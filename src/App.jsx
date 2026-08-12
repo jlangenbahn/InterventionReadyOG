@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Authenticator } from '@aws-amplify/ui-react'
 import { generateClient } from 'aws-amplify/data'
 import {
@@ -6,15 +6,19 @@ import {
   AppBar,
   Box,
   Button,
+  ButtonGroup,
+  Checkbox,
   Chip,
   CircularProgress,
   CssBaseline,
   Dialog,
   DialogActions,
   DialogContent,
+  DialogContentText,
   DialogTitle,
   Divider,
   Drawer,
+  FormLabel,
   IconButton,
   List,
   ListItemButton,
@@ -33,9 +37,9 @@ import {
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import AddIcon from '@mui/icons-material/Add'
 import LockIcon from '@mui/icons-material/Lock'
-import LockOpenIcon from '@mui/icons-material/LockOpen'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
+import SaveIcon from '@mui/icons-material/Save'
 import SearchIcon from '@mui/icons-material/Search'
 
 const client = generateClient()
@@ -72,12 +76,24 @@ const scopeColumnDefs = (locked) => [
   {
     field: 'inScope',
     headerName: 'In scope',
-    type: 'boolean',
     width: 110,
-    editable: !locked,
-    // Force two-state checkbox only (never indeterminate/null).
-    valueGetter: (_value, row) => row.inScope === true,
-    valueSetter: (value, row) => ({ ...row, inScope: value === true }),
+    sortable: true,
+    filterable: true,
+    editable: false,
+    disableColumnMenu: true,
+    // Display only — toggle is handled by DataGrid onCellClick (one click).
+    renderCell: (params) => (
+      <Checkbox
+        size="small"
+        checked={params.row.inScope === true}
+        disabled={locked}
+        tabIndex={-1}
+        disableRipple
+        sx={{ pointerEvents: 'none' }}
+        inputProps={{ 'aria-label': `In scope for ${params.row.concept || 'concept'}` }}
+      />
+    ),
+    sortComparator: (a, b) => Number(Boolean(b)) - Number(Boolean(a)),
   },
   {
     field: 'sequence',
@@ -87,7 +103,6 @@ const scopeColumnDefs = (locked) => [
     editable: !locked,
     align: 'left',
     headerAlign: 'left',
-    // Empty sequences sort after numbered ones.
     sortComparator: (a, b) => {
       if (a == null && b == null) return 0
       if (a == null) return 1
@@ -96,6 +111,14 @@ const scopeColumnDefs = (locked) => [
     },
   },
   { field: 'concept', headerName: 'Concept', flex: 1.2, minWidth: 180 },
+  {
+    field: 'masteryStatus',
+    headerName: 'Mastery status',
+    type: 'singleSelect',
+    width: 150,
+    editable: !locked,
+    valueOptions: MASTERY_STATUSES,
+  },
   {
     field: 'level',
     headerName: 'Level',
@@ -110,15 +133,25 @@ const scopeColumnDefs = (locked) => [
   },
   { field: 'category', headerName: 'Category', flex: 1, minWidth: 160 },
   { field: 'subcategory', headerName: 'Subcategory', flex: 1, minWidth: 160 },
-  {
-    field: 'masteryStatus',
-    headerName: 'Mastery status',
-    type: 'singleSelect',
-    width: 150,
-    editable: !locked,
-    valueOptions: MASTERY_STATUSES,
-  },
 ]
+
+function inventoryToRows(concepts, inventory) {
+  const byConceptId = new Map(inventory.map((entry) => [entry.conceptId, entry]))
+  return concepts.map((concept) => {
+    const entry = byConceptId.get(concept.id)
+    return {
+      id: concept.id,
+      conceptId: concept.id,
+      concept: concept.concept ?? '',
+      level: concept.level ?? '',
+      category: concept.category ?? '',
+      subcategory: concept.subcategory ?? '',
+      inScope: entry?.inScope === true,
+      masteryStatus: entry?.masteryStatus ?? 'unknown',
+      sequence: entry?.sequence ?? null,
+    }
+  })
+}
 
 async function listAll(model, options = {}) {
   const items = []
@@ -193,16 +226,20 @@ function buildScopeAndSequence(concepts, existing) {
 }
 
 function parseScopeAndSequence(value) {
-  if (Array.isArray(value)) return value
-  if (typeof value === 'string') {
+  let current = value
+  // Amplify AWSJSON may arrive as an array or as a (sometimes double-encoded) string.
+  for (let i = 0; i < 3; i += 1) {
+    if (Array.isArray(current)) return current
+    if (typeof current !== 'string') break
+    const trimmed = current.trim()
+    if (!trimmed) return []
     try {
-      const parsed = JSON.parse(value)
-      return Array.isArray(parsed) ? parsed : []
+      current = JSON.parse(trimmed)
     } catch {
       return []
     }
   }
-  return []
+  return Array.isArray(current) ? current : []
 }
 
 /** AWSJSON fields must be sent as JSON strings to AppSync. */
@@ -355,43 +392,136 @@ function ScopeAndSequencePanel({
   loadingCatalog,
   onScopeUpdated,
   setError,
+  locked,
+  onLockedChange,
+  saveRef,
 }) {
   const [saving, setSaving] = useState(false)
-  const [locked, setLocked] = useState(true)
+  // Local draft while editing — nothing hits the DB until Save.
+  const [draftInventory, setDraftInventory] = useState(null)
+
+  const persistedInventory = useMemo(() => {
+    if (!student || !concepts.length) return []
+    return buildScopeAndSequence(concepts, parseScopeAndSequence(student.scopeAndSequence))
+  }, [student, concepts])
+
+  const activeInventory = !locked && draftInventory ? draftInventory : persistedInventory
+
+  const rows = useMemo(
+    () => inventoryToRows(concepts, activeInventory),
+    [concepts, activeInventory],
+  )
+
+  const draftRef = useRef(null)
+
+  const setDraft = useCallback(
+    (updater) => {
+      setDraftInventory((prev) => {
+        const base =
+          prev ??
+          buildScopeAndSequence(concepts, parseScopeAndSequence(student?.scopeAndSequence))
+        const next = typeof updater === 'function' ? updater(base) : updater
+        draftRef.current = next
+        return next
+      })
+    },
+    [concepts, student],
+  )
+
+  const persistInventory = useCallback(
+    async (nextInventory) => {
+      if (!student?.id) return null
+      setSaving(true)
+      try {
+        const { data, errors } = await client.models.Student.update({
+          id: student.id,
+          scopeAndSequence: serializeScopeAndSequence(nextInventory),
+        })
+        if (errors?.length) throw new Error(errors.map((e) => e.message).join(', '))
+        // Always keep the inventory we just wrote — update responses sometimes omit AWSJSON.
+        onScopeUpdated({
+          ...student,
+          ...(data ?? {}),
+          scopeAndSequence: nextInventory,
+        })
+        setError('')
+        return data
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to update Scope and Sequence')
+        throw err
+      } finally {
+        setSaving(false)
+      }
+    },
+    [student, onScopeUpdated, setError],
+  )
+
+  const beginEdit = useCallback(() => {
+    const draft = buildScopeAndSequence(
+      concepts,
+      parseScopeAndSequence(student?.scopeAndSequence),
+    )
+    draftRef.current = draft
+    setDraftInventory(draft)
+    onLockedChange(false)
+  }, [concepts, student, onLockedChange])
+
+  const saveEdit = useCallback(async () => {
+    const draft = draftRef.current
+    if (locked || !Array.isArray(draft)) {
+      onLockedChange(true)
+      return true
+    }
+    try {
+      await persistInventory(draft)
+      draftRef.current = null
+      setDraftInventory(null)
+      onLockedChange(true)
+      return true
+    } catch {
+      return false
+    }
+  }, [locked, persistInventory, onLockedChange])
 
   useEffect(() => {
-    setLocked(true)
+    if (!saveRef) return undefined
+    saveRef.current = saveEdit
+    return () => {
+      if (saveRef.current === saveEdit) saveRef.current = null
+    }
+  }, [saveRef, saveEdit])
+
+  useEffect(() => {
+    if (locked) {
+      draftRef.current = null
+      setDraftInventory(null)
+    }
+  }, [locked])
+
+  useEffect(() => {
+    draftRef.current = null
+    setDraftInventory(null)
   }, [student?.id])
+
+  const toggleInScopeForRow = useCallback(
+    (row, nextValue) => {
+      if (locked || !row?.conceptId) return
+      setDraft((base) =>
+        base.map((entry) =>
+          entry.conceptId === row.conceptId
+            ? { ...entry, inScope: nextValue === true }
+            : entry,
+        ),
+      )
+    },
+    [locked, setDraft],
+  )
 
   const columns = useMemo(() => scopeColumnDefs(locked), [locked])
 
-  const rows = useMemo(() => {
-    if (!student || !concepts.length) return []
-    const inventory = buildScopeAndSequence(
-      concepts,
-      parseScopeAndSequence(student.scopeAndSequence),
-    )
-    const byConceptId = new Map(inventory.map((entry) => [entry.conceptId, entry]))
-    return concepts.map((concept) => {
-      const entry = byConceptId.get(concept.id)
-      return {
-        id: concept.id,
-        conceptId: concept.id,
-        concept: concept.concept ?? '',
-        level: concept.level ?? '',
-        category: concept.category ?? '',
-        subcategory: concept.subcategory ?? '',
-        inScope: entry?.inScope === true,
-        masteryStatus: entry?.masteryStatus ?? 'unknown',
-        sequence: entry?.sequence ?? null,
-      }
-    })
-  }, [student, concepts])
-
-  // Persist a full inventory the first time we open Scope and Sequence for a student,
-  // and whenever new catalog concepts are missing from the saved inventory.
+  // Backfill only missing concept IDs. Never run while editing (would clobber draft/saves).
   useEffect(() => {
-    if (!student?.id || loadingCatalog || !concepts.length) return
+    if (!student?.id || loadingCatalog || !concepts.length || !locked) return
     const existing = parseScopeAndSequence(student.scopeAndSequence)
     const existingIds = new Set(existing.map((entry) => entry.conceptId).filter(Boolean))
     const needsPersist = concepts.some((concept) => !existingIds.has(concept.id))
@@ -406,7 +536,13 @@ function ScopeAndSequencePanel({
           scopeAndSequence: serializeScopeAndSequence(merged),
         })
         if (errors?.length) throw new Error(errors.map((e) => e.message).join(', '))
-        if (!cancelled && data) onScopeUpdated(data)
+        if (!cancelled) {
+          onScopeUpdated({
+            ...student,
+            ...(data ?? {}),
+            scopeAndSequence: merged,
+          })
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to initialize Scope and Sequence')
@@ -417,10 +553,9 @@ function ScopeAndSequencePanel({
     return () => {
       cancelled = true
     }
-  }, [student, concepts, loadingCatalog, onScopeUpdated, setError])
+  }, [student, concepts, loadingCatalog, locked, onScopeUpdated, setError])
 
-  async function processRowUpdate(newRow, oldRow) {
-    if (!student?.id) return oldRow
+  function processRowUpdate(newRow, oldRow) {
     if (locked) return oldRow
 
     const sequence = normalizeSequence(newRow.sequence)
@@ -429,12 +564,8 @@ function ScopeAndSequencePanel({
       ? newRow.masteryStatus
       : 'unknown'
 
-    setSaving(true)
-    try {
-      const nextInventory = buildScopeAndSequence(
-        concepts,
-        parseScopeAndSequence(student.scopeAndSequence),
-      ).map((entry) =>
+    setDraft((base) =>
+      base.map((entry) =>
         entry.conceptId === newRow.conceptId
           ? {
               conceptId: newRow.conceptId,
@@ -443,27 +574,27 @@ function ScopeAndSequencePanel({
               sequence,
             }
           : entry,
-      )
+      ),
+    )
 
-      const { data, errors } = await client.models.Student.update({
-        id: student.id,
-        scopeAndSequence: serializeScopeAndSequence(nextInventory),
-      })
-      if (errors?.length) throw new Error(errors.map((e) => e.message).join(', '))
-      if (data) onScopeUpdated(data)
-      setError('')
-      return {
-        ...newRow,
-        inScope,
-        masteryStatus,
-        sequence,
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update Scope and Sequence')
-      throw err
-    } finally {
-      setSaving(false)
+    return {
+      ...newRow,
+      inScope,
+      masteryStatus,
+      sequence,
     }
+  }
+
+  function applyLevelPreset(level) {
+    if (locked) return
+    const target = String(level)
+    setDraft((base) =>
+      base.map((entry) => {
+        const concept = concepts.find((item) => item.id === entry.conceptId)
+        const isTargetLevel = String(concept?.level ?? '') === target
+        return { ...entry, inScope: isTargetLevel }
+      }),
+    )
   }
 
   if (!student) {
@@ -490,52 +621,89 @@ function ScopeAndSequencePanel({
         minHeight: 480,
         display: 'flex',
         flexDirection: 'column',
-        border: locked ? '2px solid' : '1px solid',
-        borderColor: locked ? 'warning.main' : 'divider',
-        bgcolor: locked ? 'rgba(255, 244, 229, 0.35)' : 'background.paper',
+        border: locked ? '1px solid' : '2px solid',
+        borderColor: locked ? 'divider' : 'primary.main',
+        bgcolor: locked ? 'background.paper' : 'rgba(15, 76, 92, 0.04)',
       }}
     >
       <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        spacing={1}
-        alignItems={{ xs: 'stretch', sm: 'center' }}
+        direction={{ xs: 'column', md: 'row' }}
+        spacing={1.5}
+        alignItems={{ xs: 'stretch', md: 'center' }}
         justifyContent="space-between"
         sx={{ mb: 1.5 }}
       >
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="h6">Scope and Sequence</Typography>
           <Chip size="small" label={studentDisplayName(student)} />
           <Chip size="small" variant="outlined" label={`${rows.length} concepts`} />
           {saving ? <Chip size="small" color="primary" label="Saving…" /> : null}
+          {locked ? (
+            <Tooltip title="Unlock to edit Scope and Sequence">
+              <Button
+                variant="contained"
+                color="warning"
+                startIcon={<LockIcon />}
+                onClick={beginEdit}
+              >
+                Locked
+              </Button>
+            </Tooltip>
+          ) : (
+            <Tooltip title="Save all changes to the database">
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<SaveIcon />}
+                disabled={saving}
+                onClick={() => {
+                  void saveEdit()
+                }}
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+            </Tooltip>
+          )}
         </Stack>
 
-        <Tooltip title={locked ? 'Unlock editing' : 'Lock editing'}>
-          <Button
-            variant={locked ? 'contained' : 'outlined'}
-            color={locked ? 'warning' : 'primary'}
-            startIcon={locked ? <LockIcon /> : <LockOpenIcon />}
-            onClick={() => setLocked((value) => !value)}
-          >
-            {locked ? 'Locked' : 'Unlocked'}
-          </Button>
-        </Tooltip>
+        <Stack
+          direction="row"
+          spacing={1.25}
+          alignItems="center"
+          flexWrap="wrap"
+          useFlexGap
+          sx={{ ml: { xs: 0, md: 'auto' }, flexShrink: 0 }}
+        >
+          <FormLabel sx={{ fontWeight: 600, m: 0 }}>Scope Presets</FormLabel>
+          <ButtonGroup variant="contained" disabled={locked || saving}>
+            <Button color="primary" onClick={() => applyLevelPreset(1)}>
+              Level 1
+            </Button>
+            <Button color="secondary" onClick={() => applyLevelPreset(2)}>
+              Level 2
+            </Button>
+            <Button color="success" onClick={() => applyLevelPreset(3)}>
+              Level 3
+            </Button>
+          </ButtonGroup>
+        </Stack>
       </Stack>
 
       {locked ? (
         <Alert severity="warning" icon={<LockIcon />} sx={{ mb: 1.5 }}>
-          Editing is locked. Click <strong>Locked</strong> to unlock and change In scope, Sequence, or
-          Mastery status.
+          Editing is locked. Unlock to change In scope, Sequence, Mastery status, or use Scope
+          Presets. Changes are saved only when you click Save.
         </Alert>
       ) : (
-        <Alert severity="info" icon={<LockOpenIcon />} sx={{ mb: 1.5 }}>
-          Editing unlocked. Changes save automatically. Sequence is a number up to 3 digits; default
-          sort is Sequence, then Level.
+        <Alert severity="info" icon={<SaveIcon />} sx={{ mb: 1.5 }}>
+          Editing mode: changes stay on this page until you click Save. Click In scope once to
+          toggle. Save before leaving this tab or switching students.
         </Alert>
       )}
 
       <Box sx={{ flex: 1, width: '100%' }}>
         <DataGridPro
-          key={`${student.id}-${locked ? 'locked' : 'unlocked'}`}
+          key={student.id}
           rows={rows}
           columns={columns}
           getRowId={(row) => row.conceptId}
@@ -548,12 +716,26 @@ function ScopeAndSequencePanel({
             pagination: { paginationModel: { pageSize: 50 } },
             sorting: {
               sortModel: [
+                { field: 'inScope', sort: 'asc' },
                 { field: 'sequence', sort: 'asc' },
                 { field: 'level', sort: 'asc' },
               ],
             },
           }}
-          isCellEditable={() => !locked}
+          isCellEditable={(params) => !locked && params.field !== 'inScope'}
+          onCellClick={(params, event) => {
+            if (params.field !== 'inScope') return
+            event.defaultMuiPrevented = true
+            if (locked) return
+            void toggleInScopeForRow(params.row, !params.row.inScope)
+          }}
+          onCellDoubleClick={(params, event) => {
+            if (params.field === 'inScope') {
+              event.defaultMuiPrevented = true
+              event.preventDefault()
+              event.stopPropagation()
+            }
+          }}
           processRowUpdate={processRowUpdate}
           onProcessRowUpdateError={(err) => {
             setError(err instanceof Error ? err.message : 'Failed to update row')
@@ -566,6 +748,11 @@ function ScopeAndSequencePanel({
             },
           }}
           density="compact"
+          sx={{
+            '& .MuiDataGrid-cell[data-field="inScope"]': {
+              px: 0,
+            },
+          }}
         />
       </Box>
     </Paper>
@@ -592,6 +779,9 @@ function AppShell({ user, signOut }) {
     comments: '',
   })
   const [savingStudent, setSavingStudent] = useState(false)
+  const [scopeLocked, setScopeLocked] = useState(true)
+  const [navBlock, setNavBlock] = useState(null)
+  const scopeSaveRef = useRef(null)
 
   const selectedStudent = useMemo(
     () => students.find((s) => s.id === selectedStudentId) ?? null,
@@ -600,7 +790,9 @@ function AppShell({ user, signOut }) {
 
   const handleScopeUpdated = useCallback((updatedStudent) => {
     setStudents((prev) =>
-      prev.map((student) => (student.id === updatedStudent.id ? updatedStudent : student)),
+      prev.map((student) =>
+        student.id === updatedStudent.id ? { ...student, ...updatedStudent } : student,
+      ),
     )
   }, [])
 
@@ -662,10 +854,43 @@ function AppShell({ user, signOut }) {
     loadCatalog()
   }, [loadStudents, loadCatalog])
 
+  useEffect(() => {
+    setScopeLocked(true)
+  }, [selectedStudentId])
+
+  function requestNavigation(action) {
+    if (!scopeLocked && mainTab === 0) {
+      // Wrap so React does not treat the callback as a state updater.
+      setNavBlock({ action })
+      return
+    }
+    action()
+  }
+
   function handleSelectStudent(studentId) {
-    setSelectedStudentId(studentId)
-    setMainTab(0)
-    setSelectedConceptId(null)
+    if (studentId === selectedStudentId) return
+    requestNavigation(() => {
+      setSelectedStudentId(studentId)
+      setMainTab(0)
+      setSelectedConceptId(null)
+      setScopeLocked(true)
+    })
+  }
+
+  function handleMainTabChange(_event, value) {
+    if (value === mainTab) return
+    requestNavigation(() => {
+      setMainTab(value)
+      setScopeLocked(true)
+    })
+  }
+
+  async function handleSaveAndContinue() {
+    const action = navBlock?.action
+    setNavBlock(null)
+    const saved = (await scopeSaveRef.current?.()) ?? true
+    if (!saved) return
+    if (typeof action === 'function') action()
   }
 
   async function handleCreateStudent(event) {
@@ -673,9 +898,7 @@ function AppShell({ user, signOut }) {
     if (!newStudent.firstName.trim() && !newStudent.lastName.trim()) return
     setSavingStudent(true)
     try {
-      const inventory = concepts.length
-        ? buildScopeAndSequence(concepts, [])
-        : []
+      const inventory = concepts.length ? buildScopeAndSequence(concepts, []) : []
       const { data, errors } = await client.models.Student.create({
         firstName: newStudent.firstName.trim() || null,
         lastName: newStudent.lastName.trim() || null,
@@ -692,6 +915,7 @@ function AppShell({ user, signOut }) {
       if (data?.id) {
         setSelectedStudentId(data.id)
         setMainTab(0)
+        setScopeLocked(true)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create student')
@@ -821,7 +1045,7 @@ function AppShell({ user, signOut }) {
 
             <Tabs
               value={mainTab}
-              onChange={(_event, value) => setMainTab(value)}
+              onChange={handleMainTabChange}
               sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
             >
               <Tab label="Scope and Sequence" />
@@ -835,6 +1059,9 @@ function AppShell({ user, signOut }) {
                 loadingCatalog={loadingCatalog}
                 onScopeUpdated={handleScopeUpdated}
                 setError={setError}
+                locked={scopeLocked}
+                onLockedChange={setScopeLocked}
+                saveRef={scopeSaveRef}
               />
             ) : (
               <ConceptsWordsPanel
@@ -886,6 +1113,22 @@ function AppShell({ user, signOut }) {
             </Button>
           </DialogActions>
         </Box>
+      </Dialog>
+
+      <Dialog open={Boolean(navBlock)} onClose={() => setNavBlock(null)}>
+        <DialogTitle>Save Scope and Sequence?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            You have unsaved Scope and Sequence edits. Save them before leaving this view, or stay
+            and keep editing.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNavBlock(null)}>Stay</Button>
+          <Button variant="contained" color="primary" onClick={() => void handleSaveAndContinue()} autoFocus>
+            Save and continue
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   )
