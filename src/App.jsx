@@ -162,6 +162,11 @@ function parseScopeAndSequence(value) {
   return []
 }
 
+/** AWSJSON fields must be sent as JSON strings to AppSync. */
+function serializeScopeAndSequence(inventory) {
+  return JSON.stringify(inventory)
+}
+
 function studentDisplayName(student) {
   return (
     [student?.firstName, student?.lastName].filter(Boolean).join(' ') || 'Unnamed student'
@@ -347,7 +352,7 @@ function ScopeAndSequencePanel({
       try {
         const { data, errors } = await client.models.Student.update({
           id: student.id,
-          scopeAndSequence: merged,
+          scopeAndSequence: serializeScopeAndSequence(merged),
         })
         if (errors?.length) throw new Error(errors.map((e) => e.message).join(', '))
         if (!cancelled && data) onScopeUpdated(data)
@@ -384,7 +389,7 @@ function ScopeAndSequencePanel({
 
       const { data, errors } = await client.models.Student.update({
         id: student.id,
-        scopeAndSequence: nextInventory,
+        scopeAndSequence: serializeScopeAndSequence(nextInventory),
       })
       if (errors?.length) throw new Error(errors.map((e) => e.message).join(', '))
       if (data) onScopeUpdated(data)
@@ -567,7 +572,7 @@ function AppShell({ user, signOut }) {
         lastName: newStudent.lastName.trim() || null,
         customID: newStudent.customID.trim() || null,
         comments: newStudent.comments.trim() || null,
-        scopeAndSequence: inventory.length ? inventory : null,
+        scopeAndSequence: inventory.length ? serializeScopeAndSequence(inventory) : null,
       })
       if (errors?.length) {
         throw new Error(errors.map((e) => e.message).join(', '))
