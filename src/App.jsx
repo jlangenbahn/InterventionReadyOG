@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Authenticator } from '@aws-amplify/ui-react'
 import { generateClient } from 'aws-amplify/data'
 import {
+  Alert,
   AppBar,
   Box,
   Button,
@@ -25,11 +26,14 @@ import {
   TextField,
   ThemeProvider,
   Toolbar,
+  Tooltip,
   Typography,
   createTheme,
 } from '@mui/material'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import AddIcon from '@mui/icons-material/Add'
+import LockIcon from '@mui/icons-material/Lock'
+import LockOpenIcon from '@mui/icons-material/LockOpen'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
 import SearchIcon from '@mui/icons-material/Search'
@@ -64,24 +68,54 @@ const wordColumns = [
   { field: 'id', headerName: 'Word ID', flex: 1, minWidth: 220 },
 ]
 
-const scopeColumns = [
-  { field: 'concept', headerName: 'Concept', flex: 1.2, minWidth: 180 },
-  { field: 'level', headerName: 'Level', width: 90 },
-  { field: 'category', headerName: 'Category', flex: 1, minWidth: 160 },
-  { field: 'subcategory', headerName: 'Subcategory', flex: 1, minWidth: 160 },
+const scopeColumnDefs = (locked) => [
   {
     field: 'inScope',
     headerName: 'In scope',
     type: 'boolean',
     width: 110,
-    editable: true,
+    editable: !locked,
+    // Force two-state checkbox only (never indeterminate/null).
+    valueGetter: (_value, row) => row.inScope === true,
+    valueSetter: (value, row) => ({ ...row, inScope: value === true }),
   },
+  {
+    field: 'sequence',
+    headerName: 'Sequence',
+    type: 'number',
+    width: 110,
+    editable: !locked,
+    align: 'left',
+    headerAlign: 'left',
+    // Empty sequences sort after numbered ones.
+    sortComparator: (a, b) => {
+      if (a == null && b == null) return 0
+      if (a == null) return 1
+      if (b == null) return -1
+      return Number(a) - Number(b)
+    },
+  },
+  { field: 'concept', headerName: 'Concept', flex: 1.2, minWidth: 180 },
+  {
+    field: 'level',
+    headerName: 'Level',
+    width: 90,
+    sortComparator: (a, b) => {
+      const left = Number(a)
+      const right = Number(b)
+      const leftNum = Number.isFinite(left) ? left : Number.POSITIVE_INFINITY
+      const rightNum = Number.isFinite(right) ? right : Number.POSITIVE_INFINITY
+      return leftNum - rightNum
+    },
+  },
+  { field: 'category', headerName: 'Category', flex: 1, minWidth: 160 },
+  { field: 'subcategory', headerName: 'Subcategory', flex: 1, minWidth: 160 },
   {
     field: 'masteryStatus',
     headerName: 'Mastery status',
     type: 'singleSelect',
     width: 150,
-    editable: true,
+    editable: !locked,
     valueOptions: MASTERY_STATUSES,
   },
 ]
@@ -119,14 +153,22 @@ function buildWordsByConceptId(conceptWords, wordsById) {
   return map
 }
 
+function normalizeSequence(value) {
+  if (value === null || value === undefined || value === '') return null
+  const n = Number(value)
+  if (!Number.isFinite(n) || n < 0) return null
+  return Math.min(999, Math.floor(Math.abs(n)))
+}
+
 function normalizeScopeEntry(entry) {
   const mastery = MASTERY_STATUSES.includes(entry?.masteryStatus)
     ? entry.masteryStatus
     : 'unknown'
   return {
     conceptId: entry.conceptId,
-    inScope: Boolean(entry?.inScope),
+    inScope: entry?.inScope === true,
     masteryStatus: mastery,
+    sequence: normalizeSequence(entry?.sequence),
   }
 }
 
@@ -144,6 +186,7 @@ function buildScopeAndSequence(concepts, existing) {
         conceptId: concept.id,
         inScope: false,
         masteryStatus: 'unknown',
+        sequence: null,
       }
     )
   })
@@ -314,6 +357,13 @@ function ScopeAndSequencePanel({
   setError,
 }) {
   const [saving, setSaving] = useState(false)
+  const [locked, setLocked] = useState(true)
+
+  useEffect(() => {
+    setLocked(true)
+  }, [student?.id])
+
+  const columns = useMemo(() => scopeColumnDefs(locked), [locked])
 
   const rows = useMemo(() => {
     if (!student || !concepts.length) return []
@@ -331,8 +381,9 @@ function ScopeAndSequencePanel({
         level: concept.level ?? '',
         category: concept.category ?? '',
         subcategory: concept.subcategory ?? '',
-        inScope: entry?.inScope ?? false,
+        inScope: entry?.inScope === true,
         masteryStatus: entry?.masteryStatus ?? 'unknown',
+        sequence: entry?.sequence ?? null,
       }
     })
   }, [student, concepts])
@@ -370,6 +421,14 @@ function ScopeAndSequencePanel({
 
   async function processRowUpdate(newRow, oldRow) {
     if (!student?.id) return oldRow
+    if (locked) return oldRow
+
+    const sequence = normalizeSequence(newRow.sequence)
+    const inScope = newRow.inScope === true
+    const masteryStatus = MASTERY_STATUSES.includes(newRow.masteryStatus)
+      ? newRow.masteryStatus
+      : 'unknown'
+
     setSaving(true)
     try {
       const nextInventory = buildScopeAndSequence(
@@ -379,10 +438,9 @@ function ScopeAndSequencePanel({
         entry.conceptId === newRow.conceptId
           ? {
               conceptId: newRow.conceptId,
-              inScope: Boolean(newRow.inScope),
-              masteryStatus: MASTERY_STATUSES.includes(newRow.masteryStatus)
-                ? newRow.masteryStatus
-                : 'unknown',
+              inScope,
+              masteryStatus,
+              sequence,
             }
           : entry,
       )
@@ -396,10 +454,9 @@ function ScopeAndSequencePanel({
       setError('')
       return {
         ...newRow,
-        inScope: Boolean(newRow.inScope),
-        masteryStatus: MASTERY_STATUSES.includes(newRow.masteryStatus)
-          ? newRow.masteryStatus
-          : 'unknown',
+        inScope,
+        masteryStatus,
+        sequence,
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update Scope and Sequence')
@@ -426,35 +483,87 @@ function ScopeAndSequencePanel({
   }
 
   return (
-    <Paper sx={{ p: 2, height: 'calc(100vh - 200px)', minHeight: 480, display: 'flex', flexDirection: 'column' }}>
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }} flexWrap="wrap">
-        <Typography variant="h6">Scope and Sequence</Typography>
-        <Chip size="small" label={studentDisplayName(student)} />
-        <Chip size="small" variant="outlined" label={`${rows.length} concepts`} />
-        {saving ? <Chip size="small" color="primary" label="Saving…" /> : null}
+    <Paper
+      sx={{
+        p: 2,
+        height: 'calc(100vh - 200px)',
+        minHeight: 480,
+        display: 'flex',
+        flexDirection: 'column',
+        border: locked ? '2px solid' : '1px solid',
+        borderColor: locked ? 'warning.main' : 'divider',
+        bgcolor: locked ? 'rgba(255, 244, 229, 0.35)' : 'background.paper',
+      }}
+    >
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={1}
+        alignItems={{ xs: 'stretch', sm: 'center' }}
+        justifyContent="space-between"
+        sx={{ mb: 1.5 }}
+      >
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+          <Typography variant="h6">Scope and Sequence</Typography>
+          <Chip size="small" label={studentDisplayName(student)} />
+          <Chip size="small" variant="outlined" label={`${rows.length} concepts`} />
+          {saving ? <Chip size="small" color="primary" label="Saving…" /> : null}
+        </Stack>
+
+        <Tooltip title={locked ? 'Unlock editing' : 'Lock editing'}>
+          <Button
+            variant={locked ? 'contained' : 'outlined'}
+            color={locked ? 'warning' : 'primary'}
+            startIcon={locked ? <LockIcon /> : <LockOpenIcon />}
+            onClick={() => setLocked((value) => !value)}
+          >
+            {locked ? 'Locked' : 'Unlocked'}
+          </Button>
+        </Tooltip>
       </Stack>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-        Double-click a cell to edit In scope or Mastery status. Changes save automatically.
-      </Typography>
+
+      {locked ? (
+        <Alert severity="warning" icon={<LockIcon />} sx={{ mb: 1.5 }}>
+          Editing is locked. Click <strong>Locked</strong> to unlock and change In scope, Sequence, or
+          Mastery status.
+        </Alert>
+      ) : (
+        <Alert severity="info" icon={<LockOpenIcon />} sx={{ mb: 1.5 }}>
+          Editing unlocked. Changes save automatically. Sequence is a number up to 3 digits; default
+          sort is Sequence, then Level.
+        </Alert>
+      )}
+
       <Box sx={{ flex: 1, width: '100%' }}>
         <DataGridPro
-          key={student.id}
+          key={`${student.id}-${locked ? 'locked' : 'unlocked'}`}
           rows={rows}
-          columns={scopeColumns}
+          columns={columns}
           getRowId={(row) => row.conceptId}
           disableRowSelectionOnClick
           pagination
+          sortingMode="client"
+          filterMode="client"
           pageSizeOptions={[25, 50, 100]}
           initialState={{
             pagination: { paginationModel: { pageSize: 50 } },
+            sorting: {
+              sortModel: [
+                { field: 'sequence', sort: 'asc' },
+                { field: 'level', sort: 'asc' },
+              ],
+            },
           }}
+          isCellEditable={() => !locked}
           processRowUpdate={processRowUpdate}
           onProcessRowUpdateError={(err) => {
             setError(err instanceof Error ? err.message : 'Failed to update row')
           }}
           slots={{ toolbar: GridToolbar }}
           slotProps={{
-            toolbar: { showQuickFilter: true },
+            toolbar: {
+              showQuickFilter: true,
+              quickFilterProps: { debounceMs: 300 },
+            },
           }}
           density="compact"
         />
