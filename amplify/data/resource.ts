@@ -21,6 +21,11 @@ const schema = a.schema({
       comments: a.string(),
       customID: a.string(),
       studentData: a.json(),
+      /**
+       * Per-student concept inventory ("Scope and Sequence").
+       * Array of { conceptId, inScope: boolean, masteryStatus: 'unknown'|'new'|'review'|'mastered' }
+       */
+      scopeAndSequence: a.json(),
       Lessons: a.hasMany('Lesson', 'studentID'),
       Lists: a.hasMany('List', 'studentID'),
       Concepts: a.hasMany('StudentConcept', 'studentId'),

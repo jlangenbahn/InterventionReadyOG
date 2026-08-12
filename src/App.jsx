@@ -20,6 +20,8 @@ import {
   ListItemText,
   Paper,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   ThemeProvider,
   Toolbar,
@@ -34,6 +36,7 @@ import SearchIcon from '@mui/icons-material/Search'
 
 const client = generateClient()
 const DRAWER_WIDTH = 300
+const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
 const theme = createTheme({
   palette: {
@@ -61,11 +64,28 @@ const wordColumns = [
   { field: 'id', headerName: 'Word ID', flex: 1, minWidth: 220 },
 ]
 
-/**
- * Paginate through an Amplify model list. One-time bulk loads are intentional:
- * ConceptWord (~16k) + Word (~12k) fit easily in memory and make concept
- * switching a local Map lookup instead of a network round-trip per click.
- */
+const scopeColumns = [
+  { field: 'concept', headerName: 'Concept', flex: 1.2, minWidth: 180 },
+  { field: 'level', headerName: 'Level', width: 90 },
+  { field: 'category', headerName: 'Category', flex: 1, minWidth: 160 },
+  { field: 'subcategory', headerName: 'Subcategory', flex: 1, minWidth: 160 },
+  {
+    field: 'inScope',
+    headerName: 'In scope',
+    type: 'boolean',
+    width: 110,
+    editable: true,
+  },
+  {
+    field: 'masteryStatus',
+    headerName: 'Mastery status',
+    type: 'singleSelect',
+    width: 150,
+    editable: true,
+    valueOptions: MASTERY_STATUSES,
+  },
+]
+
 async function listAll(model, options = {}) {
   const items = []
   let nextToken
@@ -99,26 +119,64 @@ function buildWordsByConceptId(conceptWords, wordsById) {
   return map
 }
 
-function AppShell({ user, signOut }) {
-  const [students, setStudents] = useState([])
-  const [selectedStudentId, setSelectedStudentId] = useState(null)
-  const [concepts, setConcepts] = useState([])
-  const [selectedConceptId, setSelectedConceptId] = useState(null)
-  const [wordsByConceptId, setWordsByConceptId] = useState(() => new Map())
-  const [conceptQuery, setConceptQuery] = useState('')
-  const [loadingStudents, setLoadingStudents] = useState(true)
-  const [loadingCatalog, setLoadingCatalog] = useState(true)
-  const [catalogStatus, setCatalogStatus] = useState('Loading concept/word catalog…')
-  const [error, setError] = useState('')
-  const [studentDialogOpen, setStudentDialogOpen] = useState(false)
-  const [newStudent, setNewStudent] = useState({
-    firstName: '',
-    lastName: '',
-    customID: '',
-    comments: '',
-  })
-  const [savingStudent, setSavingStudent] = useState(false)
+function normalizeScopeEntry(entry) {
+  const mastery = MASTERY_STATUSES.includes(entry?.masteryStatus)
+    ? entry.masteryStatus
+    : 'unknown'
+  return {
+    conceptId: entry.conceptId,
+    inScope: Boolean(entry?.inScope),
+    masteryStatus: mastery,
+  }
+}
 
+/** Ensure every catalog concept exists on the student's inventory. */
+function buildScopeAndSequence(concepts, existing) {
+  const byId = new Map()
+  const raw = Array.isArray(existing) ? existing : []
+  for (const entry of raw) {
+    if (entry?.conceptId) byId.set(entry.conceptId, normalizeScopeEntry(entry))
+  }
+  return concepts.map((concept) => {
+    const prior = byId.get(concept.id)
+    return (
+      prior ?? {
+        conceptId: concept.id,
+        inScope: false,
+        masteryStatus: 'unknown',
+      }
+    )
+  })
+}
+
+function parseScopeAndSequence(value) {
+  if (Array.isArray(value)) return value
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+function studentDisplayName(student) {
+  return (
+    [student?.firstName, student?.lastName].filter(Boolean).join(' ') || 'Unnamed student'
+  )
+}
+
+function ConceptsWordsPanel({
+  concepts,
+  selectedConceptId,
+  setSelectedConceptId,
+  conceptQuery,
+  setConceptQuery,
+  wordsByConceptId,
+  loadingCatalog,
+}) {
   const selectedConcept = useMemo(
     () => concepts.find((c) => c.id === selectedConceptId) ?? null,
     [concepts, selectedConceptId],
@@ -141,6 +199,296 @@ function AppShell({ user, signOut }) {
     const words = wordsByConceptId.get(selectedConceptId)
     return words ? words.slice() : []
   }, [wordsByConceptId, selectedConceptId])
+
+  return (
+    <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="stretch">
+      <Paper sx={{ flex: 1, minWidth: 280, p: 2, display: 'flex', flexDirection: 'column' }}>
+        <Typography variant="h6" sx={{ mb: 1 }}>
+          Concepts
+        </Typography>
+        <TextField
+          size="small"
+          placeholder="Filter concepts…"
+          value={conceptQuery}
+          onChange={(e) => setConceptQuery(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <SearchIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+            ),
+          }}
+          sx={{ mb: 1.5 }}
+        />
+        {loadingCatalog ? (
+          <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
+            <CircularProgress size={28} />
+          </Box>
+        ) : (
+          <List dense sx={{ overflow: 'auto', maxHeight: '65vh' }}>
+            {filteredConcepts.map((concept) => {
+              const count = wordsByConceptId.get(concept.id)?.length ?? 0
+              return (
+                <ListItemButton
+                  key={concept.id}
+                  selected={concept.id === selectedConceptId}
+                  onClick={() => setSelectedConceptId(concept.id)}
+                >
+                  <ListItemText
+                    primary={concept.concept}
+                    secondary={[
+                      concept.level && `Level ${concept.level}`,
+                      concept.category,
+                      `${count} words`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  />
+                </ListItemButton>
+              )
+            })}
+          </List>
+        )}
+      </Paper>
+
+      <Paper sx={{ flex: 1.6, p: 2, minHeight: 480, display: 'flex', flexDirection: 'column' }}>
+        {!selectedConcept ? (
+          <Typography color="text.secondary">Select a concept to see tagged words.</Typography>
+        ) : (
+          <>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap">
+              <Typography variant="h6">{selectedConcept.concept}</Typography>
+              {selectedConcept.level ? (
+                <Chip size="small" label={`Level ${selectedConcept.level}`} />
+              ) : null}
+              {selectedConcept.category ? (
+                <Chip size="small" variant="outlined" label={selectedConcept.category} />
+              ) : null}
+              <Chip
+                size="small"
+                color="primary"
+                variant="outlined"
+                label={`${selectedWords.length} words`}
+              />
+            </Stack>
+            {selectedConcept.subcategory ? (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                {selectedConcept.subcategory}
+              </Typography>
+            ) : null}
+
+            <Box sx={{ flex: 1, minHeight: 360, width: '100%' }}>
+              <DataGridPro
+                key={selectedConceptId}
+                rows={selectedWords}
+                columns={wordColumns}
+                getRowId={(row) => row.id}
+                disableRowSelectionOnClick
+                pagination
+                pageSizeOptions={[25, 50, 100]}
+                initialState={{
+                  pagination: { paginationModel: { pageSize: 50 } },
+                }}
+                slots={{ toolbar: GridToolbar }}
+                slotProps={{
+                  toolbar: { showQuickFilter: true },
+                }}
+                density="compact"
+              />
+            </Box>
+          </>
+        )}
+      </Paper>
+    </Stack>
+  )
+}
+
+function ScopeAndSequencePanel({
+  student,
+  concepts,
+  loadingCatalog,
+  onScopeUpdated,
+  setError,
+}) {
+  const [saving, setSaving] = useState(false)
+
+  const rows = useMemo(() => {
+    if (!student || !concepts.length) return []
+    const inventory = buildScopeAndSequence(
+      concepts,
+      parseScopeAndSequence(student.scopeAndSequence),
+    )
+    const byConceptId = new Map(inventory.map((entry) => [entry.conceptId, entry]))
+    return concepts.map((concept) => {
+      const entry = byConceptId.get(concept.id)
+      return {
+        id: concept.id,
+        conceptId: concept.id,
+        concept: concept.concept ?? '',
+        level: concept.level ?? '',
+        category: concept.category ?? '',
+        subcategory: concept.subcategory ?? '',
+        inScope: entry?.inScope ?? false,
+        masteryStatus: entry?.masteryStatus ?? 'unknown',
+      }
+    })
+  }, [student, concepts])
+
+  // Persist a full inventory the first time we open Scope and Sequence for a student,
+  // and whenever new catalog concepts are missing from the saved inventory.
+  useEffect(() => {
+    if (!student?.id || loadingCatalog || !concepts.length) return
+    const existing = parseScopeAndSequence(student.scopeAndSequence)
+    const existingIds = new Set(existing.map((entry) => entry.conceptId).filter(Boolean))
+    const needsPersist = concepts.some((concept) => !existingIds.has(concept.id))
+    if (!needsPersist) return
+
+    const merged = buildScopeAndSequence(concepts, existing)
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data, errors } = await client.models.Student.update({
+          id: student.id,
+          scopeAndSequence: merged,
+        })
+        if (errors?.length) throw new Error(errors.map((e) => e.message).join(', '))
+        if (!cancelled && data) onScopeUpdated(data)
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to initialize Scope and Sequence')
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [student, concepts, loadingCatalog, onScopeUpdated, setError])
+
+  async function processRowUpdate(newRow, oldRow) {
+    if (!student?.id) return oldRow
+    setSaving(true)
+    try {
+      const nextInventory = buildScopeAndSequence(
+        concepts,
+        parseScopeAndSequence(student.scopeAndSequence),
+      ).map((entry) =>
+        entry.conceptId === newRow.conceptId
+          ? {
+              conceptId: newRow.conceptId,
+              inScope: Boolean(newRow.inScope),
+              masteryStatus: MASTERY_STATUSES.includes(newRow.masteryStatus)
+                ? newRow.masteryStatus
+                : 'unknown',
+            }
+          : entry,
+      )
+
+      const { data, errors } = await client.models.Student.update({
+        id: student.id,
+        scopeAndSequence: nextInventory,
+      })
+      if (errors?.length) throw new Error(errors.map((e) => e.message).join(', '))
+      if (data) onScopeUpdated(data)
+      setError('')
+      return {
+        ...newRow,
+        inScope: Boolean(newRow.inScope),
+        masteryStatus: MASTERY_STATUSES.includes(newRow.masteryStatus)
+          ? newRow.masteryStatus
+          : 'unknown',
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update Scope and Sequence')
+      throw err
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!student) {
+    return (
+      <Typography color="text.secondary">
+        Select a student to view their Scope and Sequence.
+      </Typography>
+    )
+  }
+
+  if (loadingCatalog) {
+    return (
+      <Box sx={{ py: 6, display: 'flex', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Box>
+    )
+  }
+
+  return (
+    <Paper sx={{ p: 2, height: 'calc(100vh - 200px)', minHeight: 480, display: 'flex', flexDirection: 'column' }}>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }} flexWrap="wrap">
+        <Typography variant="h6">Scope and Sequence</Typography>
+        <Chip size="small" label={studentDisplayName(student)} />
+        <Chip size="small" variant="outlined" label={`${rows.length} concepts`} />
+        {saving ? <Chip size="small" color="primary" label="Saving…" /> : null}
+      </Stack>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+        Double-click a cell to edit In scope or Mastery status. Changes save automatically.
+      </Typography>
+      <Box sx={{ flex: 1, width: '100%' }}>
+        <DataGridPro
+          key={student.id}
+          rows={rows}
+          columns={scopeColumns}
+          getRowId={(row) => row.conceptId}
+          disableRowSelectionOnClick
+          pagination
+          pageSizeOptions={[25, 50, 100]}
+          initialState={{
+            pagination: { paginationModel: { pageSize: 50 } },
+          }}
+          processRowUpdate={processRowUpdate}
+          onProcessRowUpdateError={(err) => {
+            setError(err instanceof Error ? err.message : 'Failed to update row')
+          }}
+          slots={{ toolbar: GridToolbar }}
+          slotProps={{
+            toolbar: { showQuickFilter: true },
+          }}
+          density="compact"
+        />
+      </Box>
+    </Paper>
+  )
+}
+
+function AppShell({ user, signOut }) {
+  const [students, setStudents] = useState([])
+  const [selectedStudentId, setSelectedStudentId] = useState(null)
+  const [mainTab, setMainTab] = useState(0)
+  const [concepts, setConcepts] = useState([])
+  const [selectedConceptId, setSelectedConceptId] = useState(null)
+  const [wordsByConceptId, setWordsByConceptId] = useState(() => new Map())
+  const [conceptQuery, setConceptQuery] = useState('')
+  const [loadingStudents, setLoadingStudents] = useState(true)
+  const [loadingCatalog, setLoadingCatalog] = useState(true)
+  const [catalogStatus, setCatalogStatus] = useState('Loading concept/word catalog…')
+  const [error, setError] = useState('')
+  const [studentDialogOpen, setStudentDialogOpen] = useState(false)
+  const [newStudent, setNewStudent] = useState({
+    firstName: '',
+    lastName: '',
+    customID: '',
+    comments: '',
+  })
+  const [savingStudent, setSavingStudent] = useState(false)
+
+  const selectedStudent = useMemo(
+    () => students.find((s) => s.id === selectedStudentId) ?? null,
+    [students, selectedStudentId],
+  )
+
+  const handleScopeUpdated = useCallback((updatedStudent) => {
+    setStudents((prev) =>
+      prev.map((student) => (student.id === updatedStudent.id ? updatedStudent : student)),
+    )
+  }, [])
 
   const loadStudents = useCallback(async () => {
     setLoadingStudents(true)
@@ -165,7 +513,6 @@ function AppShell({ user, signOut }) {
     setLoadingCatalog(true)
     setCatalogStatus('Loading concepts, words, and mappings…')
     try {
-      // Parallel bulk fetch once — avoids per-concept AppSync queries on click.
       const [conceptItems, wordItems, linkItems] = await Promise.all([
         listAll(client.models.Concept),
         listAll(client.models.Word, {
@@ -201,16 +548,26 @@ function AppShell({ user, signOut }) {
     loadCatalog()
   }, [loadStudents, loadCatalog])
 
+  function handleSelectStudent(studentId) {
+    setSelectedStudentId(studentId)
+    setMainTab(0)
+    setSelectedConceptId(null)
+  }
+
   async function handleCreateStudent(event) {
     event.preventDefault()
     if (!newStudent.firstName.trim() && !newStudent.lastName.trim()) return
     setSavingStudent(true)
     try {
+      const inventory = concepts.length
+        ? buildScopeAndSequence(concepts, [])
+        : []
       const { data, errors } = await client.models.Student.create({
         firstName: newStudent.firstName.trim() || null,
         lastName: newStudent.lastName.trim() || null,
         customID: newStudent.customID.trim() || null,
         comments: newStudent.comments.trim() || null,
+        scopeAndSequence: inventory.length ? inventory : null,
       })
       if (errors?.length) {
         throw new Error(errors.map((e) => e.message).join(', '))
@@ -218,7 +575,10 @@ function AppShell({ user, signOut }) {
       setStudentDialogOpen(false)
       setNewStudent({ firstName: '', lastName: '', customID: '', comments: '' })
       await loadStudents()
-      if (data?.id) setSelectedStudentId(data.id)
+      if (data?.id) {
+        setSelectedStudentId(data.id)
+        setMainTab(0)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create student')
     } finally {
@@ -303,14 +663,12 @@ function AppShell({ user, signOut }) {
         ) : (
           <List dense sx={{ overflow: 'auto' }}>
             {students.map((student) => {
-              const name =
-                [student.firstName, student.lastName].filter(Boolean).join(' ') ||
-                'Unnamed student'
+              const name = studentDisplayName(student)
               return (
                 <ListItemButton
                   key={student.id}
                   selected={student.id === selectedStudentId}
-                  onClick={() => setSelectedStudentId(student.id)}
+                  onClick={() => handleSelectStudent(student.id)}
                 >
                   <PersonIcon fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
                   <ListItemText
@@ -332,98 +690,51 @@ function AppShell({ user, signOut }) {
           </Paper>
         ) : null}
 
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="stretch">
-          <Paper sx={{ flex: 1, minWidth: 280, p: 2, display: 'flex', flexDirection: 'column' }}>
-            <Typography variant="h6" sx={{ mb: 1 }}>
-              Concepts
+        {!selectedStudent ? (
+          <Paper sx={{ p: 3 }}>
+            <Typography color="text.secondary">
+              Select or add a student to open their Scope and Sequence.
             </Typography>
-            <TextField
-              size="small"
-              placeholder="Filter concepts…"
-              value={conceptQuery}
-              onChange={(e) => setConceptQuery(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <SearchIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                ),
-              }}
-              sx={{ mb: 1.5 }}
-            />
-            {loadingCatalog ? (
-              <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
-                <CircularProgress size={28} />
-              </Box>
-            ) : (
-              <List dense sx={{ overflow: 'auto', maxHeight: '70vh' }}>
-                {filteredConcepts.map((concept) => {
-                  const count = wordsByConceptId.get(concept.id)?.length ?? 0
-                  return (
-                    <ListItemButton
-                      key={concept.id}
-                      selected={concept.id === selectedConceptId}
-                      onClick={() => setSelectedConceptId(concept.id)}
-                    >
-                      <ListItemText
-                        primary={concept.concept}
-                        secondary={[
-                          concept.level && `Level ${concept.level}`,
-                          concept.category,
-                          `${count} words`,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      />
-                    </ListItemButton>
-                  )
-                })}
-              </List>
-            )}
           </Paper>
+        ) : (
+          <>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap">
+              <Typography variant="h5">{studentDisplayName(selectedStudent)}</Typography>
+              {selectedStudent.customID ? (
+                <Chip size="small" label={`ID ${selectedStudent.customID}`} />
+              ) : null}
+            </Stack>
 
-          <Paper sx={{ flex: 1.6, p: 2, minHeight: 480, display: 'flex', flexDirection: 'column' }}>
-            {!selectedConcept ? (
-              <Typography color="text.secondary">Select a concept to see tagged words.</Typography>
+            <Tabs
+              value={mainTab}
+              onChange={(_event, value) => setMainTab(value)}
+              sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+            >
+              <Tab label="Scope and Sequence" />
+              <Tab label="Concepts & Words" />
+            </Tabs>
+
+            {mainTab === 0 ? (
+              <ScopeAndSequencePanel
+                student={selectedStudent}
+                concepts={concepts}
+                loadingCatalog={loadingCatalog}
+                onScopeUpdated={handleScopeUpdated}
+                setError={setError}
+              />
             ) : (
-              <>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap">
-                  <Typography variant="h6">{selectedConcept.concept}</Typography>
-                  {selectedConcept.level ? (
-                    <Chip size="small" label={`Level ${selectedConcept.level}`} />
-                  ) : null}
-                  {selectedConcept.category ? (
-                    <Chip size="small" variant="outlined" label={selectedConcept.category} />
-                  ) : null}
-                  <Chip size="small" color="primary" variant="outlined" label={`${selectedWords.length} words`} />
-                </Stack>
-                {selectedConcept.subcategory ? (
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    {selectedConcept.subcategory}
-                  </Typography>
-                ) : null}
-
-                <Box sx={{ flex: 1, minHeight: 360, width: '100%' }}>
-                  <DataGridPro
-                    key={selectedConceptId}
-                    rows={selectedWords}
-                    columns={wordColumns}
-                    getRowId={(row) => row.id}
-                    disableRowSelectionOnClick
-                    pagination
-                    pageSizeOptions={[25, 50, 100]}
-                    initialState={{
-                      pagination: { paginationModel: { pageSize: 50 } },
-                    }}
-                    slots={{ toolbar: GridToolbar }}
-                    slotProps={{
-                      toolbar: { showQuickFilter: true },
-                    }}
-                    density="compact"
-                  />
-                </Box>
-              </>
+              <ConceptsWordsPanel
+                concepts={concepts}
+                selectedConceptId={selectedConceptId}
+                setSelectedConceptId={setSelectedConceptId}
+                conceptQuery={conceptQuery}
+                setConceptQuery={setConceptQuery}
+                wordsByConceptId={wordsByConceptId}
+                loadingCatalog={loadingCatalog}
+              />
             )}
-          </Paper>
-        </Stack>
+          </>
+        )}
       </Box>
 
       <Dialog open={studentDialogOpen} onClose={() => setStudentDialogOpen(false)} fullWidth maxWidth="xs">
