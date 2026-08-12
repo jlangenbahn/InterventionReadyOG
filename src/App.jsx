@@ -26,6 +26,7 @@ import {
   Typography,
   createTheme,
 } from '@mui/material'
+import { DataGridPro } from '@mui/x-data-grid-pro'
 import AddIcon from '@mui/icons-material/Add'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
@@ -49,12 +50,28 @@ const theme = createTheme({
   shape: { borderRadius: 10 },
 })
 
+const wordColumns = [
+  { field: 'word', headerName: 'Word', flex: 1, minWidth: 160 },
+  {
+    field: 'isNonsenseWord',
+    headerName: 'Nonsense',
+    width: 120,
+    type: 'boolean',
+  },
+  { field: 'id', headerName: 'Word ID', flex: 1, minWidth: 220 },
+]
+
+/**
+ * Paginate through an Amplify model list. One-time bulk loads are intentional:
+ * ConceptWord (~16k) + Word (~12k) fit easily in memory and make concept
+ * switching a local Map lookup instead of a network round-trip per click.
+ */
 async function listAll(model, options = {}) {
   const items = []
   let nextToken
   do {
     const { data, errors, nextToken: token } = await model.list({
-      limit: 200,
+      limit: 1000,
       nextToken,
       ...options,
     })
@@ -67,17 +84,31 @@ async function listAll(model, options = {}) {
   return items
 }
 
+function buildWordsByConceptId(conceptWords, wordsById) {
+  const map = new Map()
+  for (const link of conceptWords) {
+    const word = wordsById.get(link.wordId)
+    if (!word || !link.conceptId) continue
+    const bucket = map.get(link.conceptId)
+    if (bucket) bucket.push(word)
+    else map.set(link.conceptId, [word])
+  }
+  for (const [, list] of map) {
+    list.sort((a, b) => String(a.word ?? '').localeCompare(String(b.word ?? '')))
+  }
+  return map
+}
+
 function AppShell({ user, signOut }) {
   const [students, setStudents] = useState([])
   const [selectedStudentId, setSelectedStudentId] = useState(null)
   const [concepts, setConcepts] = useState([])
   const [selectedConceptId, setSelectedConceptId] = useState(null)
-  const [conceptWords, setConceptWords] = useState([])
+  const [wordsByConceptId, setWordsByConceptId] = useState(() => new Map())
   const [conceptQuery, setConceptQuery] = useState('')
-  const [wordQuery, setWordQuery] = useState('')
   const [loadingStudents, setLoadingStudents] = useState(true)
-  const [loadingConcepts, setLoadingConcepts] = useState(true)
-  const [loadingWords, setLoadingWords] = useState(false)
+  const [loadingCatalog, setLoadingCatalog] = useState(true)
+  const [catalogStatus, setCatalogStatus] = useState('Loading concept/word catalog…')
   const [error, setError] = useState('')
   const [studentDialogOpen, setStudentDialogOpen] = useState(false)
   const [newStudent, setNewStudent] = useState({
@@ -105,11 +136,10 @@ function AppShell({ user, signOut }) {
     )
   }, [concepts, conceptQuery])
 
-  const filteredWords = useMemo(() => {
-    const q = wordQuery.trim().toLowerCase()
-    if (!q) return conceptWords
-    return conceptWords.filter((w) => String(w.word ?? '').toLowerCase().includes(q))
-  }, [conceptWords, wordQuery])
+  const selectedWords = useMemo(
+    () => (selectedConceptId ? wordsByConceptId.get(selectedConceptId) ?? [] : []),
+    [wordsByConceptId, selectedConceptId],
+  )
 
   const loadStudents = useCallback(async () => {
     setLoadingStudents(true)
@@ -130,54 +160,46 @@ function AppShell({ user, signOut }) {
     }
   }, [])
 
-  const loadConcepts = useCallback(async () => {
-    setLoadingConcepts(true)
+  const loadCatalog = useCallback(async () => {
+    setLoadingCatalog(true)
+    setCatalogStatus('Loading concepts, words, and mappings…')
     try {
-      const items = await listAll(client.models.Concept)
-      items.sort((a, b) => String(a.concept ?? '').localeCompare(String(b.concept ?? '')))
-      setConcepts(items)
-      setSelectedConceptId((current) => current ?? items[0]?.id ?? null)
-      setError('')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load concepts')
-    } finally {
-      setLoadingConcepts(false)
-    }
-  }, [])
+      // Parallel bulk fetch once — avoids per-concept AppSync queries on click.
+      const [conceptItems, wordItems, linkItems] = await Promise.all([
+        listAll(client.models.Concept),
+        listAll(client.models.Word, {
+          selectionSet: ['id', 'word', 'isNonsenseWord'],
+        }),
+        listAll(client.models.ConceptWord, {
+          selectionSet: ['id', 'conceptId', 'wordId'],
+        }),
+      ])
 
-  const loadWordsForConcept = useCallback(async (conceptId) => {
-    if (!conceptId) {
-      setConceptWords([])
-      return
-    }
-    setLoadingWords(true)
-    try {
-      const links = await listAll(client.models.ConceptWord, {
-        filter: { conceptId: { eq: conceptId } },
-        selectionSet: ['id', 'wordId', 'word.id', 'word.word', 'word.isNonsenseWord'],
-      })
-      const words = links
-        .map((link) => link.word)
-        .filter(Boolean)
-      words.sort((a, b) => String(a.word ?? '').localeCompare(String(b.word ?? '')))
-      setConceptWords(words)
+      conceptItems.sort((a, b) =>
+        String(a.concept ?? '').localeCompare(String(b.concept ?? '')),
+      )
+      const wordsById = new Map(wordItems.map((w) => [w.id, w]))
+      const indexed = buildWordsByConceptId(linkItems, wordsById)
+
+      setConcepts(conceptItems)
+      setWordsByConceptId(indexed)
+      setSelectedConceptId((current) => current ?? conceptItems[0]?.id ?? null)
+      setCatalogStatus(
+        `${conceptItems.length} concepts · ${wordItems.length} words · ${linkItems.length} mappings`,
+      )
       setError('')
     } catch (err) {
-      setConceptWords([])
-      setError(err instanceof Error ? err.message : 'Failed to load concept words')
+      setError(err instanceof Error ? err.message : 'Failed to load catalog')
+      setCatalogStatus('Catalog failed to load')
     } finally {
-      setLoadingWords(false)
+      setLoadingCatalog(false)
     }
   }, [])
 
   useEffect(() => {
     loadStudents()
-    loadConcepts()
-  }, [loadStudents, loadConcepts])
-
-  useEffect(() => {
-    loadWordsForConcept(selectedConceptId)
-  }, [selectedConceptId, loadWordsForConcept])
+    loadCatalog()
+  }, [loadStudents, loadCatalog])
 
   async function handleCreateStudent(event) {
     event.preventDefault()
@@ -221,6 +243,9 @@ function AppShell({ user, signOut }) {
         <Toolbar sx={{ gap: 2 }}>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
             InterventionReadyOG
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ display: { xs: 'none', md: 'block' } }}>
+            {catalogStatus}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             {user?.signInDetails?.loginId ?? user?.username}
@@ -317,42 +342,58 @@ function AppShell({ user, signOut }) {
               placeholder="Filter concepts…"
               value={conceptQuery}
               onChange={(e) => setConceptQuery(e.target.value)}
-              InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} /> }}
+              InputProps={{
+                startAdornment: (
+                  <SearchIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+                ),
+              }}
               sx={{ mb: 1.5 }}
             />
-            {loadingConcepts ? (
+            {loadingCatalog ? (
               <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
                 <CircularProgress size={28} />
               </Box>
             ) : (
               <List dense sx={{ overflow: 'auto', maxHeight: '70vh' }}>
-                {filteredConcepts.map((concept) => (
-                  <ListItemButton
-                    key={concept.id}
-                    selected={concept.id === selectedConceptId}
-                    onClick={() => setSelectedConceptId(concept.id)}
-                  >
-                    <ListItemText
-                      primary={concept.concept}
-                      secondary={[concept.level && `Level ${concept.level}`, concept.category, concept.subcategory]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    />
-                  </ListItemButton>
-                ))}
+                {filteredConcepts.map((concept) => {
+                  const count = wordsByConceptId.get(concept.id)?.length ?? 0
+                  return (
+                    <ListItemButton
+                      key={concept.id}
+                      selected={concept.id === selectedConceptId}
+                      onClick={() => setSelectedConceptId(concept.id)}
+                    >
+                      <ListItemText
+                        primary={concept.concept}
+                        secondary={[
+                          concept.level && `Level ${concept.level}`,
+                          concept.category,
+                          `${count} words`,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      />
+                    </ListItemButton>
+                  )
+                })}
               </List>
             )}
           </Paper>
 
-          <Paper sx={{ flex: 1.4, p: 2, minHeight: 420 }}>
+          <Paper sx={{ flex: 1.6, p: 2, minHeight: 480, display: 'flex', flexDirection: 'column' }}>
             {!selectedConcept ? (
               <Typography color="text.secondary">Select a concept to see tagged words.</Typography>
             ) : (
               <>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap">
                   <Typography variant="h6">{selectedConcept.concept}</Typography>
-                  {selectedConcept.level ? <Chip size="small" label={`Level ${selectedConcept.level}`} /> : null}
-                  {selectedConcept.category ? <Chip size="small" variant="outlined" label={selectedConcept.category} /> : null}
+                  {selectedConcept.level ? (
+                    <Chip size="small" label={`Level ${selectedConcept.level}`} />
+                  ) : null}
+                  {selectedConcept.category ? (
+                    <Chip size="small" variant="outlined" label={selectedConcept.category} />
+                  ) : null}
+                  <Chip size="small" color="primary" variant="outlined" label={`${selectedWords.length} words`} />
                 </Stack>
                 {selectedConcept.subcategory ? (
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -360,35 +401,22 @@ function AppShell({ user, signOut }) {
                   </Typography>
                 ) : null}
 
-                <TextField
-                  size="small"
-                  fullWidth
-                  placeholder="Filter words for this concept…"
-                  value={wordQuery}
-                  onChange={(e) => setWordQuery(e.target.value)}
-                  sx={{ mb: 2 }}
-                />
-
-                {loadingWords ? (
-                  <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
-                    <CircularProgress size={28} />
-                  </Box>
-                ) : (
-                  <>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      {filteredWords.length} word{filteredWords.length === 1 ? '' : 's'} tagged via
-                      ConceptWord
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                      {filteredWords.map((word) => (
-                        <Chip key={word.id} label={word.word || '(blank)'} variant="outlined" />
-                      ))}
-                      {filteredWords.length === 0 ? (
-                        <Typography color="text.secondary">No words mapped to this concept.</Typography>
-                      ) : null}
-                    </Box>
-                  </>
-                )}
+                <Box sx={{ flex: 1, minHeight: 360, width: '100%' }}>
+                  <DataGridPro
+                    rows={selectedWords}
+                    columns={wordColumns}
+                    getRowId={(row) => row.id}
+                    disableRowSelectionOnClick
+                    pageSizeOptions={[25, 50, 100]}
+                    initialState={{
+                      pagination: { paginationModel: { pageSize: 50 } },
+                    }}
+                    slotProps={{
+                      toolbar: { showQuickFilter: true },
+                    }}
+                    density="compact"
+                  />
+                </Box>
               </>
             )}
           </Paper>
