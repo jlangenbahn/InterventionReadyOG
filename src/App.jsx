@@ -136,10 +136,11 @@ function AppShell({ user, signOut }) {
     )
   }, [concepts, conceptQuery])
 
-  const selectedWords = useMemo(
-    () => (selectedConceptId ? wordsByConceptId.get(selectedConceptId) ?? [] : []),
-    [wordsByConceptId, selectedConceptId],
-  )
+  const selectedWords = useMemo(() => {
+    if (!selectedConceptId) return []
+    const words = wordsByConceptId.get(selectedConceptId)
+    return words ? words.slice() : []
+  }, [wordsByConceptId, selectedConceptId])
 
   const loadStudents = useCallback(async () => {
     setLoadingStudents(true)
@@ -183,7 +184,6 @@ function AppShell({ user, signOut }) {
 
       setConcepts(conceptItems)
       setWordsByConceptId(indexed)
-      setSelectedConceptId((current) => current ?? conceptItems[0]?.id ?? null)
       setCatalogStatus(
         `${conceptItems.length} concepts · ${wordItems.length} words · ${linkItems.length} mappings`,
       )
@@ -403,6 +403,7 @@ function AppShell({ user, signOut }) {
 
                 <Box sx={{ flex: 1, minHeight: 360, width: '100%' }}>
                   <DataGridPro
+                    key={selectedConceptId}
                     rows={selectedWords}
                     columns={wordColumns}
                     getRowId={(row) => row.id}
