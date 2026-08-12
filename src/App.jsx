@@ -26,7 +26,7 @@ import {
   Typography,
   createTheme,
 } from '@mui/material'
-import { DataGridPro } from '@mui/x-data-grid-pro'
+import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import AddIcon from '@mui/icons-material/Add'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
@@ -407,10 +407,12 @@ function AppShell({ user, signOut }) {
                     columns={wordColumns}
                     getRowId={(row) => row.id}
                     disableRowSelectionOnClick
+                    pagination
                     pageSizeOptions={[25, 50, 100]}
                     initialState={{
                       pagination: { paginationModel: { pageSize: 50 } },
                     }}
+                    slots={{ toolbar: GridToolbar }}
                     slotProps={{
                       toolbar: { showQuickFilter: true },
                     }}
