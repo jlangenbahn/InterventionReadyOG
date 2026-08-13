@@ -18,7 +18,8 @@
     "@mui/x-license": "^9.11.0",
     "aws-amplify": "^6.20.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "react-to-print": "^3.3.0"
   },
   "devDependencies": {
     "@aws-amplify/backend": "^1.24.0",

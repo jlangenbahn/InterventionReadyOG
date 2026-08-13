@@ -33,6 +33,8 @@ const schema = a.schema({
       scopeAndSequence: a.json(),
       Lessons: a.hasMany('Lesson', 'studentID'),
       Lists: a.hasMany('List', 'studentID'),
+      Sentences: a.hasMany('Sentence', 'studentID'),
+      Passages: a.hasMany('Passage', 'studentID'),
       Concepts: a.hasMany('StudentConcept', 'studentId'),
     })
     .authorization((allow) => [allow.owner()]),
@@ -48,10 +50,13 @@ const schema = a.schema({
       gptPrompt: a.string(),
       conceptID: a.id().required(),
       concept: a.belongsTo('Concept', 'conceptID'),
+      // Optional so catalog passages remain shared; set when assigning to a student.
+      studentID: a.id(),
+      student: a.belongsTo('Student', 'studentID'),
       Lessons: a.hasMany('PassageLesson', 'passageId'),
       passageData: a.json(),
     })
-    .secondaryIndexes((index) => [index('conceptID')])
+    .secondaryIndexes((index) => [index('conceptID'), index('studentID')])
     .authorization((allow) => [allow.authenticated()]),
 
   Sentence: a
@@ -62,11 +67,15 @@ const schema = a.schema({
       upvotes: a.integer(),
       downvotes: a.integer(),
       gptPrompt: a.string(),
+      // Optional so catalog sentences remain shared; set when assigning to a student.
+      studentID: a.id(),
+      student: a.belongsTo('Student', 'studentID'),
       Lessons: a.hasMany('SentenceLesson', 'sentenceId'),
       Words: a.hasMany('SentenceWord', 'sentenceId'),
       Concepts: a.hasMany('SentenceConcept', 'sentenceId'),
       sentenceData: a.json(),
     })
+    .secondaryIndexes((index) => [index('studentID')])
     .authorization((allow) => [allow.authenticated()]),
 
   Lesson: a

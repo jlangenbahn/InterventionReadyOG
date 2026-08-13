@@ -43,6 +43,7 @@ import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SaveIcon from '@mui/icons-material/Save'
 import SearchIcon from '@mui/icons-material/Search'
+import LessonPlanPanel from './components/LessonPlanPanel'
 
 const client = generateClient()
 const DRAWER_WIDTH = 300
@@ -1379,6 +1380,7 @@ function AppShell({ user, signOut }) {
             >
               <Tab label="Scope & Sequence" />
               <Tab label="Concepts & Lists" />
+              <Tab label="Lesson Plan" />
             </Tabs>
 
             {mainTab === 0 ? (
@@ -1392,7 +1394,7 @@ function AppShell({ user, signOut }) {
                 onLockedChange={setScopeLocked}
                 saveRef={scopeSaveRef}
               />
-            ) : (
+            ) : mainTab === 1 ? (
               <ConceptsWordsPanel
                 student={selectedStudent}
                 concepts={concepts}
@@ -1402,6 +1404,13 @@ function AppShell({ user, signOut }) {
                 setConceptQuery={setConceptQuery}
                 wordsByConceptId={wordsByConceptId}
                 loadingCatalog={loadingCatalog}
+                setError={setError}
+              />
+            ) : (
+              <LessonPlanPanel
+                student={selectedStudent}
+                wordsByConceptId={wordsByConceptId}
+                instructor={user?.signInDetails?.loginId ?? user?.username ?? ''}
                 setError={setError}
               />
             )}
