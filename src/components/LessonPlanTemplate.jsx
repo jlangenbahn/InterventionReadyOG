@@ -4,6 +4,13 @@ import { Box, Paper, Typography } from '@mui/material'
 const WHAT_SPELLS = ['/a/ cat', '/e/ pet', '/i/ itch', '/o/ octopus', '/u/ up', '/ck/ luck', '/sk/ mask', '/ft/ gift']
 const SIMULTANEOUS_ORAL = ['task', 'shaft', 'pluck']
 
+const EXHIBIT_COLUMNS = [
+  { key: 'review1', fallback: 'Review concept #1' },
+  { key: 'review2', fallback: 'Review concept #2' },
+  { key: 'review3', fallback: 'Review concept #3' },
+  { key: 'newConcept', fallback: 'The new concept list' },
+]
+
 const paperSx = {
   bgcolor: '#ffffff',
   width: '100%',
@@ -69,19 +76,29 @@ const chipSx = {
   },
 }
 
-const reviewTableSx = {
+const exhibitTableSx = {
   width: '100%',
   borderCollapse: 'collapse',
   tableLayout: 'fixed',
 }
 
-const reviewCellSx = {
-  width: '33.33%',
+const exhibitHeaderSx = {
+  width: '25%',
+  verticalAlign: 'bottom',
+  pr: '10px',
+  pb: '6px',
+  fontWeight: 700,
+  fontSize: '11px',
+  borderBottom: '1px solid #e0e0e0',
+}
+
+const exhibitCellSx = {
+  width: '25%',
   verticalAlign: 'top',
-  pr: '8px',
+  pr: '10px',
   py: 0,
   lineHeight: 2,
-  fontSize: '11px',
+  fontSize: '14px',
 }
 
 function Placeholder({ tag, value }) {
@@ -116,47 +133,12 @@ function listWordLabels(list) {
       return word?.word?.word
     })
     .filter(Boolean)
-  if (labels.length) return labels
-  return list.name ? [`(${list.name})`] : []
+  return labels
 }
 
-function WordStack({ list, tag }) {
-  const words = listWordLabels(list)
-  if (!words.length) return <Placeholder tag={tag} />
-  return (
-    <Box sx={{ lineHeight: 2 }}>
-      {words.map((word, index) => (
-        <Box key={`${word}-${index}`}>{word}</Box>
-      ))}
-    </Box>
-  )
-}
-
-function ReviewWordsTable({ reviewLists }) {
-  const columns = [0, 1, 2].map((index) => listWordLabels(reviewLists[index]))
-  const rowCount = Math.max(1, ...columns.map((words) => words.length))
-
-  return (
-    <Box component="table" sx={reviewTableSx}>
-      <Box component="tbody">
-        {Array.from({ length: rowCount }, (_, row) => (
-          <Box component="tr" key={row}>
-            {columns.map((words, col) => (
-              <Box component="td" key={col} sx={reviewCellSx}>
-                {words[row] ? (
-                  words[row]
-                ) : row === 0 && !reviewLists[col] ? (
-                  <Placeholder tag={`<<REVIEW_LIST_WORDS_${col + 1}>>`} />
-                ) : (
-                  '\u00a0'
-                )}
-              </Box>
-            ))}
-          </Box>
-        ))}
-      </Box>
-    </Box>
-  )
+function listDisplayName(list, fallback) {
+  if (list?.name) return list.name
+  return fallback
 }
 
 function sentenceText(sentence) {
@@ -172,13 +154,44 @@ function passageText(passage) {
   return `${title}${passage.text || ''}`.trim()
 }
 
+function StudentExhibit({ reviewLists, newConceptList }) {
+  const lists = [
+    reviewLists[0],
+    reviewLists[1],
+    reviewLists[2],
+    newConceptList,
+  ]
+  const columns = lists.map((list) => listWordLabels(list))
+  const rowCount = Math.max(1, ...columns.map((words) => words.length))
+
+  return (
+    <Box component="table" sx={exhibitTableSx}>
+      <Box component="thead">
+        <Box component="tr">
+          {EXHIBIT_COLUMNS.map((column, index) => (
+            <Box component="th" key={column.key} sx={exhibitHeaderSx}>
+              {listDisplayName(lists[index], column.fallback)}
+            </Box>
+          ))}
+        </Box>
+      </Box>
+      <Box component="tbody">
+        {Array.from({ length: rowCount }, (_, row) => (
+          <Box component="tr" key={row}>
+            {columns.map((words, col) => (
+              <Box component="td" key={col} sx={exhibitCellSx}>
+                {words[row] || '\u00a0'}
+              </Box>
+            ))}
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  )
+}
+
 /**
- * Printable lesson-plan layout. Maps relational props onto the original HTML placeholders:
- *   <<STUDENT>>                student first + last name
- *   <<REVIEW_LIST_WORDS_1..3>> reviewLists[0..2]
- *   <<NEW_CONCEPT_LIST_WORDS>> newConceptList
- *   <<SENTENCE_1>> / _2        sentences[0], sentences[1]
- *   <<PASSAGE_1>>              passage
+ * Printable lesson-plan layout: cover sheet (page 1) plus student word-list exhibit (page 2).
  */
 const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
   {
@@ -199,139 +212,175 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
   const paddedReview = [0, 1, 2].map((index) => reviewLists[index] ?? null)
 
   return (
-    <Paper ref={ref} elevation={0} className="lesson-plan-print-root" sx={paperSx}>
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '10px',
-          pb: '8px',
-          borderBottom: '2px solid rgba(0,0,0,0.87)',
-          mb: '12px',
-          fontWeight: 700,
-          fontSize: '11px',
-        }}
-      >
-        <Box>
-          Student: <Placeholder tag="<<STUDENT>>" value={studentName} />
+    <Box ref={ref} className="lesson-plan-print-root">
+      <Paper elevation={0} className="lesson-plan-page" sx={{ ...paperSx, mb: 2, '@media print': { ...paperSx['@media print'], mb: 0 } }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: '10px',
+            pb: '8px',
+            borderBottom: '2px solid rgba(0,0,0,0.87)',
+            mb: '12px',
+            fontWeight: 700,
+            fontSize: '11px',
+          }}
+        >
+          <Box>
+            Student: <Placeholder tag="<<STUDENT>>" value={studentName} />
+          </Box>
+          <Box>
+            Date: <Placeholder tag="<<DATE>>" value={date} />
+          </Box>
+          <Box>
+            Lesson #: <Placeholder tag="<<LESSON>>" value={lessonNumber} />
+          </Box>
+          <Box>
+            Instructor: <Placeholder tag="<<INSTRUCTOR>>" value={instructor} />
+          </Box>
         </Box>
-        <Box>
-          Date: <Placeholder tag="<<DATE>>" value={date} />
-        </Box>
-        <Box>
-          Lesson #: <Placeholder tag="<<LESSON>>" value={lessonNumber} />
-        </Box>
-        <Box>
-          Instructor: <Placeholder tag="<<INSTRUCTOR>>" value={instructor} />
-        </Box>
-      </Box>
 
-      <Box sx={sectionSx}>
-        <Typography component="div" sx={sectionHeaderSx}>
-          Decoding
-        </Typography>
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          <Box sx={rowSx}>
-            <Box sx={labelSx}>SOAP Notes</Box>
-            <Box sx={contentSx}>{soapNotes || '[SOAP Notes Field]'}</Box>
+        <Box sx={sectionSx}>
+          <Typography component="div" sx={sectionHeaderSx}>
+            Decoding
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <Box sx={rowSx}>
+              <Box sx={labelSx}>SOAP Notes</Box>
+              <Box sx={contentSx}>{soapNotes || '[SOAP Notes Field]'}</Box>
+            </Box>
+            <Box sx={rowSx}>
+              <Box sx={labelSx}>Drills</Box>
+              <Box sx={contentSx}>
+                Phonemic Awareness, Phonogram Card Drill
+                <br />
+                Blending Drill
+                <br />
+                Non-Phonetic Morpheme Drill
+              </Box>
+            </Box>
           </Box>
           <Box sx={rowSx}>
-            <Box sx={labelSx}>Drills</Box>
+            <Box sx={labelSx}>Review Words</Box>
             <Box sx={contentSx}>
-              Phonemic Awareness, Phonogram Card Drill
-              <br />
-              Blending Drill
-              <br />
-              Non-Phonetic Morpheme Drill
+              {[0, 1, 2].map((index) => (
+                <Box key={index}>
+                  {index + 1}.{' '}
+                  <Placeholder
+                    tag={`Review concept #${index + 1}`}
+                    value={paddedReview[index]?.name || ''}
+                  />
+                </Box>
+              ))}
             </Box>
           </Box>
         </Box>
-        <Box sx={rowSx}>
-          <Box sx={labelSx}>Review Words</Box>
-          <Box sx={contentSx}>
-            <ReviewWordsTable reviewLists={paddedReview} />
-          </Box>
-        </Box>
-      </Box>
 
-      <Box sx={sectionSx}>
-        <Typography component="div" sx={sectionHeaderSx}>
-          Guided Discovery
-        </Typography>
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          <Box sx={rowSx}>
-            <Box sx={labelSx}>New Concept</Box>
-            <Box sx={contentSx}>{newConceptList?.name || '[New Concept Field]'}</Box>
-          </Box>
-          <Box sx={rowSx}>
-            <Box sx={labelSx}>Methods</Box>
-            <Box sx={contentSx}>VATK, Coding of New Concept, Handwriting</Box>
-          </Box>
-        </Box>
-        <Box sx={rowSx}>
-          <Box sx={labelSx}>Auditory Visual</Box>
-          <Box sx={contentSx}>
-            <WordStack list={newConceptList} tag="<<NEW_CONCEPT_LIST_WORDS>>" />
-          </Box>
-        </Box>
-      </Box>
-
-      <Box sx={sectionSx}>
-        <Typography component="div" sx={sectionHeaderSx}>
-          Encoding
-        </Typography>
-        <Box sx={rowSx}>
-          <Box sx={labelSx}>What Spells?</Box>
-          <Box sx={contentSx}>
-            {WHAT_SPELLS.map((item) => (
-              <Box key={item} component="span" sx={chipSx}>
-                {item}
+        <Box sx={sectionSx}>
+          <Typography component="div" sx={sectionHeaderSx}>
+            Guided Discovery
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <Box sx={rowSx}>
+              <Box sx={labelSx}>New Concept</Box>
+              <Box sx={contentSx}>
+                <Placeholder tag="The new concept list" value={newConceptList?.name || ''} />
               </Box>
-            ))}
+            </Box>
+            <Box sx={rowSx}>
+              <Box sx={labelSx}>Methods</Box>
+              <Box sx={contentSx}>VATK, Coding of New Concept, Handwriting</Box>
+            </Box>
           </Box>
         </Box>
-        <Box sx={rowSx}>
-          <Box sx={labelSx}>Simultaneous Oral</Box>
-          <Box sx={contentSx}>
-            {SIMULTANEOUS_ORAL.map((item) => (
-              <Box key={item} component="span" sx={chipSx}>
-                {item}
-              </Box>
-            ))}
-          </Box>
-        </Box>
-        <Box sx={rowSx}>
-          <Box sx={labelSx}>Dictation</Box>
-          <Box sx={contentSx}>
-            1. <Placeholder tag="<<SENTENCE_1>>" value={sentenceText(sentences[0])} />
-            <br />
-            2. <Placeholder tag="<<SENTENCE_2>>" value={sentenceText(sentences[1])} />
-          </Box>
-        </Box>
-      </Box>
 
-      <Box sx={sectionSx}>
-        <Typography component="div" sx={sectionHeaderSx}>
-          Oral Reading
-        </Typography>
-        <Box sx={rowSx}>
-          <Box sx={labelSx}>Passage</Box>
-          <Box sx={contentSx}>
-            <Placeholder tag="<<PASSAGE_1>>" value={passageText(passage)} />
+        <Box sx={sectionSx}>
+          <Typography component="div" sx={sectionHeaderSx}>
+            Encoding
+          </Typography>
+          <Box sx={rowSx}>
+            <Box sx={labelSx}>What Spells?</Box>
+            <Box sx={contentSx}>
+              {WHAT_SPELLS.map((item) => (
+                <Box key={item} component="span" sx={chipSx}>
+                  {item}
+                </Box>
+              ))}
+            </Box>
+          </Box>
+          <Box sx={rowSx}>
+            <Box sx={labelSx}>Simultaneous Oral</Box>
+            <Box sx={contentSx}>
+              {SIMULTANEOUS_ORAL.map((item) => (
+                <Box key={item} component="span" sx={chipSx}>
+                  {item}
+                </Box>
+              ))}
+            </Box>
+          </Box>
+          <Box sx={rowSx}>
+            <Box sx={labelSx}>Dictation</Box>
+            <Box sx={contentSx}>
+              1. <Placeholder tag="Sentence #1" value={sentenceText(sentences[0])} />
+              <br />
+              2. <Placeholder tag="Sentence #2" value={sentenceText(sentences[1])} />
+            </Box>
           </Box>
         </Box>
-      </Box>
 
-      <Box sx={sectionSx}>
-        <Typography component="div" sx={sectionHeaderSx}>
-          Reflection
-        </Typography>
-        <Box sx={rowSx}>
-          <Box sx={labelSx}>SOAP Notes</Box>
-          <Box sx={contentSx}>{reflectionNotes || '[Final SOAP Notes Field] | '}</Box>
+        <Box sx={sectionSx}>
+          <Typography component="div" sx={sectionHeaderSx}>
+            Oral Reading
+          </Typography>
+          <Box sx={rowSx}>
+            <Box sx={labelSx}>Passage</Box>
+            <Box sx={contentSx}>
+              <Placeholder tag="Passage #1" value={passageText(passage)} />
+            </Box>
+          </Box>
         </Box>
-      </Box>
-    </Paper>
+
+        <Box sx={sectionSx}>
+          <Typography component="div" sx={sectionHeaderSx}>
+            Reflection
+          </Typography>
+          <Box sx={rowSx}>
+            <Box sx={labelSx}>SOAP Notes</Box>
+            <Box sx={contentSx}>{reflectionNotes || '[Final SOAP Notes Field] | '}</Box>
+          </Box>
+        </Box>
+      </Paper>
+
+      <Paper
+        elevation={0}
+        className="lesson-plan-page lesson-plan-page-2"
+        sx={{
+          ...paperSx,
+          '@media print': {
+            ...paperSx['@media print'],
+            breakBefore: 'page',
+            pageBreakBefore: 'always',
+          },
+        }}
+      >
+        <Typography
+          className="lesson-plan-screen-only"
+          component="div"
+          sx={{
+            fontSize: '10px',
+            fontWeight: 700,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: 'rgba(0,0,0,0.54)',
+            mb: '10px',
+            '@media print': { display: 'none' },
+          }}
+        >
+          Page 2 · Student exhibit
+        </Typography>
+        <StudentExhibit reviewLists={paddedReview} newConceptList={newConceptList} />
+      </Paper>
+    </Box>
   )
 })
 

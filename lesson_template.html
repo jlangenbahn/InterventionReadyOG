@@ -82,23 +82,6 @@
             line-height: 1.3;
         }
 
-        .review-words {
-            width: 100%;
-            border-collapse: collapse;
-            table-layout: fixed;
-        }
-
-        .review-words td {
-            width: 33.33%;
-            vertical-align: top;
-            padding: 0 8px 0 0;
-            line-height: 2;
-        }
-
-        .word-stack {
-            line-height: 2;
-        }
-
         .placeholder {
             color: #d32f2f;
             font-family: 'Courier New', Courier, monospace;
@@ -116,7 +99,35 @@
             border: 1px solid #ccc;
         }
 
-        /* Print Specific Styles for exactly 1 page */
+        .exhibit-words {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        .exhibit-words th {
+            width: 25%;
+            text-align: left;
+            vertical-align: bottom;
+            padding: 0 10px 6px 0;
+            font-weight: 700;
+            font-size: 11px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .exhibit-words td {
+            width: 25%;
+            vertical-align: top;
+            padding: 0 10px 0 0;
+            line-height: 2;
+            font-size: 14px;
+        }
+
+        .page-2 {
+            margin-top: 24px;
+        }
+
+        /* Print: cover sheet then student exhibit on a second page */
         @media print {
             body {
                 background-color: transparent;
@@ -131,7 +142,16 @@
                 border: 1px solid var(--border);
                 background: transparent;
             }
+            .page-2 {
+                break-before: page;
+                page-break-before: always;
+                margin-top: 0;
+            }
+            .screen-only {
+                display: none;
+            }
             @page {
+                size: 8.5in 11in;
                 margin: 0.5in;
             }
         }
@@ -169,13 +189,9 @@
             <div class="row">
                 <div class="label">Review Words</div>
                 <div class="content">
-                    <table class="review-words">
-                        <tr>
-                            <td><span class="placeholder">&lt;&lt;REVIEW_LIST_WORDS_1&gt;&gt;</span></td>
-                            <td><span class="placeholder">&lt;&lt;REVIEW_LIST_WORDS_2&gt;&gt;</span></td>
-                            <td><span class="placeholder">&lt;&lt;REVIEW_LIST_WORDS_3&gt;&gt;</span></td>
-                        </tr>
-                    </table>
+                    1. Review concept #1<br>
+                    2. Review concept #2<br>
+                    3. Review concept #3
                 </div>
             </div>
         </div>
@@ -186,17 +202,11 @@
             <div class="grid-2">
                 <div class="row">
                     <div class="label">New Concept</div>
-                    <div class="content">[New Concept Field]</div>
+                    <div class="content">The new concept list</div>
                 </div>
                 <div class="row">
                     <div class="label">Methods</div>
                     <div class="content">VATK, Coding of New Concept, Handwriting</div>
-                </div>
-            </div>
-            <div class="row">
-                <div class="label">Auditory Visual</div>
-                <div class="content word-stack">
-                    <span class="placeholder">&lt;&lt;NEW_CONCEPT_LIST_WORDS&gt;&gt;</span>
                 </div>
             </div>
         </div>
@@ -228,8 +238,8 @@
             <div class="row">
                 <div class="label">Dictation</div>
                 <div class="content">
-                    1. <span class="placeholder">&lt;&lt;SENTENCE_1&gt;&gt;</span><br>
-                    2. <span class="placeholder">&lt;&lt;SENTENCE_2&gt;&gt;</span>
+                    1. Sentence #1<br>
+                    2. Sentence #2
                 </div>
             </div>
         </div>
@@ -240,7 +250,7 @@
             <div class="row">
                 <div class="label">Passage</div>
                 <div class="content">
-                    <span class="placeholder">&lt;&lt;PASSAGE_1&gt;&gt;</span>
+                    Passage #1
                 </div>
             </div>
         </div>
@@ -253,6 +263,31 @@
                 <div class="content">[Final SOAP Notes Field] | </div>
             </div>
         </div>
+    </div>
+
+    <!-- PAGE 2: STUDENT EXHIBIT -->
+    <div class="paper page-2">
+        <div class="screen-only" style="font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(0,0,0,0.54); margin-bottom: 10px;">
+            Page 2 · Student exhibit
+        </div>
+        <table class="exhibit-words">
+            <thead>
+                <tr>
+                    <th>Review concept #1</th>
+                    <th>Review concept #2</th>
+                    <th>Review concept #3</th>
+                    <th>The new concept list</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                    <td>&nbsp;</td>
+                </tr>
+            </tbody>
+        </table>
     </div>
 
 </body>

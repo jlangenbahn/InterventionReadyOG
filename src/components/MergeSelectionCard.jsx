@@ -87,16 +87,17 @@ export default function MergeSelectionCard({
         subheaderTypographyProps={{ variant: 'body2' }}
       />
       <CardContent sx={{ pt: 1.5 }}>
-        <Stack spacing={1.5}>
-          <Stack spacing={0.75}>
+        <Stack direction="row" spacing={1} alignItems="stretch">
+          <Stack spacing={0.75} sx={{ width: 168, flexShrink: 0 }}>
             {(slots ?? []).map((slot) => {
               const assignedId = assignments?.[slot.key] ?? null
               const assignedItem = assignedId ? itemsById.get(assignedId) : null
               const assignedLabel = assignedItem ? getItemLabel(assignedItem) : ''
               return (
-                <Stack key={slot.key} direction="row" spacing={0.5} alignItems="stretch">
+                <Stack key={slot.key} direction="row" spacing={0.25} alignItems="flex-start">
                   <Button
                     fullWidth
+                    size="small"
                     variant={assignedId ? 'contained' : 'outlined'}
                     color="primary"
                     onClick={() => handleSlotClick(slot.key)}
@@ -104,54 +105,55 @@ export default function MergeSelectionCard({
                       justifyContent: 'flex-start',
                       textAlign: 'left',
                       textTransform: 'none',
-                      py: 0.75,
-                      px: 1.25,
+                      minHeight: 32,
+                      px: 1,
+                      py: 0.5,
+                      lineHeight: 1.2,
+                      fontSize: 12,
+                      fontWeight: 600,
                     }}
                   >
                     <Box sx={{ minWidth: 0, width: '100%' }}>
-                      <Typography
-                        component="span"
+                      <Box
                         sx={{
-                          display: 'block',
-                          fontFamily: '"Courier New", Courier, monospace',
-                          fontSize: 11,
-                          fontWeight: 700,
-                          lineHeight: 1.3,
-                        }}
-                      >
-                        {slot.tag}
-                      </Typography>
-                      <Typography
-                        component="span"
-                        sx={{
-                          display: 'block',
-                          fontSize: 12,
-                          fontWeight: 500,
-                          opacity: assignedLabel ? 1 : 0.72,
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                         }}
                       >
-                        {assignedLabel || 'Select a row, then click'}
-                      </Typography>
+                        {slot.label}
+                      </Box>
+                      {assignedLabel ? (
+                        <Box
+                          sx={{
+                            fontSize: 10,
+                            fontWeight: 500,
+                            opacity: 0.85,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {assignedLabel}
+                        </Box>
+                      ) : null}
                     </Box>
                   </Button>
                   {assignedId ? (
                     <IconButton
                       size="small"
                       onClick={() => onClear(slot.key)}
-                      aria-label={`Clear ${slot.tag}`}
-                      sx={{ alignSelf: 'center' }}
+                      aria-label={`Clear ${slot.label}`}
+                      sx={{ p: 0.25, mt: 0.25 }}
                     >
-                      <CloseIcon fontSize="small" />
+                      <CloseIcon sx={{ fontSize: 16 }} />
                     </IconButton>
                   ) : null}
                 </Stack>
               )
             })}
           </Stack>
-          <Box sx={{ height: 260, width: '100%' }}>
+          <Box sx={{ flex: 1, minWidth: 0, height: 260 }}>
             <DataGridPro
               rows={rows}
               columns={gridColumns}

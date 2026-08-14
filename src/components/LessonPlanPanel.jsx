@@ -24,6 +24,20 @@ const PRINT_PAGE_STYLE = `
     box-shadow: none !important;
     padding: 0 !important;
     max-width: 100% !important;
+    background: transparent !important;
+  }
+  .lesson-plan-page {
+    box-shadow: none !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    border-radius: 0 !important;
+  }
+  .lesson-plan-page-2 {
+    break-before: page;
+    page-break-before: always;
+  }
+  .lesson-plan-screen-only {
+    display: none !important;
   }
 `
 
@@ -44,19 +58,19 @@ const EMPTY_PASSAGE_SLOTS = {
 }
 
 const LIST_SLOTS = [
-  { key: 'newConcept', tag: '<<NEW_CONCEPT_LIST_WORDS>>', shortLabel: 'New concept' },
-  { key: 'review1', tag: '<<REVIEW_LIST_WORDS_1>>', shortLabel: 'Review 1' },
-  { key: 'review2', tag: '<<REVIEW_LIST_WORDS_2>>', shortLabel: 'Review 2' },
-  { key: 'review3', tag: '<<REVIEW_LIST_WORDS_3>>', shortLabel: 'Review 3' },
+  { key: 'newConcept', label: 'The new concept list', shortLabel: 'New concept' },
+  { key: 'review1', label: 'Review concept #1', shortLabel: 'Review 1' },
+  { key: 'review2', label: 'Review concept #2', shortLabel: 'Review 2' },
+  { key: 'review3', label: 'Review concept #3', shortLabel: 'Review 3' },
 ]
 
 const SENTENCE_SLOTS = [
-  { key: 'sentence1', tag: '<<SENTENCE_1>>', shortLabel: 'Sentence 1' },
-  { key: 'sentence2', tag: '<<SENTENCE_2>>', shortLabel: 'Sentence 2' },
+  { key: 'sentence1', label: 'Sentence #1', shortLabel: 'Sentence 1' },
+  { key: 'sentence2', label: 'Sentence #2', shortLabel: 'Sentence 2' },
 ]
 
 const PASSAGE_SLOTS = [
-  { key: 'passage1', tag: '<<PASSAGE_1>>', shortLabel: 'Passage' },
+  { key: 'passage1', label: 'Passage #1', shortLabel: 'Passage' },
 ]
 
 const LIST_COLUMNS = [
