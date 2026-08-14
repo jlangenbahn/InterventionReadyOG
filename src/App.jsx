@@ -44,6 +44,7 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SaveIcon from '@mui/icons-material/Save'
 import SearchIcon from '@mui/icons-material/Search'
 import LessonPlanPanel from './components/LessonPlanPanel'
+import { fetchStudentLists } from './lib/fetchStudentLessonPlan'
 
 const client = generateClient()
 const DRAWER_WIDTH = 300
@@ -338,14 +339,15 @@ function ConceptsWordsPanel({
   setConceptQuery,
   wordsByConceptId,
   loadingCatalog,
+  studentLists = [],
+  loadingLists = false,
+  onReloadLists,
   setError,
 }) {
   const [wordSelection, setWordSelection] = useState(emptyWordSelection)
   const [createListOpen, setCreateListOpen] = useState(false)
   const [listName, setListName] = useState('')
   const [creatingList, setCreatingList] = useState(false)
-  const [loadingLists, setLoadingLists] = useState(false)
-  const [studentLists, setStudentLists] = useState([])
 
   const selectedConcept = useMemo(
     () => concepts.find((c) => c.id === selectedConceptId) ?? null,
@@ -398,29 +400,8 @@ function ConceptsWordsPanel({
   )
 
   const loadLists = useCallback(async () => {
-    if (!student?.id) {
-      setStudentLists([])
-      return
-    }
-    setLoadingLists(true)
-    try {
-      const items = await listAll(client.models.List, {
-        filter: { studentID: { eq: student.id } },
-        selectionSet: ['id', 'name', 'conceptID', 'studentID', 'listData', 'createdAt'],
-      })
-      items.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
-      setStudentLists(items)
-      setError('')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load lists')
-    } finally {
-      setLoadingLists(false)
-    }
-  }, [student?.id, setError])
-
-  useEffect(() => {
-    void loadLists()
-  }, [loadLists])
+    if (onReloadLists) await onReloadLists()
+  }, [onReloadLists])
 
   useEffect(() => {
     setWordSelection(emptyWordSelection())
@@ -1101,6 +1082,8 @@ function AppShell({ user, signOut }) {
   const [loadingCatalog, setLoadingCatalog] = useState(true)
   const [catalogStatus, setCatalogStatus] = useState('Loading concept/word catalog…')
   const [error, setError] = useState('')
+  const [studentLists, setStudentLists] = useState([])
+  const [loadingLists, setLoadingLists] = useState(false)
   const [studentDialogOpen, setStudentDialogOpen] = useState(false)
   const [newStudent, setNewStudent] = useState({
     firstName: '',
@@ -1183,6 +1166,29 @@ function AppShell({ user, signOut }) {
     loadStudents()
     loadCatalog()
   }, [loadStudents, loadCatalog])
+
+  const loadStudentLists = useCallback(async () => {
+    if (!selectedStudentId) {
+      setStudentLists([])
+      return
+    }
+    setLoadingLists(true)
+    try {
+      const items = await fetchStudentLists(selectedStudentId)
+      items.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
+      setStudentLists(items)
+      setError('')
+    } catch (err) {
+      setStudentLists([])
+      setError(err instanceof Error ? err.message : 'Failed to load lists')
+    } finally {
+      setLoadingLists(false)
+    }
+  }, [selectedStudentId])
+
+  useEffect(() => {
+    void loadStudentLists()
+  }, [loadStudentLists])
 
   useEffect(() => {
     setScopeLocked(true)
@@ -1404,11 +1410,17 @@ function AppShell({ user, signOut }) {
                 setConceptQuery={setConceptQuery}
                 wordsByConceptId={wordsByConceptId}
                 loadingCatalog={loadingCatalog}
+                studentLists={studentLists}
+                loadingLists={loadingLists}
+                onReloadLists={loadStudentLists}
                 setError={setError}
               />
             ) : (
               <LessonPlanPanel
                 student={selectedStudent}
+                concepts={concepts}
+                studentLists={studentLists}
+                loadingLists={loadingLists}
                 wordsByConceptId={wordsByConceptId}
                 instructor={user?.signInDetails?.loginId ?? user?.username ?? ''}
                 setError={setError}

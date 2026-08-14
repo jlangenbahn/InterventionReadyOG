@@ -5,67 +5,44 @@ const client = generateClient()
 
 export { client }
 
-const STUDENT_LESSON_SELECTION = [
+const STUDENT_CORE_SELECTION = [
   'id',
   'firstName',
   'lastName',
   'customID',
   'scopeAndSequence',
-  'Lists.id',
-  'Lists.name',
-  'Lists.conceptID',
-  'Lists.listData',
-  'Lists.createdAt',
-  'Lists.words.wordId',
-  'Lists.words.word.id',
-  'Lists.words.word.word',
-  'Sentences.id',
-  'Sentences.text',
-  'Sentences.wordCount',
-  'Sentences.createdAt',
-  'Passages.id',
-  'Passages.title',
-  'Passages.text',
-  'Passages.wordCount',
-  'Passages.conceptID',
-  'Passages.createdAt',
   'Lessons.id',
   'Lessons.date',
   'Lessons.lessonNumber',
 ]
 
-const STUDENT_LESSON_SELECTION_LISTS_ONLY = [
-  'id',
-  'firstName',
-  'lastName',
-  'customID',
-  'scopeAndSequence',
-  'Lists.id',
-  'Lists.name',
-  'Lists.conceptID',
-  'Lists.listData',
-  'Lists.createdAt',
-  'Lessons.id',
-  'Lessons.date',
-  'Lessons.lessonNumber',
-]
+const LIST_SELECTION = ['id', 'name', 'conceptID', 'studentID', 'listData', 'createdAt']
 
-async function listAll(model, options = {}) {
+async function paginate(request) {
   const items = []
   let nextToken
   do {
-    const { data, errors, nextToken: token } = await model.list({
-      limit: 1000,
-      nextToken,
-      ...options,
-    })
-    if (errors?.length) {
+    const { data, errors, nextToken: token } = await request(nextToken)
+    items.push(...(data ?? []))
+    if (errors?.length && !data?.length) {
       throw new Error(errors.map((e) => e.message).join(', '))
     }
-    items.push(...(data ?? []))
     nextToken = token
   } while (nextToken)
   return items
+}
+
+async function listAll(model, options = {}) {
+  return paginate((nextToken) => model.list({ limit: 1000, nextToken, ...options }))
+}
+
+function asListRecords(items, studentId) {
+  return (items ?? []).filter((item) => {
+    const id = item?.id
+    if (!id) return false
+    if (!studentId) return true
+    return !item.studentID || item.studentID === studentId
+  })
 }
 
 function asArray(value) {
@@ -79,53 +56,87 @@ function errorsMessage(errors) {
 }
 
 /**
- * Deep-fetch a student with related lists (including words), sentences, and passages.
- *
- * Primary path (Amplify Gen 2 eager load):
- *   client.models.Student.get({ id }, { selectionSet: ['Lists.*', 'Sentences.*', 'Passages.*', ...] })
- *
- * Falls back to Lists/Lessons only if Sentences/Passages relations are not yet deployed,
- * then fills sentences/passages from the concept catalog for in-scope review/new concepts.
+ * Load lists for a student. Tries the studentID GSI first, then the same
+ * List.list + filter used by Concepts & Lists, then an owner-scoped list
+ * filtered on the client. DynamoDB List records use `id` as the primary key
+ * and `studentID` / `conceptID` as attributes.
+ */
+export async function fetchStudentLists(studentId) {
+  if (!studentId) return []
+
+  const byIndex = client.models.List.listListByStudentID
+  if (typeof byIndex === 'function') {
+    try {
+      const indexed = asListRecords(
+        await paginate((nextToken) =>
+          byIndex.call(client.models.List, { studentID: studentId }, {
+            limit: 1000,
+            nextToken,
+            selectionSet: LIST_SELECTION,
+          }),
+        ),
+        studentId,
+      )
+      if (indexed.length) return indexed
+    } catch {
+      // Fall through to the filter query used by Concepts & Lists.
+    }
+  }
+
+  try {
+    const filtered = asListRecords(
+      await listAll(client.models.List, {
+        filter: { studentID: { eq: studentId } },
+        selectionSet: LIST_SELECTION,
+      }),
+      studentId,
+    )
+    if (filtered.length) return filtered
+  } catch {
+    // Fall through to an owner-scoped unfiltered list.
+  }
+
+  const owned = await listAll(client.models.List, { selectionSet: LIST_SELECTION }).catch(() => [])
+  return asListRecords(owned, studentId)
+}
+
+/**
+ * Load a student plus their sentences, passages, and lessons.
+ * Lists are loaded separately via fetchStudentLists so a Student.get failure
+ * cannot blank out the List Selection grid.
  */
 export async function fetchStudentLessonPlan(studentId) {
   if (!studentId) return null
 
-  let student
-  let errors
-
-  const attempts = [STUDENT_LESSON_SELECTION, STUDENT_LESSON_SELECTION_LISTS_ONLY]
-  for (const selectionSet of attempts) {
-    ;({ data: student, errors } = await client.models.Student.get(
+  let student = null
+  try {
+    const { data, errors } = await client.models.Student.get(
       { id: studentId },
-      { selectionSet },
-    ))
-    if (student) break
-    const message = errorsMessage(errors)
-    const retryable = /Sentence|Passage|words/i.test(message)
-    if (!retryable || selectionSet === STUDENT_LESSON_SELECTION_LISTS_ONLY) {
-      throw new Error(message || 'Student not found')
+      { selectionSet: STUDENT_CORE_SELECTION },
+    )
+    student = data
+    if (!student && errors?.length) {
+      throw new Error(errorsMessage(errors) || 'Student not found')
     }
+  } catch {
+    student = { id: studentId }
   }
 
-  if (!student) return null
-
-  let lists = asArray(student.Lists)
-  if (!lists.length) {
-    lists = await listAll(client.models.List, {
+  const [sentenceItems, passageItems] = await Promise.all([
+    listAll(client.models.Sentence, {
       filter: { studentID: { eq: studentId } },
-      selectionSet: ['id', 'name', 'conceptID', 'studentID', 'listData', 'createdAt'],
-    })
-  }
+      selectionSet: ['id', 'text', 'wordCount', 'createdAt', 'studentID'],
+    }).catch(() => []),
+    listAll(client.models.Passage, {
+      filter: { studentID: { eq: studentId } },
+      selectionSet: ['id', 'title', 'text', 'wordCount', 'conceptID', 'createdAt', 'studentID'],
+    }).catch(() => []),
+  ])
 
-  const lessons = asArray(student.Lessons)
-  let sentences = asArray(student.Sentences)
-  let passages = asArray(student.Passages)
-
-  if (!sentences.length || !passages.length) {
-    const fallback = await fetchCatalogMaterials(student)
-    if (!sentences.length) sentences = fallback.sentences
-    if (!passages.length) passages = fallback.passages
-  }
+  const lists = []
+  const sentences = sentenceItems
+  const passages = passageItems
+  const lessons = asArray(student?.Lessons)
 
   lists.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
   sentences.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
@@ -138,48 +149,6 @@ export async function fetchStudentLessonPlan(studentId) {
     passages,
     lessons,
   }
-}
-
-async function fetchCatalogMaterials(student) {
-  const inventory = parseScopeAndSequence(student.scopeAndSequence)
-  const preferredIds = inventory
-    .filter((entry) => entry.inScope && (entry.masteryStatus === 'new' || entry.masteryStatus === 'review'))
-    .map((entry) => entry.conceptId)
-    .filter(Boolean)
-  const fallbackIds = inventory
-    .filter((entry) => entry.inScope)
-    .map((entry) => entry.conceptId)
-    .filter(Boolean)
-  const conceptIds = [...new Set(preferredIds.length ? preferredIds : fallbackIds)].slice(0, 8)
-
-  if (!conceptIds.length) {
-    return { sentences: [], passages: [] }
-  }
-
-  const orFilter = { or: conceptIds.map((id) => ({ conceptId: { eq: id } })) }
-  const passageOrFilter = { or: conceptIds.map((id) => ({ conceptID: { eq: id } })) }
-
-  const [sentenceLinks, passageItems] = await Promise.all([
-    listAll(client.models.SentenceConcept, {
-      filter: orFilter,
-      selectionSet: ['id', 'sentenceId', 'conceptId', 'sentence.id', 'sentence.text', 'sentence.wordCount'],
-    }).catch(() => []),
-    listAll(client.models.Passage, {
-      filter: passageOrFilter,
-      selectionSet: ['id', 'title', 'text', 'wordCount', 'conceptID'],
-    }).catch(() => []),
-  ])
-
-  const sentences = []
-  const seenSentence = new Set()
-  for (const link of sentenceLinks) {
-    const sentence = link.sentence
-    if (!sentence?.id || seenSentence.has(sentence.id) || !sentence.text) continue
-    seenSentence.add(sentence.id)
-    sentences.push(sentence)
-  }
-
-  return { sentences, passages: passageItems }
 }
 
 export function parseScopeAndSequence(value) {

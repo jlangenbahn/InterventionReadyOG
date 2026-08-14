@@ -69,6 +69,21 @@ const chipSx = {
   },
 }
 
+const reviewTableSx = {
+  width: '100%',
+  borderCollapse: 'collapse',
+  tableLayout: 'fixed',
+}
+
+const reviewCellSx = {
+  width: '33.33%',
+  verticalAlign: 'top',
+  pr: '8px',
+  py: 0,
+  lineHeight: 2,
+  fontSize: '11px',
+}
+
 function Placeholder({ tag, value }) {
   if (value) {
     return (
@@ -91,9 +106,8 @@ function Placeholder({ tag, value }) {
   )
 }
 
-function formatListWords(list) {
-  if (!list) return ''
-  if (typeof list === 'string') return list
+function listWordLabels(list) {
+  if (!list) return []
   const words = Array.isArray(list.words) ? list.words : []
   const labels = words
     .map((word) => {
@@ -102,8 +116,47 @@ function formatListWords(list) {
       return word?.word?.word
     })
     .filter(Boolean)
-  if (labels.length) return labels.join(', ')
-  return list.name ? `(${list.name})` : ''
+  if (labels.length) return labels
+  return list.name ? [`(${list.name})`] : []
+}
+
+function WordStack({ list, tag }) {
+  const words = listWordLabels(list)
+  if (!words.length) return <Placeholder tag={tag} />
+  return (
+    <Box sx={{ lineHeight: 2 }}>
+      {words.map((word, index) => (
+        <Box key={`${word}-${index}`}>{word}</Box>
+      ))}
+    </Box>
+  )
+}
+
+function ReviewWordsTable({ reviewLists }) {
+  const columns = [0, 1, 2].map((index) => listWordLabels(reviewLists[index]))
+  const rowCount = Math.max(1, ...columns.map((words) => words.length))
+
+  return (
+    <Box component="table" sx={reviewTableSx}>
+      <Box component="tbody">
+        {Array.from({ length: rowCount }, (_, row) => (
+          <Box component="tr" key={row}>
+            {columns.map((words, col) => (
+              <Box component="td" key={col} sx={reviewCellSx}>
+                {words[row] ? (
+                  words[row]
+                ) : row === 0 && !reviewLists[col] ? (
+                  <Placeholder tag={`<<REVIEW_LIST_WORDS_${col + 1}>>`} />
+                ) : (
+                  '\u00a0'
+                )}
+              </Box>
+            ))}
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  )
 }
 
 function sentenceText(sentence) {
@@ -122,17 +175,18 @@ function passageText(passage) {
 /**
  * Printable lesson-plan layout. Maps relational props onto the original HTML placeholders:
  *   <<STUDENT>>                student first + last name
- *   <<REVIEW_LIST_WORDS_1..3>> lists (review slots, or lists[0..2])
- *   <<NEW_CONCEPT_LIST_WORDS>> lists marked kind === 'new' (or lists[3])
+ *   <<REVIEW_LIST_WORDS_1..3>> reviewLists[0..2]
+ *   <<NEW_CONCEPT_LIST_WORDS>> newConceptList
  *   <<SENTENCE_1>> / _2        sentences[0], sentences[1]
- *   <<PASSAGE_1>>              passages[0]
+ *   <<PASSAGE_1>>              passage
  */
 const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
   {
     student,
-    lists = [],
-    sentences = [],
-    passages = [],
+    reviewLists = [null, null, null],
+    newConceptList = null,
+    sentences = [null, null],
+    passage = null,
     date,
     lessonNumber,
     instructor,
@@ -142,11 +196,7 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
   ref,
 ) {
   const studentName = [student?.firstName, student?.lastName].filter(Boolean).join(' ')
-
-  const reviewLists = lists.filter((list) => list?.kind !== 'new').slice(0, 3)
-  const newConceptList = lists.find((list) => list?.kind === 'new') ?? lists[3] ?? null
-
-  const reviewWords = [0, 1, 2].map((index) => formatListWords(reviewLists[index]))
+  const paddedReview = [0, 1, 2].map((index) => reviewLists[index] ?? null)
 
   return (
     <Paper ref={ref} elevation={0} className="lesson-plan-print-root" sx={paperSx}>
@@ -199,11 +249,7 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
         <Box sx={rowSx}>
           <Box sx={labelSx}>Review Words</Box>
           <Box sx={contentSx}>
-            <Placeholder tag="<<REVIEW_LIST_WORDS_1>>" value={reviewWords[0]} />
-            {', '}
-            <Placeholder tag="<<REVIEW_LIST_WORDS_2>>" value={reviewWords[1]} />
-            {', '}
-            <Placeholder tag="<<REVIEW_LIST_WORDS_3>>" value={reviewWords[2]} />
+            <ReviewWordsTable reviewLists={paddedReview} />
           </Box>
         </Box>
       </Box>
@@ -225,7 +271,7 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
         <Box sx={rowSx}>
           <Box sx={labelSx}>Auditory Visual</Box>
           <Box sx={contentSx}>
-            <Placeholder tag="<<NEW_CONCEPT_LIST_WORDS>>" value={formatListWords(newConceptList)} />
+            <WordStack list={newConceptList} tag="<<NEW_CONCEPT_LIST_WORDS>>" />
           </Box>
         </Box>
       </Box>
@@ -271,7 +317,7 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
         <Box sx={rowSx}>
           <Box sx={labelSx}>Passage</Box>
           <Box sx={contentSx}>
-            <Placeholder tag="<<PASSAGE_1>>" value={passageText(passages[0])} />
+            <Placeholder tag="<<PASSAGE_1>>" value={passageText(passage)} />
           </Box>
         </Box>
       </Box>
