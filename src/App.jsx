@@ -49,6 +49,9 @@ import { fetchStudentLists } from './lib/fetchStudentLessonPlan'
 
 const client = generateClient()
 const DRAWER_WIDTH = 300
+const TAB_LESSON_PLAN = 0
+const TAB_SCOPE = 1
+const TAB_CONCEPTS = 2
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
 /** Sequential teal: unknown (lightest) → mastered (darkest). */
@@ -1196,7 +1199,7 @@ function AppShell({ user, signOut }) {
   }, [selectedStudentId])
 
   function requestNavigation(action) {
-    if (!scopeLocked && mainTab === 0) {
+    if (!scopeLocked && mainTab === TAB_SCOPE) {
       // Wrap so React does not treat the callback as a state updater.
       setNavBlock({ action })
       return
@@ -1208,7 +1211,6 @@ function AppShell({ user, signOut }) {
     if (studentId === selectedStudentId) return
     requestNavigation(() => {
       setSelectedStudentId(studentId)
-      setMainTab(0)
       setSelectedConceptId(null)
       setScopeLocked(true)
     })
@@ -1251,7 +1253,6 @@ function AppShell({ user, signOut }) {
       await loadStudents()
       if (data?.id) {
         setSelectedStudentId(data.id)
-        setMainTab(0)
         setScopeLocked(true)
       }
     } catch (err) {
@@ -1368,7 +1369,7 @@ function AppShell({ user, signOut }) {
         {!selectedStudent ? (
           <Paper sx={{ p: 3 }}>
             <Typography color="text.secondary">
-              Select or add a student to open their Scope and Sequence.
+              Select or add a student to open their Lesson Plan.
             </Typography>
           </Paper>
         ) : (
@@ -1385,13 +1386,23 @@ function AppShell({ user, signOut }) {
               onChange={handleMainTabChange}
               sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
             >
+              <Tab label="Lesson Plan" />
               <Tab label="Scope & Sequence" />
               <Tab label="Concepts & Lists" />
-              <Tab label="Lesson Plan" />
               <Tab label="Data Entry" />
             </Tabs>
 
-            {mainTab === 0 ? (
+            {mainTab === TAB_LESSON_PLAN ? (
+              <LessonPlanPanel
+                student={selectedStudent}
+                concepts={concepts}
+                studentLists={studentLists}
+                loadingLists={loadingLists}
+                wordsByConceptId={wordsByConceptId}
+                instructor={user?.signInDetails?.loginId ?? user?.username ?? ''}
+                setError={setError}
+              />
+            ) : mainTab === TAB_SCOPE ? (
               <ScopeAndSequencePanel
                 student={selectedStudent}
                 concepts={concepts}
@@ -1402,7 +1413,7 @@ function AppShell({ user, signOut }) {
                 onLockedChange={setScopeLocked}
                 saveRef={scopeSaveRef}
               />
-            ) : mainTab === 1 ? (
+            ) : mainTab === TAB_CONCEPTS ? (
               <ConceptsWordsPanel
                 student={selectedStudent}
                 concepts={concepts}
@@ -1415,16 +1426,6 @@ function AppShell({ user, signOut }) {
                 studentLists={studentLists}
                 loadingLists={loadingLists}
                 onReloadLists={loadStudentLists}
-                setError={setError}
-              />
-            ) : mainTab === 2 ? (
-              <LessonPlanPanel
-                student={selectedStudent}
-                concepts={concepts}
-                studentLists={studentLists}
-                loadingLists={loadingLists}
-                wordsByConceptId={wordsByConceptId}
-                instructor={user?.signInDetails?.loginId ?? user?.username ?? ''}
                 setError={setError}
               />
             ) : (
