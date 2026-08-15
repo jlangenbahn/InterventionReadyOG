@@ -141,19 +141,23 @@ function ScoreWordButton({ word, state, onToggle, fullWidth = false }) {
 
 function ScoreStat({ label, tally }) {
   return (
-    <Paper variant="outlined" sx={{ px: 1.5, py: 1, minWidth: 140 }}>
-      <Typography variant="caption" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography variant="subtitle1" sx={{ lineHeight: 1.2 }}>
-        {formatScoreTally(tally)}
-      </Typography>
+    <Box sx={{ py: 0.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="baseline" spacing={1}>
+        <Typography variant="body2" color="text.secondary">
+          {label}
+        </Typography>
+        <Typography variant="subtitle2" sx={{ lineHeight: 1.2, textAlign: 'right' }}>
+          {formatScoreTally(tally)}
+        </Typography>
+      </Stack>
       <Typography variant="caption" color="text.secondary">
         {tally.total ? `${tally.unscored} not scored` : 'No words'}
       </Typography>
-    </Paper>
+    </Box>
   )
 }
+
+const EMPTY_TALLY = { correct: 0, incorrect: 0, unscored: 0, total: 0, scored: 0, accuracy: null }
 
 export default function DataEntryPanel({ student, setError }) {
   const [savedLessons, setSavedLessons] = useState([])
@@ -364,18 +368,8 @@ export default function DataEntryPanel({ student, setError }) {
   }
 
   return (
-    <Box>
-      <Paper
-        sx={{
-          p: 2,
-          mb: 2,
-          display: 'flex',
-          alignItems: { xs: 'stretch', sm: 'center' },
-          justifyContent: 'space-between',
-          gap: 1.5,
-          flexWrap: 'wrap',
-        }}
-      >
+    <Box sx={{ pb: 10 }}>
+      <Paper sx={{ p: 2, mb: 2 }}>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
           <Typography variant="h6">Data Entry</Typography>
           <Chip size="small" label={studentDisplayName(student)} />
@@ -391,92 +385,92 @@ export default function DataEntryPanel({ student, setError }) {
           {notice ? <Chip size="small" color="success" label={notice} /> : null}
           {loadingLessons || saving ? <CircularProgress size={16} /> : null}
         </Stack>
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-          <Button
-            variant="outlined"
-            startIcon={<DoneAllIcon />}
-            onClick={markAllCorrect}
-            disabled={!loadedLesson || !allKeys.length}
-          >
-            Mark all correct
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<RestartAltIcon />}
-            onClick={clearScores}
-            disabled={!loadedLesson || !allKeys.length}
-          >
-            Clear scores
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<SaveIcon />}
-            onClick={() => void handleSave()}
-            disabled={!loadedLesson || !dirty || saving}
-          >
-            Save scores
-          </Button>
-        </Stack>
       </Paper>
 
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Typography variant="subtitle1">Saved lesson plans</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Click a row to score that lesson. Click a word to cycle Not scored → Correct → Incorrect.
-        </Typography>
-        <Box sx={{ height: 280, width: '100%' }}>
-          <DataGridPro
-            rows={savedLessonRows}
-            columns={SAVED_LESSON_COLUMNS}
-            getRowId={(row) => row.id}
-            onRowClick={(params) => {
-              const lesson = savedLessons.find((item) => item.id === params.id)
-              if (lesson) void selectLesson(lesson)
-            }}
-            getRowClassName={(params) => (params.id === loadedLesson?.id ? 'Mui-selected' : '')}
-            loading={loadingLessons}
-            pagination
-            pageSizeOptions={[10, 25, 50]}
-            initialState={{
-              pagination: { paginationModel: { pageSize: 10 } },
-              sorting: { sortModel: [{ field: 'lessonDateLabel', sort: 'desc' }] },
-            }}
-            slots={{ toolbar: GridToolbar }}
-            slotProps={{
-              toolbar: {
-                showQuickFilter: true,
-                quickFilterProps: { debounceMs: 300 },
-              },
-            }}
-            density="compact"
-            localeText={{
-              noRowsLabel: 'No saved lesson plans yet. Save a plan on the Lesson Plan tab first.',
-            }}
-          />
-        </Box>
-      </Paper>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(260px, 32%) minmax(0, 1fr)' },
+          gap: 2,
+          mb: 2,
+          alignItems: 'stretch',
+        }}
+      >
+        <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', minHeight: { md: 280 } }}>
+          <Typography variant="subtitle1">Lesson scores</Typography>
+          {loadedLesson ? (
+            <>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Totals for the selected lesson. Click a word below to score it.
+              </Typography>
+              <ScoreStat label="Total" tally={totalTally} />
+              <ScoreStat label="New concept" tally={newConceptTally} />
+              <ScoreStat label="Review concepts" tally={reviewTally} />
+              <ScoreStat label="Sentences" tally={sentenceTally} />
+              <ScoreStat label="Passage" tally={passageTally} />
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5 }} flexWrap="wrap" useFlexGap>
+                <Typography variant="caption" color="text.secondary">
+                  Legend
+                </Typography>
+                <Chip size="small" variant="outlined" label="Not scored" />
+                <Chip size="small" sx={{ bgcolor: '#2e7d32', color: '#fff' }} label="Correct" />
+                <Chip size="small" sx={{ bgcolor: '#c62828', color: '#fff' }} label="Incorrect" />
+              </Stack>
+            </>
+          ) : (
+            <>
+              <ScoreStat label="Total" tally={EMPTY_TALLY} />
+              <ScoreStat label="New concept" tally={EMPTY_TALLY} />
+              <ScoreStat label="Review concepts" tally={EMPTY_TALLY} />
+              <ScoreStat label="Sentences" tally={EMPTY_TALLY} />
+              <ScoreStat label="Passage" tally={EMPTY_TALLY} />
+              <Alert severity="info" sx={{ mt: 1.5 }}>
+                Select a saved lesson plan to enter word-level scores.
+              </Alert>
+            </>
+          )}
+        </Paper>
 
-      {!loadedLesson ? (
-        <Alert severity="info">Select a saved lesson plan to enter word-level scores.</Alert>
-      ) : (
+        <Paper sx={{ p: 2, minWidth: 0 }}>
+          <Typography variant="subtitle1">Saved lesson plans</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Click a row to score that lesson. Click a word to cycle Not scored → Correct → Incorrect.
+          </Typography>
+          <Box sx={{ height: 280, width: '100%' }}>
+            <DataGridPro
+              rows={savedLessonRows}
+              columns={SAVED_LESSON_COLUMNS}
+              getRowId={(row) => row.id}
+              onRowClick={(params) => {
+                const lesson = savedLessons.find((item) => item.id === params.id)
+                if (lesson) void selectLesson(lesson)
+              }}
+              getRowClassName={(params) => (params.id === loadedLesson?.id ? 'Mui-selected' : '')}
+              loading={loadingLessons}
+              pagination
+              pageSizeOptions={[10, 25, 50]}
+              initialState={{
+                pagination: { paginationModel: { pageSize: 10 } },
+                sorting: { sortModel: [{ field: 'lessonDateLabel', sort: 'desc' }] },
+              }}
+              slots={{ toolbar: GridToolbar }}
+              slotProps={{
+                toolbar: {
+                  showQuickFilter: true,
+                  quickFilterProps: { debounceMs: 300 },
+                },
+              }}
+              density="compact"
+              localeText={{
+                noRowsLabel: 'No saved lesson plans yet. Save a plan on the Lesson Plan tab first.',
+              }}
+            />
+          </Box>
+        </Paper>
+      </Box>
+
+      {loadedLesson ? (
         <>
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
-            <ScoreStat label="Total" tally={totalTally} />
-            <ScoreStat label="New concept" tally={newConceptTally} />
-            <ScoreStat label="Review concepts" tally={reviewTally} />
-            <ScoreStat label="Sentences" tally={sentenceTally} />
-            <ScoreStat label="Passage" tally={passageTally} />
-          </Stack>
-
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
-            <Typography variant="caption" color="text.secondary">
-              Legend
-            </Typography>
-            <Chip size="small" variant="outlined" label="Not scored" />
-            <Chip size="small" sx={{ bgcolor: '#2e7d32', color: '#fff' }} label="Correct" />
-            <Chip size="small" sx={{ bgcolor: '#c62828', color: '#fff' }} label="Incorrect" />
-          </Stack>
-
           <Typography variant="subtitle1" sx={{ mb: 1 }}>
             Lists
           </Typography>
@@ -619,7 +613,47 @@ export default function DataEntryPanel({ student, setError }) {
             )}
           </Paper>
         </>
-      )}
+      ) : null}
+
+      <Paper
+        elevation={8}
+        sx={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          zIndex: (theme) => theme.zIndex.snackbar,
+          p: 1,
+          display: 'flex',
+          gap: 1,
+          flexWrap: 'wrap',
+          maxWidth: 'calc(100vw - 48px)',
+        }}
+      >
+        <Button
+          variant="outlined"
+          startIcon={<DoneAllIcon />}
+          onClick={markAllCorrect}
+          disabled={!loadedLesson || !allKeys.length}
+        >
+          Mark all correct
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<RestartAltIcon />}
+          onClick={clearScores}
+          disabled={!loadedLesson || !allKeys.length}
+        >
+          Clear scores
+        </Button>
+        <Button
+          variant="contained"
+          startIcon={<SaveIcon />}
+          onClick={() => void handleSave()}
+          disabled={!loadedLesson || !dirty || saving}
+        >
+          Save scores
+        </Button>
+      </Paper>
     </Box>
   )
 }
