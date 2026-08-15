@@ -7,10 +7,13 @@ import {
   CircularProgress,
   Paper,
   Stack,
+  Tab,
+  Tabs,
   Typography,
 } from '@mui/material'
 import PrintIcon from '@mui/icons-material/Print'
 import AddIcon from '@mui/icons-material/Add'
+import ViewListIcon from '@mui/icons-material/ViewList'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import LessonPlanTemplate from './LessonPlanTemplate'
 import CreateLessonStepper from './CreateLessonStepper'
@@ -210,6 +213,9 @@ const SAVED_LESSON_COLUMNS = [
   { field: 'newConcept', headerName: 'New concept', flex: 1, minWidth: 160 },
 ]
 
+const LESSON_MODE_VIEW = 0
+const LESSON_MODE_CREATE = 1
+
 export default function LessonPlanPanel({
   student,
   concepts = [],
@@ -233,6 +239,7 @@ export default function LessonPlanPanel({
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
   const [activeStep, setActiveStep] = useState(0)
+  const [lessonMode, setLessonMode] = useState(LESSON_MODE_VIEW)
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -292,6 +299,7 @@ export default function LessonPlanPanel({
     setLessonDate(todayIso())
     setNotice('')
     setActiveStep(0)
+    setLessonMode(LESSON_MODE_VIEW)
   }, [student?.id])
 
   const wordLookup = useMemo(() => buildWordLookup(wordsByConceptId), [wordsByConceptId])
@@ -458,6 +466,7 @@ export default function LessonPlanPanel({
     setNotice('')
     setError('')
     setActiveStep(0)
+    setLessonMode(LESSON_MODE_CREATE)
   }
 
   function applyLesson(lesson) {
@@ -567,42 +576,156 @@ export default function LessonPlanPanel({
   }
 
   return (
-    <Box>
-      <Paper
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+        gridTemplateAreas: { xs: '"preview" "work"', md: '"work preview"' },
+        gap: 2,
+        alignItems: 'start',
+        '@media print': { display: 'block' },
+      }}
+    >
+      <Box sx={{ gridArea: 'work', minWidth: 0, '@media print': { display: 'none' } }}>
+        <Paper sx={{ p: 2 }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            justifyContent="space-between"
+            flexWrap="wrap"
+            useFlexGap
+            sx={{ mb: 1 }}
+          >
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+              {lists.length ? (
+                <Chip size="small" variant="outlined" label={`${lists.length} lists`} />
+              ) : null}
+              {loadedLesson ? (
+                <Chip
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  label={`Created ${formatCreatedDate(loadedLesson.createdAt)}`}
+                />
+              ) : (
+                <Chip size="small" variant="outlined" label="Unsaved" />
+              )}
+              {notice ? <Chip size="small" color="success" label={notice} /> : null}
+              {loading || loadingLists || loadingLessons || saving ? <CircularProgress size={16} /> : null}
+            </Stack>
+            <Button variant="outlined" startIcon={<AddIcon />} onClick={handleNew} disabled={saving}>
+              New
+            </Button>
+          </Stack>
+
+          <Tabs
+            value={lessonMode}
+            onChange={(_event, value) => setLessonMode(value)}
+            variant="fullWidth"
+            sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+          >
+            <Tab icon={<ViewListIcon />} iconPosition="start" label="View lesson plans" />
+            <Tab icon={<AddIcon />} iconPosition="start" label="Create lesson" />
+          </Tabs>
+
+          {lessonMode === LESSON_MODE_VIEW ? (
+            <>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Select a saved plan to preview it on the right. Switch to Create lesson to edit it.
+                Lesson date is when it is taught; Created is when you saved it.
+              </Typography>
+              <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
+                <DataGridPro
+                  rows={savedLessonRows}
+                  columns={SAVED_LESSON_COLUMNS}
+                  getRowId={(row) => row.id}
+                  onRowClick={(params) => {
+                    const lesson = savedLessons.find((item) => item.id === params.id)
+                    if (lesson) applyLesson(lesson)
+                  }}
+                  getRowClassName={(params) => (params.id === loadedLesson?.id ? 'Mui-selected' : '')}
+                  loading={loadingLessons}
+                  pagination
+                  pageSizeOptions={[10, 25, 50]}
+                  initialState={{
+                    pagination: { paginationModel: { pageSize: 10 } },
+                    sorting: { sortModel: [{ field: 'lessonDateLabel', sort: 'desc' }] },
+                  }}
+                  slots={{ toolbar: GridToolbar }}
+                  slotProps={{
+                    toolbar: {
+                      showQuickFilter: true,
+                      quickFilterProps: { debounceMs: 300 },
+                    },
+                  }}
+                  density="compact"
+                  localeText={{
+                    noRowsLabel: 'No saved lesson plans yet. Switch to Create lesson to make one.',
+                  }}
+                />
+              </Box>
+            </>
+          ) : (
+            <>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                {loadedLesson
+                  ? 'This saved plan is loaded. Change materials and update it, or click New to start another plan.'
+                  : 'Walk through each step to choose materials, then create the lesson. The preview on the right updates as you go.'}
+              </Typography>
+              <CreateLessonStepper
+                activeStep={activeStep}
+                onStepChange={setActiveStep}
+                lessonDate={lessonDate}
+                onLessonDateChange={setLessonDate}
+                lists={lists}
+                sentences={sentences}
+                passages={passages}
+                loading={loading}
+                loadingLists={loadingLists}
+                newConceptIds={newConceptIds}
+                reviewIds={reviewIds}
+                sentenceIds={sentenceIds}
+                passageIds={passageIds}
+                onNewConceptChange={handleNewConceptChange}
+                onReviewChange={handleReviewChange}
+                onSentencesChange={handleSentenceChange}
+                onPassagesChange={handlePassageChange}
+                onCreate={handleSave}
+                creating={saving}
+                createLabel={loadedLesson ? 'Update lesson plan' : 'Create lesson plan'}
+                canCreate={canCreate}
+              />
+            </>
+          )}
+        </Paper>
+      </Box>
+
+      <Box
         sx={{
-          p: 2,
-          mb: 2,
-          display: 'flex',
-          alignItems: { xs: 'stretch', sm: 'center' },
-          justifyContent: 'space-between',
-          gap: 1.5,
-          flexWrap: 'wrap',
-          '@media print': { display: 'none' },
+          gridArea: 'preview',
+          position: { md: 'sticky' },
+          top: { md: 88 },
+          maxHeight: { md: 'calc(100vh - 104px)' },
+          overflow: { md: 'auto' },
+          bgcolor: '#f5f5f6',
+          py: 1.5,
+          px: { xs: 1, sm: 1.5 },
+          borderRadius: 1,
+          '@media print': {
+            position: 'static',
+            maxHeight: 'none',
+            overflow: 'visible',
+            bgcolor: 'transparent',
+            p: 0,
+          },
         }}
       >
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-          <Typography variant="h6">Lesson Plan</Typography>
-          <Chip size="small" label={studentDisplayName(student)} />
-          {lists.length ? (
-            <Chip size="small" variant="outlined" label={`${lists.length} lists`} />
-          ) : null}
-          {loadedLesson ? (
-            <Chip
-              size="small"
-              color="primary"
-              variant="outlined"
-              label={`Created ${formatCreatedDate(loadedLesson.createdAt)}`}
-            />
-          ) : (
-            <Chip size="small" variant="outlined" label="Unsaved" />
-          )}
-          {notice ? <Chip size="small" color="success" label={notice} /> : null}
-          {loading || loadingLists || loadingLessons || saving ? <CircularProgress size={16} /> : null}
-        </Stack>
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-          <Button variant="outlined" startIcon={<AddIcon />} onClick={handleNew} disabled={saving}>
-            New
-          </Button>
+        <Stack
+          direction="row"
+          justifyContent="flex-end"
+          sx={{ mb: 1, '@media print': { display: 'none' } }}
+        >
           <Button
             variant="contained"
             startIcon={<PrintIcon />}
@@ -612,120 +735,19 @@ export default function LessonPlanPanel({
             Print Lesson Plan
           </Button>
         </Stack>
-      </Paper>
-
-      <Paper sx={{ p: 2, mb: 2, '@media print': { display: 'none' } }}>
-        <Typography variant="subtitle1">Saved lesson plans</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Click a row to load that plan into the stepper. Lesson date is when it is taught; Created is when you saved it.
-        </Typography>
-        <Box sx={{ height: 280, width: '100%' }}>
-          <DataGridPro
-            rows={savedLessonRows}
-            columns={SAVED_LESSON_COLUMNS}
-            getRowId={(row) => row.id}
-            onRowClick={(params) => {
-              const lesson = savedLessons.find((item) => item.id === params.id)
-              if (lesson) applyLesson(lesson)
-            }}
-            getRowClassName={(params) => (params.id === loadedLesson?.id ? 'Mui-selected' : '')}
-            loading={loadingLessons}
-            pagination
-            pageSizeOptions={[10, 25, 50]}
-            initialState={{
-              pagination: { paginationModel: { pageSize: 10 } },
-              sorting: { sortModel: [{ field: 'lessonDateLabel', sort: 'desc' }] },
-            }}
-            slots={{ toolbar: GridToolbar }}
-            slotProps={{
-              toolbar: {
-                showQuickFilter: true,
-                quickFilterProps: { debounceMs: 300 },
-              },
-            }}
-            density="compact"
-            localeText={{
-              noRowsLabel: 'No saved lesson plans yet. Finish the stepper and create a lesson.',
-            }}
-          />
-        </Box>
-      </Paper>
-
-      <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', lg: 'minmax(420px, 560px) minmax(340px, 1fr)' },
-            gap: 2,
-            alignItems: 'start',
-            '@media print': { display: 'block' },
-          }}
-        >
-          <Box
-            sx={{
-              position: { lg: 'sticky' },
-              top: { lg: 88 },
-              maxHeight: { lg: 'calc(100vh - 104px)' },
-              overflow: { lg: 'auto' },
-              bgcolor: '#f5f5f6',
-              py: 1.5,
-              px: { xs: 1, sm: 1.5 },
-              borderRadius: 1,
-              '@media print': {
-                position: 'static',
-                maxHeight: 'none',
-                overflow: 'visible',
-                bgcolor: 'transparent',
-                p: 0,
-              },
-            }}
-          >
-            <LessonPlanTemplate
-              ref={printRef}
-              student={payload?.student ?? student}
-              reviewLists={reviewLists}
-              newConceptList={newConceptList}
-              sentences={selectedSentences}
-              passages={selectedPassages}
-              passage={selectedPassage}
-              date={dateLabel}
-              lessonNumber={lessonNumber}
-              instructor={instructor}
-            />
-          </Box>
-
-          <Box sx={{ minWidth: 0, '@media print': { display: 'none' } }}>
-            <Typography variant="subtitle1" sx={{ mb: 0.5 }}>
-              Create a lesson plan
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Walk through each step to choose materials, then create the lesson. Click New to start
-              another plan.
-            </Typography>
-            <CreateLessonStepper
-              activeStep={activeStep}
-              onStepChange={setActiveStep}
-              lessonDate={lessonDate}
-              onLessonDateChange={setLessonDate}
-              lists={lists}
-              sentences={sentences}
-              passages={passages}
-              loading={loading}
-              loadingLists={loadingLists}
-              newConceptIds={newConceptIds}
-              reviewIds={reviewIds}
-              sentenceIds={sentenceIds}
-              passageIds={passageIds}
-              onNewConceptChange={handleNewConceptChange}
-              onReviewChange={handleReviewChange}
-              onSentencesChange={handleSentenceChange}
-              onPassagesChange={handlePassageChange}
-              onCreate={handleSave}
-              creating={saving}
-              createLabel={loadedLesson ? 'Update lesson plan' : 'Create lesson plan'}
-              canCreate={canCreate}
-            />
-          </Box>
-        </Box>
+        <LessonPlanTemplate
+          ref={printRef}
+          student={payload?.student ?? student}
+          reviewLists={reviewLists}
+          newConceptList={newConceptList}
+          sentences={selectedSentences}
+          passages={selectedPassages}
+          passage={selectedPassage}
+          date={dateLabel}
+          lessonNumber={lessonNumber}
+          instructor={instructor}
+        />
+      </Box>
     </Box>
   )
 }
