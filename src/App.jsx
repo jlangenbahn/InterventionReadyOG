@@ -44,6 +44,7 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SaveIcon from '@mui/icons-material/Save'
 import SearchIcon from '@mui/icons-material/Search'
 import LessonPlanPanel from './components/LessonPlanPanel'
+import DataEntryPanel from './components/DataEntryPanel'
 import { fetchStudentLists } from './lib/fetchStudentLessonPlan'
 
 const client = generateClient()
@@ -1387,6 +1388,7 @@ function AppShell({ user, signOut }) {
               <Tab label="Scope & Sequence" />
               <Tab label="Concepts & Lists" />
               <Tab label="Lesson Plan" />
+              <Tab label="Data Entry" />
             </Tabs>
 
             {mainTab === 0 ? (
@@ -1415,7 +1417,7 @@ function AppShell({ user, signOut }) {
                 onReloadLists={loadStudentLists}
                 setError={setError}
               />
-            ) : (
+            ) : mainTab === 2 ? (
               <LessonPlanPanel
                 student={selectedStudent}
                 concepts={concepts}
@@ -1423,6 +1425,11 @@ function AppShell({ user, signOut }) {
                 loadingLists={loadingLists}
                 wordsByConceptId={wordsByConceptId}
                 instructor={user?.signInDetails?.loginId ?? user?.username ?? ''}
+                setError={setError}
+              />
+            ) : (
+              <DataEntryPanel
+                student={selectedStudent}
                 setError={setError}
               />
             )}

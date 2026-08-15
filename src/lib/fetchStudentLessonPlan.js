@@ -302,6 +302,179 @@ export function nextLessonNumber(lessons) {
   return Math.max(...numbers) + 1
 }
 
+export const SCORE_UNSCORED = 'unscored'
+export const SCORE_CORRECT = 'correct'
+export const SCORE_INCORRECT = 'incorrect'
+export const SCORE_CYCLE = [SCORE_UNSCORED, SCORE_CORRECT, SCORE_INCORRECT]
+
+const LIST_SCORE_SLOTS = [
+  { key: 'newConcept', section: 'new', label: 'New concept' },
+  { key: 'review1', section: 'review', label: 'Review concept #1' },
+  { key: 'review2', section: 'review', label: 'Review concept #2' },
+  { key: 'review3', section: 'review', label: 'Review concept #3' },
+]
+
+const SENTENCE_SCORE_SLOTS = [
+  { key: 'sentence1', label: 'Sentence #1' },
+  { key: 'sentence2', label: 'Sentence #2' },
+]
+
+export function nextScoreState(current) {
+  const index = SCORE_CYCLE.indexOf(current)
+  const from = index >= 0 ? index : 0
+  return SCORE_CYCLE[(from + 1) % SCORE_CYCLE.length]
+}
+
+export function tokenizeWords(text) {
+  return String(text ?? '').trim().split(/\s+/).filter(Boolean)
+}
+
+export function tallyScores(keys, scores) {
+  let correct = 0
+  let incorrect = 0
+  let unscored = 0
+  for (const key of keys ?? []) {
+    const state = scores?.[key] || SCORE_UNSCORED
+    if (state === SCORE_CORRECT) correct += 1
+    else if (state === SCORE_INCORRECT) incorrect += 1
+    else unscored += 1
+  }
+  const total = (keys ?? []).length
+  const scored = correct + incorrect
+  return {
+    correct,
+    incorrect,
+    unscored,
+    total,
+    scored,
+    accuracy: scored ? correct / scored : null,
+  }
+}
+
+function formatPercent(accuracy) {
+  if (accuracy == null) return ''
+  return `${Math.round(accuracy * 100)}%`
+}
+
+export function formatScoreTally(tally) {
+  if (!tally?.total) return '—'
+  if (!tally.scored) return `0/${tally.total} scored`
+  const percent = formatPercent(tally.accuracy)
+  return percent
+    ? `${tally.correct}/${tally.scored} (${percent})`
+    : `${tally.correct}/${tally.scored}`
+}
+
+function conceptIdentityKeys(conceptID, conceptName) {
+  const keys = []
+  if (conceptID) keys.push(`id:${conceptID}`)
+  const name = String(conceptName ?? '').trim().toLowerCase()
+  if (name) keys.push(`name:${name}`)
+  return keys
+}
+
+export function lessonConceptKeys(lesson) {
+  const data = parseLessonData(lesson?.lessonData)
+  const keys = new Set()
+  const lists = data.snapshots?.lists ?? {}
+  for (const list of Object.values(lists)) {
+    for (const key of conceptIdentityKeys(list?.conceptID, list?.concept)) keys.add(key)
+  }
+  if (lesson?.concepts) keys.add(`id:${lesson.concepts}`)
+  const passage = data.snapshots?.passage
+  for (const key of conceptIdentityKeys(passage?.conceptID, passage?.concept)) keys.add(key)
+  return keys
+}
+
+function isPreviousLesson(lesson, current) {
+  if (!lesson?.id || lesson.id === current?.id) return false
+  const lessonDate = String(lesson.date ?? '')
+  const currentDate = String(current?.date ?? '')
+  if (lessonDate && currentDate && lessonDate !== currentDate) return lessonDate < currentDate
+  return String(lesson.createdAt ?? '') < String(current?.createdAt ?? '')
+}
+
+export function countConceptExposures(lessons, currentLesson, conceptID, conceptName) {
+  const matchKeys = new Set(conceptIdentityKeys(conceptID, conceptName))
+  if (!matchKeys.size) return 0
+  let count = 0
+  for (const lesson of lessons ?? []) {
+    if (!isPreviousLesson(lesson, currentLesson)) continue
+    const keys = lessonConceptKeys(lesson)
+    let hit = false
+    for (const key of matchKeys) {
+      if (keys.has(key)) {
+        hit = true
+        break
+      }
+    }
+    if (hit) count += 1
+  }
+  return count
+}
+
+function wordItems(prefix, slotKey, words) {
+  return (words ?? []).map((word, index) => ({
+    key: `${prefix}:${slotKey}:${index}`,
+    word: String(word),
+  }))
+}
+
+export function buildLessonScoreMaterials(lesson) {
+  const data = parseLessonData(lesson?.lessonData)
+  const snaps = data.snapshots ?? {}
+  const lists = LIST_SCORE_SLOTS.map((slot) => {
+    const list = snaps.lists?.[slot.key] ?? null
+    const words = Array.isArray(list?.words) ? list.words.filter(Boolean) : []
+    return {
+      ...slot,
+      list,
+      name: list?.name || '',
+      concept: list?.concept || '',
+      conceptID: list?.conceptID || null,
+      words: wordItems('list', slot.key, words),
+    }
+  })
+
+  const sentenceSnaps = Array.isArray(snaps.sentences) ? snaps.sentences : []
+  const sentences = SENTENCE_SCORE_SLOTS.map((slot, index) => {
+    const sentence = snaps.sentences?.[slot.key] ?? sentenceSnaps[index] ?? null
+    return {
+      ...slot,
+      sentence,
+      text: sentence?.text || '',
+      words: wordItems('sentence', slot.key, tokenizeWords(sentence?.text || '')),
+    }
+  })
+
+  const passage = snaps.passage ?? null
+  const passageWords = wordItems('passage', 'passage1', tokenizeWords(passage?.text || ''))
+
+  const allKeys = [
+    ...lists.flatMap((list) => list.words.map((item) => item.key)),
+    ...sentences.flatMap((sentence) => sentence.words.map((item) => item.key)),
+    ...passageWords.map((item) => item.key),
+  ]
+
+  return {
+    lists,
+    sentences,
+    passage: {
+      key: 'passage1',
+      label: 'Passage',
+      passage,
+      title: passage?.title || '',
+      concept: passage?.concept || '',
+      conceptID: passage?.conceptID || null,
+      text: passage?.text || '',
+      words: passageWords,
+    },
+    allKeys,
+    scores: data.scores && typeof data.scores === 'object' ? data.scores : {},
+    scoreSummary: data.scoreSummary && typeof data.scoreSummary === 'object' ? data.scoreSummary : null,
+  }
+}
+
 /**
  * Map student lists onto the template slots:
  *   lists[0..2] → review (prefer masteryStatus === 'review')
