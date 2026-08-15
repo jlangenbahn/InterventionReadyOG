@@ -317,6 +317,15 @@ const LIST_SCORE_SLOTS = [
 const SENTENCE_SCORE_SLOTS = [
   { key: 'sentence1', label: 'Sentence #1' },
   { key: 'sentence2', label: 'Sentence #2' },
+  { key: 'sentence3', label: 'Sentence #3' },
+  { key: 'sentence4', label: 'Sentence #4' },
+  { key: 'sentence5', label: 'Sentence #5' },
+  { key: 'sentence6', label: 'Sentence #6' },
+]
+
+const PASSAGE_SCORE_SLOTS = [
+  { key: 'passage1', label: 'Passage #1' },
+  { key: 'passage2', label: 'Passage #2' },
 ]
 
 export function nextScoreState(current) {
@@ -383,6 +392,10 @@ export function lessonConceptKeys(lesson) {
   if (lesson?.concepts) keys.add(`id:${lesson.concepts}`)
   const passage = data.snapshots?.passage
   for (const key of conceptIdentityKeys(passage?.conceptID, passage?.concept)) keys.add(key)
+  const passageList = Array.isArray(data.snapshots?.passages) ? data.snapshots.passages : []
+  for (const item of passageList) {
+    for (const key of conceptIdentityKeys(item?.conceptID, item?.concept)) keys.add(key)
+  }
   return keys
 }
 
@@ -445,29 +458,45 @@ export function buildLessonScoreMaterials(lesson) {
       text: sentence?.text || '',
       words: wordItems('sentence', slot.key, tokenizeWords(sentence?.text || '')),
     }
-  })
+  }).filter((sentence) => sentence.words.length)
 
-  const passage = snaps.passage ?? null
-  const passageWords = wordItems('passage', 'passage1', tokenizeWords(passage?.text || ''))
-
-  const allKeys = [
-    ...lists.flatMap((list) => list.words.map((item) => item.key)),
-    ...sentences.flatMap((sentence) => sentence.words.map((item) => item.key)),
-    ...passageWords.map((item) => item.key),
-  ]
-
-  return {
-    lists,
-    sentences,
-    passage: {
-      key: 'passage1',
-      label: 'Passage',
+  const passageSnaps = Array.isArray(snaps.passages)
+    ? snaps.passages
+    : snaps.passage
+      ? [snaps.passage]
+      : []
+  const passages = PASSAGE_SCORE_SLOTS.map((slot, index) => {
+    const passage = snaps.passages?.[slot.key] ?? passageSnaps[index] ?? (index === 0 ? snaps.passage : null) ?? null
+    return {
+      ...slot,
       passage,
       title: passage?.title || '',
       concept: passage?.concept || '',
       conceptID: passage?.conceptID || null,
       text: passage?.text || '',
-      words: passageWords,
+      words: wordItems('passage', slot.key, tokenizeWords(passage?.text || '')),
+    }
+  }).filter((item) => item.words.length)
+
+  const allKeys = [
+    ...lists.flatMap((list) => list.words.map((item) => item.key)),
+    ...sentences.flatMap((sentence) => sentence.words.map((item) => item.key)),
+    ...passages.flatMap((item) => item.words.map((itemWord) => itemWord.key)),
+  ]
+
+  return {
+    lists,
+    sentences,
+    passages,
+    passage: passages[0] ?? {
+      key: 'passage1',
+      label: 'Passage',
+      passage: null,
+      title: '',
+      concept: '',
+      conceptID: null,
+      text: '',
+      words: [],
     },
     allKeys,
     scores: data.scores && typeof data.scores === 'object' ? data.scores : {},

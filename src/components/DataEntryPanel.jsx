@@ -217,7 +217,7 @@ export default function DataEntryPanel({ student, setError }) {
     [materials],
   )
   const passageKeys = useMemo(
-    () => (materials?.passage?.words ?? []).map((item) => item.key),
+    () => (materials?.passages ?? []).flatMap((item) => item.words.map((word) => word.key)),
     [materials],
   )
 
@@ -225,18 +225,6 @@ export default function DataEntryPanel({ student, setError }) {
   const reviewTally = useMemo(() => tallyScores(reviewKeys, scores), [reviewKeys, scores])
   const sentenceTally = useMemo(() => tallyScores(sentenceKeys, scores), [sentenceKeys, scores])
   const passageTally = useMemo(() => tallyScores(passageKeys, scores), [passageKeys, scores])
-  const passageExposure = useMemo(
-    () =>
-      loadedLesson
-        ? countConceptExposures(
-            savedLessons,
-            loadedLesson,
-            materials?.passage?.conceptID,
-            materials?.passage?.concept,
-          )
-        : 0,
-    [savedLessons, loadedLesson, materials],
-  )
 
   const savedLessonRows = useMemo(
     () =>
@@ -541,17 +529,17 @@ export default function DataEntryPanel({ student, setError }) {
             Sentences
           </Typography>
           <Stack spacing={1.5} sx={{ mb: 2 }}>
-            {(materials?.sentences ?? []).map((sentence) => (
-              <Paper key={sentence.key} variant="outlined" sx={{ p: 1.5 }}>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap" useFlexGap>
-                  <Typography variant="subtitle2">{sentence.label}</Typography>
-                  <Chip
-                    size="small"
-                    variant="outlined"
-                    label={formatScoreTally(tallyScores(sentence.words.map((item) => item.key), scores))}
-                  />
-                </Stack>
-                {sentence.words.length ? (
+            {(materials?.sentences ?? []).length ? (
+              (materials.sentences).map((sentence) => (
+                <Paper key={sentence.key} variant="outlined" sx={{ p: 1.5 }}>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap" useFlexGap>
+                    <Typography variant="subtitle2">{sentence.label}</Typography>
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={formatScoreTally(tallyScores(sentence.words.map((item) => item.key), scores))}
+                    />
+                  </Stack>
                   <Stack direction="row" flexWrap="wrap" useFlexGap spacing={0.75}>
                     {sentence.words.map((item) => (
                       <ScoreWordButton
@@ -562,56 +550,68 @@ export default function DataEntryPanel({ student, setError }) {
                       />
                     ))}
                   </Stack>
-                ) : (
-                  <Typography variant="body2" color="text.secondary">
-                    No sentence assigned
-                  </Typography>
-                )}
-              </Paper>
-            ))}
+                </Paper>
+              ))
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                No sentence assigned
+              </Typography>
+            )}
           </Stack>
 
           <Typography variant="subtitle1" sx={{ mb: 1 }}>
-            Passage
+            Passages
           </Typography>
-          <Paper variant="outlined" sx={{ p: 1.5 }}>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap" useFlexGap>
-              <Typography variant="subtitle2">
-                {materials?.passage?.title || materials?.passage?.label || 'Passage'}
-              </Typography>
-              {materials?.passage?.concept ? (
-                <Chip size="small" variant="outlined" label={materials.passage.concept} />
-              ) : null}
-              {materials?.passage?.concept || materials?.passage?.conceptID ? (
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={passageExposure === 0 ? 'First exposure' : `Exposed ${passageExposure}×`}
-                />
-              ) : null}
-              <Chip
-                size="small"
-                variant="outlined"
-                label={formatScoreTally(tallyScores(passageKeys, scores))}
-              />
-            </Stack>
-            {materials?.passage?.words?.length ? (
-              <Stack direction="row" flexWrap="wrap" useFlexGap spacing={0.75}>
-                {materials.passage.words.map((item) => (
-                  <ScoreWordButton
-                    key={item.key}
-                    word={item.word}
-                    state={scores[item.key] || SCORE_UNSCORED}
-                    onToggle={() => toggleWord(item.key)}
-                  />
-                ))}
-              </Stack>
+          <Stack spacing={1.5}>
+            {(materials?.passages ?? []).length ? (
+              materials.passages.map((item) => {
+                const exposure = countConceptExposures(
+                  savedLessons,
+                  loadedLesson,
+                  item.conceptID,
+                  item.concept,
+                )
+                return (
+                  <Paper key={item.key} variant="outlined" sx={{ p: 1.5 }}>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap" useFlexGap>
+                      <Typography variant="subtitle2">
+                        {item.title || item.label || 'Passage'}
+                      </Typography>
+                      {item.concept ? (
+                        <Chip size="small" variant="outlined" label={item.concept} />
+                      ) : null}
+                      {item.concept || item.conceptID ? (
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label={exposure === 0 ? 'First exposure' : `Exposed ${exposure}×`}
+                        />
+                      ) : null}
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        label={formatScoreTally(tallyScores(item.words.map((word) => word.key), scores))}
+                      />
+                    </Stack>
+                    <Stack direction="row" flexWrap="wrap" useFlexGap spacing={0.75}>
+                      {item.words.map((word) => (
+                        <ScoreWordButton
+                          key={word.key}
+                          word={word.word}
+                          state={scores[word.key] || SCORE_UNSCORED}
+                          onToggle={() => toggleWord(word.key)}
+                        />
+                      ))}
+                    </Stack>
+                  </Paper>
+                )
+              })
             ) : (
               <Typography variant="body2" color="text.secondary">
                 No passage assigned
               </Typography>
             )}
-          </Paper>
+          </Stack>
         </>
       ) : null}
 

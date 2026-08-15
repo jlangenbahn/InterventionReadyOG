@@ -198,7 +198,8 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
     student,
     reviewLists = [null, null, null],
     newConceptList = null,
-    sentences = [null, null],
+    sentences = [null, null, null, null, null, null],
+    passages = [null, null],
     passage = null,
     date,
     lessonNumber,
@@ -210,6 +211,7 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
 ) {
   const studentName = [student?.firstName, student?.lastName].filter(Boolean).join(' ')
   const paddedReview = [0, 1, 2].map((index) => reviewLists[index] ?? null)
+  const paddedPassages = [0, 1].map((index) => passages[index] ?? (index === 0 ? passage : null) ?? null)
 
   return (
     <Box ref={ref} className="lesson-plan-print-root">
@@ -321,9 +323,15 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
           <Box sx={rowSx}>
             <Box sx={labelSx}>Dictation</Box>
             <Box sx={contentSx}>
-              1. <Placeholder tag="Sentence #1" value={sentenceText(sentences[0])} />
-              <br />
-              2. <Placeholder tag="Sentence #2" value={sentenceText(sentences[1])} />
+              {[0, 1, 2, 3, 4, 5].map((index) => (
+                <Box key={index}>
+                  {index + 1}.{' '}
+                  <Placeholder
+                    tag={`Sentence #${index + 1}`}
+                    value={sentenceText(sentences[index])}
+                  />
+                </Box>
+              ))}
             </Box>
           </Box>
         </Box>
@@ -335,7 +343,15 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
           <Box sx={rowSx}>
             <Box sx={labelSx}>Passage</Box>
             <Box sx={contentSx}>
-              <Placeholder tag="Passage #1" value={passageText(passage)} />
+              {[0, 1].map((index) => (
+                <Box key={index}>
+                  {index + 1}.{' '}
+                  <Placeholder
+                    tag={`Passage #${index + 1}`}
+                    value={passageText(paddedPassages[index])}
+                  />
+                </Box>
+              ))}
             </Box>
           </Box>
         </Box>

@@ -1,0 +1,113 @@
+import { useMemo } from 'react'
+import { Box, Chip, Stack, Typography } from '@mui/material'
+import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+
+export default function StepperSelectionGrid({
+  items = [],
+  columns = [],
+  selectedIds = [],
+  onChange,
+  maxCount = 1,
+  loading = false,
+  noRowsLabel,
+  excludeIds = [],
+  getItemLabel,
+}) {
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const excluded = useMemo(() => new Set(excludeIds), [excludeIds])
+
+  const rows = useMemo(
+    () =>
+      (items ?? [])
+        .filter((item) => item?.id && !excluded.has(item.id))
+        .map((item) => {
+          const row = { id: item.id, selected: selectedSet.has(item.id) }
+          for (const column of columns) {
+            if (column.field && column.field in item) row[column.field] = item[column.field]
+          }
+          return row
+        }),
+    [items, columns, excluded, selectedSet],
+  )
+
+  const itemsById = useMemo(() => {
+    const map = new Map()
+    for (const item of items ?? []) {
+      if (item?.id) map.set(item.id, item)
+    }
+    return map
+  }, [items])
+
+  function handleRowClick(params) {
+    const id = params.id
+    if (selectedSet.has(id)) {
+      onChange(selectedIds.filter((value) => value !== id))
+      return
+    }
+    if (maxCount <= 1) {
+      onChange([id])
+      return
+    }
+    if (selectedIds.length >= maxCount) return
+    onChange([...selectedIds, id])
+  }
+
+  function removeId(id) {
+    onChange(selectedIds.filter((value) => value !== id))
+  }
+
+  return (
+    <Box>
+      <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mb: 1, minHeight: 32 }}>
+        {selectedIds.length ? (
+          selectedIds.map((id) => {
+            const item = itemsById.get(id)
+            const label = item && getItemLabel ? getItemLabel(item) : id
+            return (
+              <Chip
+                key={id}
+                size="small"
+                label={label}
+                onDelete={() => removeId(id)}
+              />
+            )
+          })
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            {maxCount <= 1
+              ? 'Click a row to select it.'
+              : `Click up to ${maxCount} rows to select them.`}
+          </Typography>
+        )}
+      </Stack>
+      <Box sx={{ height: 280, width: '100%' }}>
+        <DataGridPro
+          rows={rows}
+          columns={columns}
+          getRowId={(row) => row.id}
+          onRowClick={handleRowClick}
+          getRowClassName={(params) => (selectedSet.has(params.id) ? 'Mui-selected stepper-selected-row' : '')}
+          loading={loading}
+          pagination
+          pageSizeOptions={[10, 25, 50]}
+          initialState={{
+            pagination: { paginationModel: { pageSize: 10 } },
+          }}
+          slots={{ toolbar: GridToolbar }}
+          slotProps={{
+            toolbar: { showQuickFilter: true },
+          }}
+          density="compact"
+          localeText={{
+            noRowsLabel: noRowsLabel || 'No rows',
+          }}
+          sx={{
+            '& .stepper-selected-row': {
+              bgcolor: 'action.selected',
+            },
+          }}
+        />
+      </Box>
+    </Box>
+  )
+}

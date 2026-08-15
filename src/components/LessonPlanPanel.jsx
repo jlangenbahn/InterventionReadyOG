@@ -1,22 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import {
-  Alert,
   Box,
   Button,
   Chip,
   CircularProgress,
   Paper,
   Stack,
-  TextField,
   Typography,
 } from '@mui/material'
 import PrintIcon from '@mui/icons-material/Print'
-import SaveIcon from '@mui/icons-material/Save'
 import AddIcon from '@mui/icons-material/Add'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import LessonPlanTemplate from './LessonPlanTemplate'
-import MergeSelectionCard from './MergeSelectionCard'
+import CreateLessonStepper from './CreateLessonStepper'
 import {
   fetchStudentLessonPlan,
   fetchStudentLessons,
@@ -67,66 +64,32 @@ const EMPTY_LIST_SLOTS = {
 const EMPTY_SENTENCE_SLOTS = {
   sentence1: null,
   sentence2: null,
+  sentence3: null,
+  sentence4: null,
+  sentence5: null,
+  sentence6: null,
 }
 
 const EMPTY_PASSAGE_SLOTS = {
   passage1: null,
+  passage2: null,
 }
 
-const LIST_SLOTS = [
-  { key: 'newConcept', label: 'The new concept list', shortLabel: 'New concept' },
-  { key: 'review1', label: 'Review concept #1', shortLabel: 'Review 1' },
-  { key: 'review2', label: 'Review concept #2', shortLabel: 'Review 2' },
-  { key: 'review3', label: 'Review concept #3', shortLabel: 'Review 3' },
-]
+const REVIEW_SLOT_KEYS = ['review1', 'review2', 'review3']
+const SENTENCE_SLOT_KEYS = ['sentence1', 'sentence2', 'sentence3', 'sentence4', 'sentence5', 'sentence6']
+const PASSAGE_SLOT_KEYS = ['passage1', 'passage2']
 
-const SENTENCE_SLOTS = [
-  { key: 'sentence1', label: 'Sentence #1', shortLabel: 'Sentence 1' },
-  { key: 'sentence2', label: 'Sentence #2', shortLabel: 'Sentence 2' },
-]
+function idsFromSlots(slots, keys) {
+  return keys.map((key) => slots?.[key]).filter(Boolean)
+}
 
-const PASSAGE_SLOTS = [
-  { key: 'passage1', label: 'Passage #1', shortLabel: 'Passage' },
-]
-
-const LIST_COLUMNS = [
-  { field: 'name', headerName: 'List', flex: 1.2, minWidth: 90 },
-  { field: 'concept', headerName: 'Concept', flex: 1, minWidth: 90 },
-  {
-    field: 'wordCount',
-    headerName: 'Words',
-    type: 'number',
-    width: 70,
-    align: 'left',
-    headerAlign: 'left',
-  },
-]
-
-const SENTENCE_COLUMNS = [
-  { field: 'text', headerName: 'Sentence', flex: 2, minWidth: 140 },
-  {
-    field: 'wordCount',
-    headerName: 'Words',
-    type: 'number',
-    width: 70,
-    align: 'left',
-    headerAlign: 'left',
-  },
-]
-
-const PASSAGE_COLUMNS = [
-  { field: 'title', headerName: 'Title', flex: 1, minWidth: 90 },
-  { field: 'concept', headerName: 'Concept', flex: 1, minWidth: 90 },
-  { field: 'text', headerName: 'Text', flex: 1.4, minWidth: 120 },
-  {
-    field: 'wordCount',
-    headerName: 'Words',
-    type: 'number',
-    width: 70,
-    align: 'left',
-    headerAlign: 'left',
-  },
-]
+function slotsFromIds(keys, ids) {
+  const next = {}
+  keys.forEach((key, index) => {
+    next[key] = ids[index] ?? null
+  })
+  return next
+}
 
 function buildWordLookup(wordsByConceptId) {
   const lookup = new Map()
@@ -233,13 +196,6 @@ function snapshotPassage(passage) {
   }
 }
 
-function truncate(value, max = 80) {
-  const text = String(value ?? '').trim()
-  if (!text) return ''
-  if (text.length <= max) return text
-  return `${text.slice(0, max - 1)}…`
-}
-
 const SAVED_LESSON_COLUMNS = [
   {
     field: 'lessonNumber',
@@ -276,6 +232,7 @@ export default function LessonPlanPanel({
   const [loadingLessons, setLoadingLessons] = useState(false)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
+  const [activeStep, setActiveStep] = useState(0)
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -334,6 +291,7 @@ export default function LessonPlanPanel({
     setSnapshots(null)
     setLessonDate(todayIso())
     setNotice('')
+    setActiveStep(0)
   }, [student?.id])
 
   const wordLookup = useMemo(() => buildWordLookup(wordsByConceptId), [wordsByConceptId])
@@ -442,50 +400,52 @@ export default function LessonPlanPanel({
     const live = passagesById.get(id)
     if (live) return live
     const snap = snapshots?.passage
-    return snap?.id === id ? snap : null
+    if (snap?.id === id) return snap
+    const snaps = snapshots?.passages
+    if (Array.isArray(snaps)) {
+      const fromArray = snaps.find((item) => item?.id === id)
+      return fromArray?.id === id ? fromArray : null
+    }
+    return null
   }
 
-  const reviewLists = [
-    listForSlot('review1'),
-    listForSlot('review2'),
-    listForSlot('review3'),
-  ]
+  const reviewLists = REVIEW_SLOT_KEYS.map((key) => listForSlot(key))
   const newConceptList = listForSlot('newConcept')
-  const selectedSentences = [sentenceForSlot('sentence1'), sentenceForSlot('sentence2')]
-  const selectedPassage = passageForSlot('passage1')
+  const selectedSentences = SENTENCE_SLOT_KEYS.map((key) => sentenceForSlot(key))
+  const selectedPassages = PASSAGE_SLOT_KEYS.map((key) => passageForSlot(key))
+  const selectedPassage = selectedPassages[0] ?? null
+
+  const newConceptIds = listSlots.newConcept ? [listSlots.newConcept] : []
+  const reviewIds = idsFromSlots(listSlots, REVIEW_SLOT_KEYS)
+  const sentenceIds = idsFromSlots(sentenceSlots, SENTENCE_SLOT_KEYS)
+  const passageIds = idsFromSlots(passageSlots, PASSAGE_SLOT_KEYS)
 
   const lessonNumber = loadedLesson?.lessonNumber ?? nextLessonNumber(savedLessons)
   const dateLabel = formatLessonDate(lessonDate)
+  const canCreate = Boolean(lessonDate) && Boolean(newConceptList)
 
-  const hasAnyMaterials = lists.length || sentences.length || passages.length
-  const hasEmptySlots =
-    !listSlots.newConcept ||
-    !listSlots.review1 ||
-    !listSlots.review2 ||
-    !listSlots.review3 ||
-    !sentenceSlots.sentence1 ||
-    !sentenceSlots.sentence2 ||
-    !passageSlots.passage1
+  function handleNewConceptChange(ids) {
+    const nextId = ids[0] ?? null
+    const remainingReviews = idsFromSlots(listSlots, REVIEW_SLOT_KEYS).filter((id) => id !== nextId)
+    setListSlots({
+      newConcept: nextId,
+      ...slotsFromIds(REVIEW_SLOT_KEYS, remainingReviews),
+    })
+  }
 
-  function assignList(slotKey, id) {
+  function handleReviewChange(ids) {
     setListSlots((prev) => ({
       ...prev,
-      [slotKey]: prev[slotKey] === id ? null : id,
+      ...slotsFromIds(REVIEW_SLOT_KEYS, ids),
     }))
   }
 
-  function assignSentence(slotKey, id) {
-    setSentenceSlots((prev) => ({
-      ...prev,
-      [slotKey]: prev[slotKey] === id ? null : id,
-    }))
+  function handleSentenceChange(ids) {
+    setSentenceSlots(slotsFromIds(SENTENCE_SLOT_KEYS, ids))
   }
 
-  function assignPassage(slotKey, id) {
-    setPassageSlots((prev) => ({
-      ...prev,
-      [slotKey]: prev[slotKey] === id ? null : id,
-    }))
+  function handlePassageChange(ids) {
+    setPassageSlots(slotsFromIds(PASSAGE_SLOT_KEYS, ids))
   }
 
   function handleNew() {
@@ -497,6 +457,7 @@ export default function LessonPlanPanel({
     setLessonDate(todayIso())
     setNotice('')
     setError('')
+    setActiveStep(0)
   }
 
   function applyLesson(lesson) {
@@ -521,16 +482,22 @@ export default function LessonPlanPanel({
         nextListSlots[key] = data.snapshots.lists[key].id
       }
     })
-    if (!nextPassageSlots.passage1 && data.snapshots?.passage?.id) {
-      nextPassageSlots.passage1 = data.snapshots.passage.id
-    }
+    const passageSnaps = Array.isArray(data.snapshots?.passages)
+      ? data.snapshots.passages
+      : data.snapshots?.passage
+        ? [data.snapshots.passage]
+        : []
+    PASSAGE_SLOT_KEYS.forEach((key, index) => {
+      if (!nextPassageSlots[key] && passageSnaps[index]?.id) {
+        nextPassageSlots[key] = passageSnaps[index].id
+      }
+    })
     const sentenceSnaps = Array.isArray(data.snapshots?.sentences) ? data.snapshots.sentences : []
-    if (!nextSentenceSlots.sentence1 && sentenceSnaps[0]?.id) {
-      nextSentenceSlots.sentence1 = sentenceSnaps[0].id
-    }
-    if (!nextSentenceSlots.sentence2 && sentenceSnaps[1]?.id) {
-      nextSentenceSlots.sentence2 = sentenceSnaps[1].id
-    }
+    SENTENCE_SLOT_KEYS.forEach((key, index) => {
+      if (!nextSentenceSlots[key] && sentenceSnaps[index]?.id) {
+        nextSentenceSlots[key] = sentenceSnaps[index].id
+      }
+    })
 
     setListSlots(nextListSlots)
     setSentenceSlots(nextSentenceSlots)
@@ -540,13 +507,14 @@ export default function LessonPlanPanel({
     setLessonDate(toIsoDate(lesson?.date))
     setNotice('')
     setError('')
+    setActiveStep(0)
   }
 
   async function handleSave() {
     const conceptId =
       newConceptList?.conceptID
       || reviewLists.find((list) => list?.conceptID)?.conceptID
-      || selectedPassage?.conceptID
+      || selectedPassages.find((item) => item?.conceptID)?.conceptID
       || null
     if (!conceptId) {
       setError('Assign at least one list before saving so the lesson has a concept.')
@@ -562,7 +530,8 @@ export default function LessonPlanPanel({
           review2: snapshotList(reviewLists[1]),
           review3: snapshotList(reviewLists[2]),
         },
-        sentences: selectedSentences.map(snapshotSentence),
+        sentences: selectedSentences.map(snapshotSentence).filter(Boolean),
+        passages: selectedPassages.map(snapshotPassage).filter(Boolean),
         passage: snapshotPassage(selectedPassage),
       },
       instructor,
@@ -617,15 +586,6 @@ export default function LessonPlanPanel({
           {lists.length ? (
             <Chip size="small" variant="outlined" label={`${lists.length} lists`} />
           ) : null}
-          <TextField
-            label="Lesson date"
-            type="date"
-            size="small"
-            value={lessonDate}
-            onChange={(event) => setLessonDate(event.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={{ width: 170 }}
-          />
           {loadedLesson ? (
             <Chip
               size="small"
@@ -645,15 +605,6 @@ export default function LessonPlanPanel({
           </Button>
           <Button
             variant="contained"
-            color="secondary"
-            startIcon={<SaveIcon />}
-            onClick={() => void handleSave()}
-            disabled={saving || loading}
-          >
-            {loadedLesson ? 'Update' : 'Save'}
-          </Button>
-          <Button
-            variant="contained"
             startIcon={<PrintIcon />}
             onClick={handlePrint}
             disabled={loading}
@@ -666,7 +617,7 @@ export default function LessonPlanPanel({
       <Paper sx={{ p: 2, mb: 2, '@media print': { display: 'none' } }}>
         <Typography variant="subtitle1">Saved lesson plans</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Click a row to load that plan. Lesson date is when it is taught; Created is when you saved it.
+          Click a row to load that plan into the stepper. Lesson date is when it is taught; Created is when you saved it.
         </Typography>
         <Box sx={{ height: 280, width: '100%' }}>
           <DataGridPro
@@ -694,7 +645,7 @@ export default function LessonPlanPanel({
             }}
             density="compact"
             localeText={{
-              noRowsLabel: 'No saved lesson plans yet. Assign lists and click Save.',
+              noRowsLabel: 'No saved lesson plans yet. Finish the stepper and create a lesson.',
             }}
           />
         </Box>
@@ -734,6 +685,7 @@ export default function LessonPlanPanel({
               reviewLists={reviewLists}
               newConceptList={newConceptList}
               sentences={selectedSentences}
+              passages={selectedPassages}
               passage={selectedPassage}
               date={dateLabel}
               lessonNumber={lessonNumber}
@@ -742,61 +694,35 @@ export default function LessonPlanPanel({
           </Box>
 
           <Box sx={{ minWidth: 0, '@media print': { display: 'none' } }}>
-            {!hasAnyMaterials ? (
-              <Alert severity="info" sx={{ mb: 1.5 }}>
-                No student lists, sentences, or passages are assigned yet. Red placeholders print until
-                related records are saved on this student.
-              </Alert>
-            ) : hasEmptySlots ? (
-              <Alert severity="info" sx={{ mb: 1.5 }}>
-                Select a row, then click a merge field to place it in the lesson plan. Unassigned
-                fields print as red placeholders.
-              </Alert>
-            ) : null}
-
-            <MergeSelectionCard
-              key={`lists-${student.id}`}
-              title={`List Selection (${lists.length})`}
-              helperText="Select a list, then click a merge field to place its words in the document."
-              slots={LIST_SLOTS}
-              assignments={listSlots}
-              items={lists}
-              getItemLabel={(list) => list.name || 'Untitled list'}
-              columns={LIST_COLUMNS}
-              noRowsLabel="No lists yet. Create lists on the Concepts & Lists tab."
-              loading={loading || loadingLists}
-              onAssign={assignList}
-              onClear={(key) => setListSlots((prev) => ({ ...prev, [key]: null }))}
-            />
-
-            <MergeSelectionCard
-              key={`sentences-${student.id}`}
-              title={`Sentence Selection (${sentences.length})`}
-              helperText="Select a sentence, then click a merge field to place it in Dictation."
-              slots={SENTENCE_SLOTS}
-              assignments={sentenceSlots}
-              items={sentences}
-              getItemLabel={(sentence) => truncate(sentence.text, 60) || 'Untitled sentence'}
-              columns={SENTENCE_COLUMNS}
-              noRowsLabel="No sentences yet for this student."
+            <Typography variant="subtitle1" sx={{ mb: 0.5 }}>
+              Create a lesson plan
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              Walk through each step to choose materials, then create the lesson. Click New to start
+              another plan.
+            </Typography>
+            <CreateLessonStepper
+              activeStep={activeStep}
+              onStepChange={setActiveStep}
+              lessonDate={lessonDate}
+              onLessonDateChange={setLessonDate}
+              lists={lists}
+              sentences={sentences}
+              passages={passages}
               loading={loading}
-              onAssign={assignSentence}
-              onClear={(key) => setSentenceSlots((prev) => ({ ...prev, [key]: null }))}
-            />
-
-            <MergeSelectionCard
-              key={`passages-${student.id}`}
-              title={`Passage Selection (${passages.length})`}
-              helperText="Select a passage, then click the merge field to place it in Oral Reading."
-              slots={PASSAGE_SLOTS}
-              assignments={passageSlots}
-              items={passages}
-              getItemLabel={(passage) => passage.title || truncate(passage.text, 60) || 'Untitled passage'}
-              columns={PASSAGE_COLUMNS}
-              noRowsLabel="No passages yet for this student."
-              loading={loading}
-              onAssign={assignPassage}
-              onClear={(key) => setPassageSlots((prev) => ({ ...prev, [key]: null }))}
+              loadingLists={loadingLists}
+              newConceptIds={newConceptIds}
+              reviewIds={reviewIds}
+              sentenceIds={sentenceIds}
+              passageIds={passageIds}
+              onNewConceptChange={handleNewConceptChange}
+              onReviewChange={handleReviewChange}
+              onSentencesChange={handleSentenceChange}
+              onPassagesChange={handlePassageChange}
+              onCreate={handleSave}
+              creating={saving}
+              createLabel={loadedLesson ? 'Update lesson plan' : 'Create lesson plan'}
+              canCreate={canCreate}
             />
           </Box>
         </Box>
