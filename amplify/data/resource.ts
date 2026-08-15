@@ -73,9 +73,15 @@ const schema = a.schema({
       Lessons: a.hasMany('SentenceLesson', 'sentenceId'),
       Words: a.hasMany('SentenceWord', 'sentenceId'),
       Concepts: a.hasMany('SentenceConcept', 'sentenceId'),
+      /**
+       * Singular unifying focus concept for this sentence.
+       * Other tagged concepts live on SentenceConcept.
+       */
+      conceptID: a.id(),
+      focusConcept: a.belongsTo('Concept', 'conceptID'),
       sentenceData: a.json(),
     })
-    .secondaryIndexes((index) => [index('studentID')])
+    .secondaryIndexes((index) => [index('studentID'), index('conceptID')])
     .authorization((allow) => [allow.authenticated()]),
 
   Lesson: a
@@ -93,6 +99,7 @@ const schema = a.schema({
       sentences: a.hasMany('SentenceLesson', 'lessonId'),
       lists: a.hasMany('ListLesson', 'lessonId'),
       lessonNumber: a.integer(),
+      name: a.string(),
       lessonData: a.json(),
       comments: a.string(),
     })
@@ -128,6 +135,7 @@ const schema = a.schema({
       Words: a.hasMany('ConceptWord', 'conceptId'),
       ReviewLessons: a.hasMany('ConceptLesson', 'conceptId'),
       sentences: a.hasMany('SentenceConcept', 'conceptId'),
+      FocusSentences: a.hasMany('Sentence', 'conceptID'),
     })
     .authorization((allow) => [allow.authenticated()]),
 

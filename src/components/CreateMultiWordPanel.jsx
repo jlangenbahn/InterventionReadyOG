@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -77,6 +78,8 @@ export default function CreateMultiWordPanel({
   const [title, setTitle] = useState('')
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
+  const [focusConceptId, setFocusConceptId] = useState(null)
+  const [focusTouched, setFocusTouched] = useState(false)
 
   const catalogIndex = useMemo(
     () => buildWordCatalogIndex(concepts, wordsByConceptId),
@@ -84,6 +87,21 @@ export default function CreateMultiWordPanel({
   )
 
   const tagged = useMemo(() => tagMultiWordText(text, catalogIndex), [text, catalogIndex])
+
+  const focusOptions = tagged.conceptRows ?? []
+  const focusValue = focusOptions.find((row) => row.id === focusConceptId) ?? null
+
+  useEffect(() => {
+    const topId = tagged.topConcept?.id ?? null
+    if (!focusTouched) {
+      setFocusConceptId(topId)
+      return
+    }
+    if (focusConceptId && !tagged.conceptIds.includes(focusConceptId)) {
+      setFocusConceptId(topId)
+      setFocusTouched(false)
+    }
+  }, [tagged.topConcept?.id, tagged.conceptIds, focusTouched, focusConceptId])
 
   const conceptRows = useMemo(
     () =>
@@ -103,6 +121,10 @@ export default function CreateMultiWordPanel({
     const trimmed = text.trim()
     if (!trimmed) {
       setError('Enter some text to tag and save.')
+      return
+    }
+    if (kind === 'sentence' && !focusConceptId) {
+      setError('Choose a focus concept for this sentence. That is the unifying concept used when creating lessons.')
       return
     }
     if (kind === 'passage' && !tagged.topConcept?.id) {
@@ -126,12 +148,23 @@ export default function CreateMultiWordPanel({
         if (!data?.id) throw new Error('Failed to save passage')
         setNotice('Passage saved and tagged against the word-concept catalog.')
       } else {
-        const { data, errors } = await client.models.Sentence.create({
+        const sentencePayload = {
           text: trimmed,
           wordCount: tagged.tokenCount,
           studentID: student.id,
-          sentenceData: JSON.stringify({ tags: payload }),
+          sentenceData: JSON.stringify({
+            tags: payload,
+            focusConceptId,
+          }),
+        }
+        let created = await client.models.Sentence.create({
+          ...sentencePayload,
+          conceptID: focusConceptId,
         })
+        if (created.errors?.length || !created.data?.id) {
+          created = await client.models.Sentence.create(sentencePayload)
+        }
+        const { data, errors } = created
         if (errors?.length) throw new Error(errors.map((item) => item.message).join(', '))
         if (!data?.id) throw new Error('Failed to save sentence')
 
@@ -213,12 +246,33 @@ export default function CreateMultiWordPanel({
                 : 'Write a sentence, or a list of words separated by spaces…'
             }
           />
+          {kind === 'sentence' ? (
+            <Autocomplete
+              options={focusOptions}
+              value={focusValue}
+              onChange={(_event, next) => {
+                setFocusTouched(true)
+                setFocusConceptId(next?.id ?? null)
+              }}
+              getOptionLabel={(option) => option?.name || ''}
+              isOptionEqualToValue={(option, selected) => option.id === selected.id}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Focus concept"
+                  size="small"
+                  required
+                  helperText="The unifying concept for this sentence. Lesson creation filters sentences by this."
+                />
+              )}
+            />
+          ) : null}
           <Stack direction="row" spacing={1} justifyContent="flex-end">
             <Button
               variant="contained"
               startIcon={<SaveIcon />}
               onClick={() => void handleSave()}
-              disabled={saving || loadingCatalog || !text.trim()}
+              disabled={saving || loadingCatalog || !text.trim() || (kind === 'sentence' && !focusConceptId)}
             >
               {kind === 'passage' ? 'Save tagged passage' : 'Save tagged sentence'}
             </Button>

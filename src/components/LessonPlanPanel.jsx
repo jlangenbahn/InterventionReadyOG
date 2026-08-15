@@ -23,6 +23,8 @@ import {
   nextLessonNumber,
   parseLessonData,
   parseScopeAndSequence,
+  formatLessonDisplayName,
+  resolveSentenceFocusId,
   resolveListWords,
   saveStudentLesson,
   studentDisplayName,
@@ -187,6 +189,8 @@ function snapshotSentence(sentence) {
     id: sentence.id,
     text: sentence.text || '',
     wordCount: sentence.wordCount ?? 0,
+    conceptID: sentence.conceptID || sentence.focusConceptId || null,
+    focusConcept: sentence.focusConcept || '',
   }
 }
 
@@ -211,8 +215,9 @@ const SAVED_LESSON_COLUMNS = [
     align: 'left',
     headerAlign: 'left',
   },
-  { field: 'lessonDateLabel', headerName: 'Lesson date', width: 140 },
-  { field: 'newConcept', headerName: 'New concept', flex: 1, minWidth: 160 },
+  { field: 'lessonDateLabel', headerName: 'Lesson date', width: 130 },
+  { field: 'name', headerName: 'Lesson', flex: 1.2, minWidth: 180 },
+  { field: 'newConcept', headerName: 'New concept', flex: 1, minWidth: 140 },
   { field: 'createdDateLabel', headerName: 'Created', width: 140 },
 ]
 
@@ -246,6 +251,7 @@ export default function LessonPlanPanel({
   const [selectedNewConceptId, setSelectedNewConceptId] = useState(null)
   const [selectedReviewConceptIds, setSelectedReviewConceptIds] = useState([])
   const [lessonNotes, setLessonNotes] = useState('')
+  const [lessonName, setLessonName] = useState('')
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -309,6 +315,7 @@ export default function LessonPlanPanel({
     setSelectedNewConceptId(null)
     setSelectedReviewConceptIds([])
     setLessonNotes('')
+    setLessonName('')
   }, [student?.id])
 
   const wordLookup = useMemo(() => buildWordLookup(wordsByConceptId), [wordsByConceptId])
@@ -359,12 +366,18 @@ export default function LessonPlanPanel({
     () =>
       (payload?.sentences ?? [])
         .filter((sentence) => sentence?.id)
-        .map((sentence) => ({
-          id: sentence.id,
-          text: sentence.text || '',
-          wordCount: sentence.wordCount ?? 0,
-        })),
-    [payload?.sentences],
+        .map((sentence) => {
+          const focusConceptId = resolveSentenceFocusId(sentence)
+          return {
+            id: sentence.id,
+            text: sentence.text || '',
+            wordCount: sentence.wordCount ?? 0,
+            conceptID: focusConceptId,
+            focusConceptId,
+            focusConcept: conceptById.get(focusConceptId)?.concept || '',
+          }
+        }),
+    [payload?.sentences, conceptById],
   )
 
   const passages = useMemo(
@@ -406,6 +419,17 @@ export default function LessonPlanPanel({
     return lists.filter((list) => allowed.has(list.conceptID))
   }, [lists, selectedReviewConceptIds])
 
+  const focusConceptIds = useMemo(() => {
+    const ids = [selectedNewConceptId, ...selectedReviewConceptIds].filter(Boolean)
+    return [...new Set(ids)]
+  }, [selectedNewConceptId, selectedReviewConceptIds])
+
+  const lessonSentences = useMemo(() => {
+    if (!focusConceptIds.length) return []
+    const allowed = new Set(focusConceptIds)
+    return sentences.filter((sentence) => allowed.has(sentence.focusConceptId))
+  }, [sentences, focusConceptIds])
+
   const savedLessonRows = useMemo(
     () =>
       [...savedLessons]
@@ -417,9 +441,10 @@ export default function LessonPlanPanel({
         .map((lesson) => {
           const data = parseLessonData(lesson.lessonData)
           const newConcept =
-            data?.snapshots?.lists?.newConcept?.name
-            || data?.snapshots?.lists?.newConcept?.concept
+            data?.snapshots?.lists?.newConcept?.concept
+            || data?.snapshots?.lists?.newConcept?.name
             || ''
+          const customName = data?.name || lesson.name || ''
           return {
             id: lesson.id,
             lessonNumber: lesson.lessonNumber ?? '',
@@ -428,6 +453,7 @@ export default function LessonPlanPanel({
             lessonDateLabel: formatLessonDate(lesson.date) || '—',
             createdDateLabel: formatCreatedDate(lesson.createdAt) || '—',
             newConcept: newConcept || '—',
+            name: formatLessonDisplayName(customName, newConcept, lesson.lessonNumber) || '—',
           }
         }),
     [savedLessons],
@@ -482,6 +508,11 @@ export default function LessonPlanPanel({
 
   const lessonNumber = loadedLesson?.lessonNumber ?? nextLessonNumber(savedLessons)
   const dateLabel = formatLessonDate(lessonDate)
+  const lessonDisplayName = formatLessonDisplayName(
+    lessonName,
+    conceptById.get(selectedNewConceptId)?.concept || newConceptList?.concept || '',
+    lessonNumber,
+  )
   const canCreate =
     Boolean(lessonDate)
     && Boolean(selectedNewConceptId)
@@ -501,6 +532,8 @@ export default function LessonPlanPanel({
       }
       return prev
     })
+    const nextFocus = [conceptId, ...selectedReviewConceptIds.filter((id) => id !== conceptId)].filter(Boolean)
+    pruneSentenceSlots(nextFocus)
   }
 
   function handleSelectedReviewConceptsChange(conceptIds) {
@@ -515,6 +548,20 @@ export default function LessonPlanPanel({
         return list && allowed.has(list.conceptID) ? listId : null
       }).filter(Boolean)
       return { ...prev, ...slotsFromIds(REVIEW_SLOT_KEYS, kept) }
+    })
+    pruneSentenceSlots([selectedNewConceptId, ...nextIds])
+  }
+
+  function pruneSentenceSlots(nextFocusIds) {
+    const allowed = new Set((nextFocusIds ?? []).filter(Boolean))
+    setSentenceSlots((prev) => {
+      const kept = SENTENCE_SLOT_KEYS.map((key) => {
+        const id = prev[key]
+        if (!id) return null
+        const sentence = sentencesById.get(id)
+        return sentence && allowed.has(sentence.focusConceptId) ? id : null
+      }).filter(Boolean)
+      return slotsFromIds(SENTENCE_SLOT_KEYS, kept)
     })
   }
 
@@ -556,6 +603,7 @@ export default function LessonPlanPanel({
     setSelectedNewConceptId(null)
     setSelectedReviewConceptIds([])
     setLessonNotes('')
+    setLessonName('')
   }
 
   function applyLesson(lesson) {
@@ -628,6 +676,7 @@ export default function LessonPlanPanel({
     setSelectedNewConceptId(inferredNewConceptId)
     setSelectedReviewConceptIds(uniqueReviewIds)
     setLessonNotes(data.notes ?? lesson?.comments ?? '')
+    setLessonName(data.name || lesson?.name || '')
   }
 
   async function handleSave() {
@@ -653,6 +702,7 @@ export default function LessonPlanPanel({
         reviewConceptIds: selectedReviewConceptIds,
       },
       notes: lessonNotes,
+      name: lessonName.trim(),
       snapshots: {
         lists: {
           newConcept: snapshotList(newConceptList),
@@ -677,6 +727,7 @@ export default function LessonPlanPanel({
         conceptId,
         lessonData,
         comments: lessonNotes.trim() || null,
+        name: lessonName.trim() || null,
       })
       const lessons = await loadSavedLessons()
       const refreshed = (lessons ?? []).find((item) => item.id === saved.id)
@@ -807,9 +858,11 @@ export default function LessonPlanPanel({
                 onSelectedReviewConceptsChange={handleSelectedReviewConceptsChange}
                 lessonNotes={lessonNotes}
                 onLessonNotesChange={setLessonNotes}
+                lessonName={lessonName}
+                onLessonNameChange={setLessonName}
                 newConceptLists={newConceptLists}
                 reviewConceptLists={reviewConceptLists}
-                sentences={sentences}
+                sentences={lessonSentences}
                 passages={passages}
                 loading={loading}
                 loadingLists={loadingLists}
@@ -875,6 +928,7 @@ export default function LessonPlanPanel({
           passage={selectedPassage}
           date={dateLabel}
           lessonNumber={lessonNumber}
+          lessonName={lessonDisplayName}
           instructor={instructor}
           soapNotes={lessonNotes}
         />

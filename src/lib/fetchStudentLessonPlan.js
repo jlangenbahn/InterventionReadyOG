@@ -168,6 +168,7 @@ export async function saveStudentLesson({
   conceptId,
   lessonData,
   comments,
+  name,
 }) {
   if (!studentID) throw new Error('Student is required to save a lesson plan')
   if (!date) throw new Error('Lesson date is required')
@@ -181,16 +182,40 @@ export async function saveStudentLesson({
     lessonData: JSON.stringify(lessonData ?? {}),
   }
   if (comments !== undefined) payload.comments = comments
+  if (name !== undefined) payload.name = name
 
   const result = id
     ? await client.models.Lesson.update({ id, ...payload }, { selectionSet: LESSON_SELECTION })
     : await client.models.Lesson.create(payload, { selectionSet: LESSON_SELECTION })
+
+  if (result.errors?.length && name !== undefined) {
+    const { name: _unusedName, ...withoutName } = payload
+    const retry = id
+      ? await client.models.Lesson.update({ id, ...withoutName }, { selectionSet: LESSON_SELECTION })
+      : await client.models.Lesson.create(withoutName, { selectionSet: LESSON_SELECTION })
+    if (!retry.errors?.length && retry.data?.id) {
+      return retry.data
+    }
+  }
 
   if (result.errors?.length) {
     throw new Error(result.errors.map((e) => e.message).join(', '))
   }
   if (!result.data?.id) throw new Error('Failed to save lesson plan')
   return result.data
+}
+
+async function listStudentSentences(studentId) {
+  const filter = { studentID: { eq: studentId } }
+  const core = ['id', 'text', 'wordCount', 'createdAt', 'studentID', 'sentenceData']
+  try {
+    return await listAll(client.models.Sentence, {
+      filter,
+      selectionSet: [...core, 'conceptID'],
+    })
+  } catch {
+    return listAll(client.models.Sentence, { filter, selectionSet: core }).catch(() => [])
+  }
 }
 
 /**
@@ -216,10 +241,7 @@ export async function fetchStudentLessonPlan(studentId) {
   }
 
   const [sentenceItems, passageItems] = await Promise.all([
-    listAll(client.models.Sentence, {
-      filter: { studentID: { eq: studentId } },
-      selectionSet: ['id', 'text', 'wordCount', 'createdAt', 'studentID'],
-    }).catch(() => []),
+    listStudentSentences(studentId),
     listAll(client.models.Passage, {
       filter: { studentID: { eq: studentId } },
       selectionSet: ['id', 'title', 'text', 'wordCount', 'conceptID', 'createdAt', 'studentID'],
@@ -274,6 +296,23 @@ export function parseListData(value) {
     }
   }
   return current && typeof current === 'object' && !Array.isArray(current) ? current : {}
+}
+
+export function formatLessonDisplayName(customName, conceptName, lessonNumber) {
+  const name = String(customName ?? '').trim()
+  const concept = String(conceptName ?? '').trim()
+  if (name && concept) return `${name} — ${concept}`
+  if (name) return name
+  if (concept && lessonNumber) return `Lesson ${lessonNumber} — ${concept}`
+  if (concept) return concept
+  if (lessonNumber) return `Lesson ${lessonNumber}`
+  return ''
+}
+
+export function resolveSentenceFocusId(sentence) {
+  if (sentence?.conceptID) return sentence.conceptID
+  const data = parseListData(sentence?.sentenceData)
+  return data.focusConceptId || data.tags?.conceptCounts?.[0]?.id || null
 }
 
 export function resolveListWords(list, wordLookup) {

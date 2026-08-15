@@ -87,33 +87,6 @@ function formatLessonDate(value) {
   }).format(new Date(year, month - 1, day))
 }
 
-function StatCard({ label, value, hint, colors }) {
-  return (
-    <Paper
-      variant="outlined"
-      sx={{
-        p: 2,
-        flex: '1 1 140px',
-        minWidth: 140,
-        bgcolor: colors?.bg,
-        color: colors?.color,
-      }}
-    >
-      <Typography variant="caption" sx={{ opacity: 0.85, textTransform: 'capitalize' }}>
-        {label}
-      </Typography>
-      <Typography variant="h4" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-        {value}
-      </Typography>
-      {hint ? (
-        <Typography variant="caption" sx={{ opacity: 0.85 }}>
-          {hint}
-        </Typography>
-      ) : null}
-    </Paper>
-  )
-}
-
 export default function ReportingPanel({ student, concepts = [], wordsByConceptId, setError }) {
   const [lessons, setLessons] = useState([])
   const [loading, setLoading] = useState(false)
@@ -224,57 +197,70 @@ export default function ReportingPanel({ student, concepts = [], wordsByConceptI
 
   return (
     <Box>
-      {loading ? (
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-          <CircularProgress size={16} />
-          <Typography variant="body2" color="text.secondary">
-            Building reports from saved lessons…
-          </Typography>
-        </Stack>
-      ) : null}
-
-      <Typography variant="subtitle1" sx={{ mb: 1 }}>
-        Concept mastery
-      </Typography>
-      <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
-        {MASTERY_STATUSES.map((status) => (
-          <StatCard
-            key={status}
-            label={status}
-            value={masteryInventory.counts[status]}
-            hint={`${masteryInventory.inScopeCount} in-scope concepts`}
-            colors={MASTERY_ROW_COLORS[status]}
-          />
-        ))}
+      <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+        {loading ? <CircularProgress size={14} /> : null}
+        {MASTERY_STATUSES.map((status) => {
+          const colors = MASTERY_ROW_COLORS[status]
+          return (
+            <Chip
+              key={status}
+              size="small"
+              label={`${status} ${masteryInventory.counts[status]}`}
+              sx={{
+                bgcolor: colors.bg,
+                color: colors.color,
+                textTransform: 'capitalize',
+                fontWeight: 600,
+              }}
+            />
+          )
+        })}
+        <Chip
+          size="small"
+          variant="outlined"
+          label={`${masteryInventory.inScopeCount} in scope`}
+        />
+        <Chip size="small" variant="outlined" label={`${wordRows.length} unique words`} />
+        <Chip
+          size="small"
+          variant="outlined"
+          label={`${wordRows.reduce((sum, row) => sum + row.encounters, 0)} encounters`}
+        />
       </Stack>
+
+      {!lessons.length && !loading ? (
+        <Alert severity="info" sx={{ mb: 1 }}>
+          Save lesson plans to build word-exposure history.
+        </Alert>
+      ) : null}
 
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: 'minmax(280px, 42%) minmax(0, 1fr)' },
-          gap: 2,
-          mb: 3,
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(220px, 34%) minmax(0, 1fr)' },
+          gap: 1,
+          mb: 1,
         }}
       >
         <ConceptCountChart
+          compact
           rows={masteryInventory.chartRows}
           totalTokens={masteryInventory.inScopeCount}
-          title="Mastery mix"
+          title="Mastery"
+          caption={`${masteryInventory.inScopeCount} in scope`}
           emptyLabel="Mark concepts in Scope & Sequence to see mastery here."
           maxBars={3}
         />
-        <Paper variant="outlined" sx={{ p: 2, minWidth: 0 }}>
-          <Typography variant="subtitle1" sx={{ mb: 1 }}>
-            In-scope concepts
-          </Typography>
-          <Box sx={{ height: 280, width: '100%' }}>
+        <Paper variant="outlined" sx={{ p: 1, minWidth: 0 }}>
+          <Box sx={{ height: 180, width: '100%' }}>
             <DataGridPro
               rows={masteryInventory.rows}
               columns={MASTERY_COLUMNS}
               getRowId={(row) => row.id}
               density="compact"
+              hideFooterSelectedRowCount
               pagination
-              pageSizeOptions={[10, 25, 50]}
+              pageSizeOptions={[10, 25]}
               initialState={{
                 pagination: { paginationModel: { pageSize: 10 } },
                 sorting: { sortModel: [{ field: 'masteryStatus', sort: 'asc' }] },
@@ -297,33 +283,15 @@ export default function ReportingPanel({ student, concepts = [], wordsByConceptI
         </Paper>
       </Box>
 
-      <Typography variant="subtitle1" sx={{ mb: 1 }}>
-        Words seen
-      </Typography>
-      <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
-        <StatCard label="Unique words" value={wordRows.length} hint="Across saved lesson plans" />
-        <StatCard
-          label="Total encounters"
-          value={wordRows.reduce((sum, row) => sum + row.encounters, 0)}
-          hint={`${lessons.length} lesson${lessons.length === 1 ? '' : 's'}`}
-        />
-      </Stack>
-      {!lessons.length && !loading ? (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          Save and teach lesson plans to build a word-exposure history for this student.
-        </Alert>
-      ) : null}
-      <Paper variant="outlined" sx={{ p: 2 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Counts include list words, sentence dictation, and passage reading from every saved lesson.
-        </Typography>
-        <Box sx={{ height: 420, width: '100%' }}>
+      <Paper variant="outlined" sx={{ p: 1 }}>
+        <Box sx={{ height: 260, width: '100%' }}>
           <DataGridPro
             rows={wordRows}
             columns={WORD_COLUMNS}
             getRowId={(row) => row.id}
             loading={loading}
             density="compact"
+            hideFooterSelectedRowCount
             pagination
             pageSizeOptions={[25, 50, 100]}
             initialState={{

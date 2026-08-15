@@ -203,6 +203,7 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
     passage = null,
     date,
     lessonNumber,
+    lessonName,
     instructor,
     soapNotes,
     reflectionNotes,
@@ -240,6 +241,11 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
           <Box>
             Instructor: <Placeholder tag="<<INSTRUCTOR>>" value={instructor} />
           </Box>
+          {lessonName ? (
+            <Box sx={{ gridColumn: '1 / -1' }}>
+              Name: <Placeholder tag="<<NAME>>" value={lessonName} />
+            </Box>
+          ) : null}
         </Box>
 
         <Box sx={sectionSx}>

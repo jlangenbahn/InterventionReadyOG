@@ -13,17 +13,20 @@ export default function ConceptCountChart({
   title = 'Concept count',
   emptyLabel = 'No catalog concepts found in this text yet.',
   maxBars = 12,
+  compact = false,
+  caption,
 }) {
   const visible = (rows ?? []).slice(0, maxBars)
   const hiddenCount = Math.max(0, (rows ?? []).length - visible.length)
   const maxCount = Math.max(totalTokens, ...visible.map((row) => row.count || 0), 1)
+  const barHeight = compact ? 10 : 18
 
   return (
-    <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: 1.5 }} spacing={1}>
-        <Typography variant="subtitle1">{title}</Typography>
+    <Paper variant="outlined" sx={{ p: compact ? 1.25 : 2, height: '100%' }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: compact ? 0.75 : 1.5 }} spacing={1}>
+        <Typography variant={compact ? 'subtitle2' : 'subtitle1'}>{title}</Typography>
         <Typography variant="caption" color="text.secondary">
-          {totalTokens ? `${totalTokens} words in text` : 'No words yet'}
+          {caption || (totalTokens ? `${totalTokens} words` : 'No words yet')}
         </Typography>
       </Stack>
       {!visible.length ? (
@@ -31,14 +34,14 @@ export default function ConceptCountChart({
           {emptyLabel}
         </Typography>
       ) : (
-        <Stack spacing={1.25}>
+        <Stack spacing={compact ? 0.6 : 1.25}>
           {visible.map((row, index) => {
             const width = `${Math.max(4, ((row.count || 0) / maxCount) * 100)}%`
             const color = BAR_COLORS[index % BAR_COLORS.length]
             return (
               <Box key={row.id || row.name || index}>
-                <Stack direction="row" justifyContent="space-between" spacing={1} sx={{ mb: 0.4 }}>
-                  <Typography variant="body2" noWrap title={row.name} sx={{ fontWeight: 600 }}>
+                <Stack direction="row" justifyContent="space-between" spacing={1} sx={{ mb: 0.25 }}>
+                  <Typography variant="caption" noWrap title={row.name} sx={{ fontWeight: 600 }}>
                     {row.name}
                   </Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
@@ -47,7 +50,7 @@ export default function ConceptCountChart({
                 </Stack>
                 <Box
                   sx={{
-                    height: 18,
+                    height: barHeight,
                     bgcolor: 'action.hover',
                     borderRadius: 1,
                     overflow: 'hidden',
@@ -67,7 +70,7 @@ export default function ConceptCountChart({
             )
           })}
           {hiddenCount ? (
-            <Chip size="small" variant="outlined" label={`${hiddenCount} more concepts in the table`} />
+            <Chip size="small" variant="outlined" label={`${hiddenCount} more`} />
           ) : null}
         </Stack>
       )}

@@ -26,6 +26,7 @@ import {
   saveStudentLesson,
   studentDisplayName,
   tallyScores,
+  formatLessonDisplayName,
 } from '../lib/fetchStudentLessonPlan'
 
 const SAVED_LESSON_COLUMNS = [
@@ -37,9 +38,10 @@ const SAVED_LESSON_COLUMNS = [
     align: 'left',
     headerAlign: 'left',
   },
-  { field: 'lessonDateLabel', headerName: 'Lesson date', width: 140 },
-  { field: 'createdDateLabel', headerName: 'Created', width: 140 },
-  { field: 'newConcept', headerName: 'New concept', flex: 1, minWidth: 140 },
+  { field: 'lessonDateLabel', headerName: 'Lesson date', width: 120 },
+  { field: 'name', headerName: 'Lesson', flex: 1.2, minWidth: 160 },
+  { field: 'newConcept', headerName: 'New concept', flex: 1, minWidth: 120 },
+  { field: 'createdDateLabel', headerName: 'Created', width: 120 },
   { field: 'scoreLabel', headerName: 'Score', width: 130 },
 ]
 
@@ -237,9 +239,10 @@ export default function DataEntryPanel({ student, setError }) {
         .map((lesson) => {
           const data = parseLessonData(lesson.lessonData)
           const newConcept =
-            data?.snapshots?.lists?.newConcept?.name
-            || data?.snapshots?.lists?.newConcept?.concept
+            data?.snapshots?.lists?.newConcept?.concept
+            || data?.snapshots?.lists?.newConcept?.name
             || ''
+          const customName = data?.name || lesson.name || ''
           const summary = data?.scoreSummary
           const scoreLabel = summary?.scored
             ? `${summary.correct}/${summary.scored}${summary.accuracy != null ? ` (${Math.round(summary.accuracy * 100)}%)` : ''}`
@@ -250,6 +253,7 @@ export default function DataEntryPanel({ student, setError }) {
             lessonDateLabel: formatLessonDate(lesson.date) || '—',
             createdDateLabel: formatCreatedDate(lesson.createdAt) || '—',
             newConcept: newConcept || '—',
+            name: formatLessonDisplayName(customName, newConcept, lesson.lessonNumber) || '—',
             scoreLabel,
           }
         }),

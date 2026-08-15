@@ -30,6 +30,7 @@ const LIST_COLUMNS = [
 
 const SENTENCE_COLUMNS = [
   { field: 'text', headerName: 'Sentence', flex: 2, minWidth: 140 },
+  { field: 'focusConcept', headerName: 'Focus concept', flex: 1, minWidth: 110 },
   {
     field: 'wordCount',
     headerName: 'Words',
@@ -233,6 +234,8 @@ export default function CreateLessonStepper({
   onSelectedReviewConceptsChange,
   lessonNotes = '',
   onLessonNotesChange,
+  lessonName = '',
+  onLessonNameChange,
   newConceptLists = [],
   reviewConceptLists = [],
   sentences = [],
@@ -268,6 +271,19 @@ export default function CreateLessonStepper({
         <MasteryLegend />
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="stretch">
           <TextField
+            label="Lesson name"
+            size="small"
+            value={lessonName}
+            onChange={(event) => onLessonNameChange(event.target.value)}
+            placeholder="e.g. Week 3 dictation"
+            sx={{ flex: 1, minWidth: 0 }}
+            helperText={
+              newConceptValue?.concept
+                ? `Saved as “${lessonName.trim() ? `${lessonName.trim()} — ${newConceptValue.concept}` : `Lesson — ${newConceptValue.concept}`}”`
+                : 'The new concept name is appended after you pick it.'
+            }
+          />
+          <TextField
             label="Lesson date"
             type="date"
             size="small"
@@ -277,16 +293,16 @@ export default function CreateLessonStepper({
             slotProps={{ inputLabel: { shrink: true } }}
             sx={{ width: { xs: '100%', sm: 190 }, flexShrink: 0 }}
           />
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <ConceptAutocomplete
-              label="New concept"
-              required
-              options={conceptOptions}
-              value={newConceptValue}
-              onChange={(next) => onSelectedNewConceptChange(next?.id ?? null)}
-            />
-          </Box>
         </Stack>
+        <Box sx={{ minWidth: 0 }}>
+          <ConceptAutocomplete
+            label="New concept"
+            required
+            options={conceptOptions}
+            value={newConceptValue}
+            onChange={(next) => onSelectedNewConceptChange(next?.id ?? null)}
+          />
+        </Box>
         <ConceptAutocomplete
           label="Review concepts"
           required
@@ -404,7 +420,7 @@ export default function CreateLessonStepper({
           </StepLabel>
           <StepContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Select up to six sentences for dictation.
+              Only sentences whose focus concept matches the new or review concepts above are shown.
             </Typography>
             <StepperSelectionGrid
               items={sentences}
@@ -413,7 +429,11 @@ export default function CreateLessonStepper({
               onChange={onSentencesChange}
               maxCount={6}
               loading={loading}
-              noRowsLabel="No sentences yet for this student."
+              noRowsLabel={
+                selectedNewConceptId
+                  ? 'No sentences with those focus concepts. Tag sentences on Create Multi-Word.'
+                  : 'Select new and review concepts above to filter sentences by focus concept.'
+              }
               getItemLabel={(sentence) => truncate(sentence.text, 60) || 'Untitled sentence'}
             />
             <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
