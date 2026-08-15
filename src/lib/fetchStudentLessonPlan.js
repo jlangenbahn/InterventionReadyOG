@@ -167,6 +167,7 @@ export async function saveStudentLesson({
   lessonNumber,
   conceptId,
   lessonData,
+  comments,
 }) {
   if (!studentID) throw new Error('Student is required to save a lesson plan')
   if (!date) throw new Error('Lesson date is required')
@@ -179,6 +180,7 @@ export async function saveStudentLesson({
     concepts: conceptId,
     lessonData: JSON.stringify(lessonData ?? {}),
   }
+  if (comments !== undefined) payload.comments = comments
 
   const result = id
     ? await client.models.Lesson.update({ id, ...payload }, { selectionSet: LESSON_SELECTION })

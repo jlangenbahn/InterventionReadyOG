@@ -22,10 +22,13 @@ import {
   fetchStudentLessons,
   nextLessonNumber,
   parseLessonData,
+  parseScopeAndSequence,
   resolveListWords,
   saveStudentLesson,
   studentDisplayName,
 } from '../lib/fetchStudentLessonPlan'
+
+const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
 const PRINT_PAGE_STYLE = `
   @page { size: 8.5in 11in; margin: 0.5in; }
@@ -209,8 +212,8 @@ const SAVED_LESSON_COLUMNS = [
     headerAlign: 'left',
   },
   { field: 'lessonDateLabel', headerName: 'Lesson date', width: 140 },
-  { field: 'createdDateLabel', headerName: 'Created', width: 140 },
   { field: 'newConcept', headerName: 'New concept', flex: 1, minWidth: 160 },
+  { field: 'createdDateLabel', headerName: 'Created', width: 140 },
 ]
 
 const LESSON_MODE_VIEW = 0
@@ -240,6 +243,9 @@ export default function LessonPlanPanel({
   const [notice, setNotice] = useState('')
   const [activeStep, setActiveStep] = useState(0)
   const [lessonMode, setLessonMode] = useState(LESSON_MODE_VIEW)
+  const [selectedNewConceptId, setSelectedNewConceptId] = useState(null)
+  const [selectedReviewConceptIds, setSelectedReviewConceptIds] = useState([])
+  const [lessonNotes, setLessonNotes] = useState('')
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -300,6 +306,9 @@ export default function LessonPlanPanel({
     setNotice('')
     setActiveStep(0)
     setLessonMode(LESSON_MODE_VIEW)
+    setSelectedNewConceptId(null)
+    setSelectedReviewConceptIds([])
+    setLessonNotes('')
   }, [student?.id])
 
   const wordLookup = useMemo(() => buildWordLookup(wordsByConceptId), [wordsByConceptId])
@@ -308,6 +317,35 @@ export default function LessonPlanPanel({
     () => new Map((concepts ?? []).map((concept) => [concept.id, concept])),
     [concepts],
   )
+
+  const conceptOptions = useMemo(() => {
+    const inventory = parseScopeAndSequence(
+      student?.scopeAndSequence ?? payload?.student?.scopeAndSequence,
+    )
+    const byConceptId = new Map((inventory ?? []).map((entry) => [entry.conceptId, entry]))
+    return (concepts ?? [])
+      .filter((concept) => concept?.id)
+      .map((concept) => {
+        const entry = byConceptId.get(concept.id)
+        const masteryStatus = MASTERY_STATUSES.includes(entry?.masteryStatus)
+          ? entry.masteryStatus
+          : 'unknown'
+        return {
+          id: concept.id,
+          concept: concept.concept || 'Untitled concept',
+          masteryStatus,
+          inScope: entry?.inScope === true,
+          sequence: Number.isFinite(Number(entry?.sequence)) ? Number(entry.sequence) : null,
+        }
+      })
+      .sort((a, b) => {
+        if (a.inScope !== b.inScope) return a.inScope ? -1 : 1
+        const seqA = a.sequence ?? Number.POSITIVE_INFINITY
+        const seqB = b.sequence ?? Number.POSITIVE_INFINITY
+        if (seqA !== seqB) return seqA - seqB
+        return a.concept.localeCompare(b.concept)
+      })
+  }, [concepts, student?.scopeAndSequence, payload?.student?.scopeAndSequence])
 
   const lists = useMemo(
     () =>
@@ -353,6 +391,20 @@ export default function LessonPlanPanel({
     () => new Map(passages.map((passage) => [passage.id, passage])),
     [passages],
   )
+
+  const newConceptLists = useMemo(
+    () =>
+      selectedNewConceptId
+        ? lists.filter((list) => list.conceptID === selectedNewConceptId)
+        : [],
+    [lists, selectedNewConceptId],
+  )
+
+  const reviewConceptLists = useMemo(() => {
+    const allowed = new Set(selectedReviewConceptIds)
+    if (!allowed.size) return []
+    return lists.filter((list) => allowed.has(list.conceptID))
+  }, [lists, selectedReviewConceptIds])
 
   const savedLessonRows = useMemo(
     () =>
@@ -430,7 +482,41 @@ export default function LessonPlanPanel({
 
   const lessonNumber = loadedLesson?.lessonNumber ?? nextLessonNumber(savedLessons)
   const dateLabel = formatLessonDate(lessonDate)
-  const canCreate = Boolean(lessonDate) && Boolean(newConceptList)
+  const canCreate =
+    Boolean(lessonDate)
+    && Boolean(selectedNewConceptId)
+    && selectedReviewConceptIds.length > 0
+    && Boolean(newConceptList)
+
+  function handleSelectedNewConceptChange(conceptId) {
+    setSelectedNewConceptId(conceptId)
+    setSelectedReviewConceptIds((prev) => prev.filter((id) => id !== conceptId))
+    setListSlots((prev) => {
+      if (!conceptId) return { ...prev, newConcept: null }
+      const current =
+        listsById.get(prev.newConcept)
+        || (snapshots?.lists?.newConcept?.id === prev.newConcept ? snapshots.lists.newConcept : null)
+      if (current && current.conceptID !== conceptId) {
+        return { ...prev, newConcept: null }
+      }
+      return prev
+    })
+  }
+
+  function handleSelectedReviewConceptsChange(conceptIds) {
+    const nextIds = (conceptIds ?? []).filter((id) => id && id !== selectedNewConceptId).slice(0, 3)
+    setSelectedReviewConceptIds(nextIds)
+    const allowed = new Set(nextIds)
+    setListSlots((prev) => {
+      const kept = REVIEW_SLOT_KEYS.map((key) => {
+        const listId = prev[key]
+        if (!listId) return null
+        const list = listsById.get(listId) || (snapshots?.lists?.[key]?.id === listId ? snapshots.lists[key] : null)
+        return list && allowed.has(list.conceptID) ? listId : null
+      }).filter(Boolean)
+      return { ...prev, ...slotsFromIds(REVIEW_SLOT_KEYS, kept) }
+    })
+  }
 
   function handleNewConceptChange(ids) {
     const nextId = ids[0] ?? null
@@ -467,6 +553,9 @@ export default function LessonPlanPanel({
     setError('')
     setActiveStep(0)
     setLessonMode(LESSON_MODE_CREATE)
+    setSelectedNewConceptId(null)
+    setSelectedReviewConceptIds([])
+    setLessonNotes('')
   }
 
   function applyLesson(lesson) {
@@ -517,11 +606,34 @@ export default function LessonPlanPanel({
     setNotice('')
     setError('')
     setActiveStep(0)
+
+    const inferredNewConceptId =
+      data.conceptSlots?.newConceptId
+      || data.snapshots?.lists?.newConcept?.conceptID
+      || null
+    const inferredReviewConceptIds = [
+      ...(Array.isArray(data.conceptSlots?.reviewConceptIds) ? data.conceptSlots.reviewConceptIds : []),
+      data.snapshots?.lists?.review1?.conceptID,
+      data.snapshots?.lists?.review2?.conceptID,
+      data.snapshots?.lists?.review3?.conceptID,
+    ].filter(Boolean)
+    const uniqueReviewIds = []
+    const seen = new Set()
+    for (const id of inferredReviewConceptIds) {
+      if (id === inferredNewConceptId || seen.has(id)) continue
+      seen.add(id)
+      uniqueReviewIds.push(id)
+      if (uniqueReviewIds.length >= 3) break
+    }
+    setSelectedNewConceptId(inferredNewConceptId)
+    setSelectedReviewConceptIds(uniqueReviewIds)
+    setLessonNotes(data.notes ?? lesson?.comments ?? '')
   }
 
   async function handleSave() {
     const conceptId =
-      newConceptList?.conceptID
+      selectedNewConceptId
+      || newConceptList?.conceptID
       || reviewLists.find((list) => list?.conceptID)?.conceptID
       || selectedPassages.find((item) => item?.conceptID)?.conceptID
       || null
@@ -529,9 +641,18 @@ export default function LessonPlanPanel({
       setError('Assign at least one list before saving so the lesson has a concept.')
       return
     }
+    if (!selectedNewConceptId || selectedReviewConceptIds.length === 0) {
+      setError('Select a new concept and at least one review concept before saving.')
+      return
+    }
 
     const lessonData = {
       slots: { listSlots, sentenceSlots, passageSlots },
+      conceptSlots: {
+        newConceptId: selectedNewConceptId,
+        reviewConceptIds: selectedReviewConceptIds,
+      },
+      notes: lessonNotes,
       snapshots: {
         lists: {
           newConcept: snapshotList(newConceptList),
@@ -555,6 +676,7 @@ export default function LessonPlanPanel({
         lessonNumber,
         conceptId,
         lessonData,
+        comments: lessonNotes.trim() || null,
       })
       const lessons = await loadSavedLessons()
       const refreshed = (lessons ?? []).find((item) => item.id === saved.id)
@@ -678,7 +800,15 @@ export default function LessonPlanPanel({
                 onStepChange={setActiveStep}
                 lessonDate={lessonDate}
                 onLessonDateChange={setLessonDate}
-                lists={lists}
+                conceptOptions={conceptOptions}
+                selectedNewConceptId={selectedNewConceptId}
+                selectedReviewConceptIds={selectedReviewConceptIds}
+                onSelectedNewConceptChange={handleSelectedNewConceptChange}
+                onSelectedReviewConceptsChange={handleSelectedReviewConceptsChange}
+                lessonNotes={lessonNotes}
+                onLessonNotesChange={setLessonNotes}
+                newConceptLists={newConceptLists}
+                reviewConceptLists={reviewConceptLists}
                 sentences={sentences}
                 passages={passages}
                 loading={loading}
@@ -746,6 +876,7 @@ export default function LessonPlanPanel({
           date={dateLabel}
           lessonNumber={lessonNumber}
           instructor={instructor}
+          soapNotes={lessonNotes}
         />
       </Box>
     </Box>

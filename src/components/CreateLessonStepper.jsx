@@ -1,6 +1,9 @@
 import {
   Alert,
+  Autocomplete,
+  Box,
   Button,
+  Chip,
   Stack,
   Step,
   StepContent,
@@ -51,6 +54,20 @@ const PASSAGE_COLUMNS = [
   },
 ]
 
+const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
+
+/** Same sequential teal as Scope & Sequence: unknown (lightest) → mastered (darkest). */
+const MASTERY_ROW_COLORS = {
+  unknown: { bg: '#eef6f8', hover: '#e2f0f3', color: '#1a2a2e' },
+  new: { bg: '#c5dce1', hover: '#b4d2d8', color: '#1a2a2e' },
+  review: { bg: '#7aadb8', hover: '#689faa', color: '#102428' },
+  mastered: { bg: '#0f4c5c', hover: '#0c3e4b', color: '#ffffff' },
+}
+
+function masteryColors(status) {
+  return MASTERY_ROW_COLORS[status] ?? MASTERY_ROW_COLORS.unknown
+}
+
 function truncate(value, max = 80) {
   const text = String(value ?? '').trim()
   if (!text) return ''
@@ -58,12 +75,166 @@ function truncate(value, max = 80) {
   return `${text.slice(0, max - 1)}…`
 }
 
+function MasteryLegend() {
+  return (
+    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap alignItems="center">
+      <Typography variant="caption" color="text.secondary">
+        Mastery:
+      </Typography>
+      {MASTERY_STATUSES.map((status) => {
+        const colors = masteryColors(status)
+        return (
+          <Chip
+            key={status}
+            size="small"
+            label={status}
+            sx={{
+              bgcolor: colors.bg,
+              color: colors.color,
+              textTransform: 'capitalize',
+              fontWeight: 600,
+            }}
+          />
+        )
+      })}
+    </Stack>
+  )
+}
+
+function MasteryChip({ status, label, sx, ...chipProps }) {
+  const colors = masteryColors(status)
+  return (
+    <Chip
+      size="small"
+      label={label ?? status}
+      {...chipProps}
+      sx={{
+        bgcolor: colors.bg,
+        color: colors.color,
+        fontWeight: 600,
+        textTransform: label ? 'none' : 'capitalize',
+        ...sx,
+      }}
+    />
+  )
+}
+
+function ConceptAutocomplete({
+  label,
+  options,
+  value,
+  onChange,
+  multiple = false,
+  maxCount = 1,
+  disabledIds = [],
+  required = false,
+}) {
+  const disabled = new Set(disabledIds)
+  const selectedIds = new Set(
+    multiple
+      ? (value ?? []).map((item) => item?.id).filter(Boolean)
+      : value?.id
+        ? [value.id]
+        : [],
+  )
+
+  return (
+    <Autocomplete
+      multiple={multiple}
+      fullWidth
+      options={options}
+      value={value}
+      onChange={(_event, next) => {
+        if (!multiple) {
+          onChange(next)
+          return
+        }
+        const limited = Array.isArray(next) ? next.slice(0, maxCount) : []
+        onChange(limited)
+      }}
+      groupBy={(option) => (option.inScope ? 'In scope' : 'Not in scope')}
+      getOptionLabel={(option) => option?.concept || ''}
+      isOptionEqualToValue={(option, selected) => option.id === selected.id}
+      getOptionDisabled={(option) => {
+        if (disabled.has(option.id)) return true
+        if (!multiple) return false
+        if (selectedIds.has(option.id)) return false
+        return selectedIds.size >= maxCount
+      }}
+      filterSelectedOptions={multiple}
+      disableCloseOnSelect={multiple}
+      renderTags={(selected, getTagProps) =>
+        selected.map((option, index) => {
+          const { key, ...tagProps } = getTagProps({ index })
+          return (
+            <MasteryChip
+              key={key}
+              {...tagProps}
+              status={option.masteryStatus}
+              label={option.concept}
+            />
+          )
+        })
+      }
+      renderOption={(props, option) => {
+        const { key, ...optionProps } = props
+        const colors = masteryColors(option.masteryStatus)
+        return (
+          <Box
+            component="li"
+            key={key}
+            {...optionProps}
+            sx={{
+              bgcolor: `${colors.bg} !important`,
+              color: colors.color,
+              '&:hover': { bgcolor: `${colors.hover} !important` },
+            }}
+          >
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ width: '100%', py: 0.25 }}>
+              <Typography variant="body2" sx={{ flex: 1, color: 'inherit' }}>
+                {option.concept}
+              </Typography>
+              <Chip
+                size="small"
+                label={option.masteryStatus}
+                sx={{
+                  bgcolor: 'transparent',
+                  color: 'inherit',
+                  border: '1px solid currentColor',
+                  textTransform: 'capitalize',
+                  height: 22,
+                }}
+              />
+            </Stack>
+          </Box>
+        )
+      }}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label={label}
+          size="small"
+          required={required}
+        />
+      )}
+    />
+  )
+}
+
 export default function CreateLessonStepper({
   activeStep,
   onStepChange,
   lessonDate,
   onLessonDateChange,
-  lists = [],
+  conceptOptions = [],
+  selectedNewConceptId = null,
+  selectedReviewConceptIds = [],
+  onSelectedNewConceptChange,
+  onSelectedReviewConceptsChange,
+  lessonNotes = '',
+  onLessonNotesChange,
+  newConceptLists = [],
+  reviewConceptLists = [],
   sentences = [],
   passages = [],
   loading = false,
@@ -81,158 +252,222 @@ export default function CreateLessonStepper({
   createLabel = 'Create lesson plan',
   canCreate = false,
 }) {
-  const newConceptId = newConceptIds[0] ?? null
-  const canContinueFromDateAndList = Boolean(lessonDate) && Boolean(newConceptId)
+  const newConceptListId = newConceptIds[0] ?? null
+  const newConceptValue = conceptOptions.find((item) => item.id === selectedNewConceptId) ?? null
+  const reviewConceptValues = selectedReviewConceptIds
+    .map((id) => conceptOptions.find((item) => item.id === id))
+    .filter(Boolean)
+  const conceptsReady =
+    Boolean(lessonDate) && Boolean(selectedNewConceptId) && selectedReviewConceptIds.length > 0
+  const canContinueFromNewList = conceptsReady && Boolean(newConceptListId)
 
   return (
-    <Stepper activeStep={activeStep} orientation="vertical" nonLinear>
-      <Step completed={Boolean(newConceptId)}>
-        <StepLabel
-          optional={<Typography variant="caption">Required</Typography>}
-          onClick={() => onStepChange(0)}
-          sx={{ cursor: 'pointer' }}
-        >
-          New concept list
-        </StepLabel>
-        <StepContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            Set the lesson date, then choose the new concept list for this lesson.
-          </Typography>
+    <Box>
+      <Stack spacing={1.5} sx={{ mb: 2 }}>
+        <Typography variant="subtitle2">Lesson setup</Typography>
+        <MasteryLegend />
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="stretch">
           <TextField
             label="Lesson date"
             type="date"
             size="small"
+            required
             value={lessonDate}
             onChange={(event) => onLessonDateChange(event.target.value)}
             slotProps={{ inputLabel: { shrink: true } }}
-            sx={{ width: 190, mb: 1.5 }}
+            sx={{ width: { xs: '100%', sm: 190 }, flexShrink: 0 }}
           />
-          <StepperSelectionGrid
-            items={lists}
-            columns={LIST_COLUMNS}
-            selectedIds={newConceptIds}
-            onChange={onNewConceptChange}
-            maxCount={1}
-            loading={loading || loadingLists}
-            noRowsLabel="No lists yet. Create lists on the Concepts & Lists tab."
-            getItemLabel={(list) => list.name || 'Untitled list'}
-          />
-          <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-            <Button
-              variant="contained"
-              onClick={() => onStepChange(1)}
-              disabled={!canContinueFromDateAndList}
-            >
-              Continue
-            </Button>
-          </Stack>
-        </StepContent>
-      </Step>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <ConceptAutocomplete
+              label="New concept"
+              required
+              options={conceptOptions}
+              value={newConceptValue}
+              onChange={(next) => onSelectedNewConceptChange(next?.id ?? null)}
+            />
+          </Box>
+        </Stack>
+        <ConceptAutocomplete
+          label="Review concepts"
+          required
+          multiple
+          maxCount={3}
+          options={conceptOptions}
+          value={reviewConceptValues}
+          disabledIds={selectedNewConceptId ? [selectedNewConceptId] : []}
+          onChange={(next) => onSelectedReviewConceptsChange((next ?? []).map((item) => item.id))}
+        />
+        <TextField
+          label="Lesson notes"
+          placeholder="Add notes for this specific lesson…"
+          value={lessonNotes}
+          onChange={(event) => onLessonNotesChange(event.target.value)}
+          multiline
+          minRows={3}
+          fullWidth
+          size="small"
+        />
+        {!conceptsReady ? (
+          <Alert severity="info">
+            Choose a lesson date, one new concept, and at least one review concept (up to three)
+            before selecting lists.
+          </Alert>
+        ) : null}
+      </Stack>
 
-      <Step completed={reviewIds.length > 0}>
-        <StepLabel
-          optional={<Typography variant="caption">Up to 3</Typography>}
-          onClick={() => onStepChange(1)}
-          sx={{ cursor: 'pointer' }}
-        >
-          Review concept lists
-        </StepLabel>
-        <StepContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            Select up to three review lists. The new concept list is hidden here so it is not chosen twice.
-          </Typography>
-          <StepperSelectionGrid
-            items={lists}
-            columns={LIST_COLUMNS}
-            selectedIds={reviewIds}
-            onChange={onReviewChange}
-            maxCount={3}
-            excludeIds={newConceptIds}
-            loading={loading || loadingLists}
-            noRowsLabel="No other lists available for review."
-            getItemLabel={(list) => list.name || 'Untitled list'}
-          />
-          <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-            <Button onClick={() => onStepChange(0)}>Back</Button>
-            <Button variant="contained" onClick={() => onStepChange(2)}>
-              Continue
-            </Button>
-          </Stack>
-        </StepContent>
-      </Step>
+      <Stepper activeStep={activeStep} orientation="vertical" nonLinear>
+        <Step completed={Boolean(newConceptListId)}>
+          <StepLabel
+            optional={<Typography variant="caption">Required</Typography>}
+            onClick={() => onStepChange(0)}
+            sx={{ cursor: 'pointer' }}
+          >
+            New concept list
+          </StepLabel>
+          <StepContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              {selectedNewConceptId
+                ? 'Only lists tagged with the selected new concept are shown.'
+                : 'Select a new concept above to see matching lists.'}
+            </Typography>
+            <StepperSelectionGrid
+              items={newConceptLists}
+              columns={LIST_COLUMNS}
+              selectedIds={newConceptIds}
+              onChange={onNewConceptChange}
+              maxCount={1}
+              loading={loading || loadingLists}
+              noRowsLabel={
+                selectedNewConceptId
+                  ? 'No lists for this concept yet. Create one on the Concepts & Lists tab.'
+                  : 'Select a new concept above to filter lists.'
+              }
+              getItemLabel={(list) => list.name || 'Untitled list'}
+            />
+            <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+              <Button
+                variant="contained"
+                onClick={() => onStepChange(1)}
+                disabled={!canContinueFromNewList}
+              >
+                Continue
+              </Button>
+            </Stack>
+          </StepContent>
+        </Step>
 
-      <Step completed={sentenceIds.length > 0}>
-        <StepLabel
-          optional={<Typography variant="caption">Up to 6</Typography>}
-          onClick={() => onStepChange(2)}
-          sx={{ cursor: 'pointer' }}
-        >
-          Sentences
-        </StepLabel>
-        <StepContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            Select up to six sentences for dictation.
-          </Typography>
-          <StepperSelectionGrid
-            items={sentences}
-            columns={SENTENCE_COLUMNS}
-            selectedIds={sentenceIds}
-            onChange={onSentencesChange}
-            maxCount={6}
-            loading={loading}
-            noRowsLabel="No sentences yet for this student."
-            getItemLabel={(sentence) => truncate(sentence.text, 60) || 'Untitled sentence'}
-          />
-          <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-            <Button onClick={() => onStepChange(1)}>Back</Button>
-            <Button variant="contained" onClick={() => onStepChange(3)}>
-              Continue
-            </Button>
-          </Stack>
-        </StepContent>
-      </Step>
+        <Step completed={reviewIds.length > 0}>
+          <StepLabel
+            optional={<Typography variant="caption">Up to 3</Typography>}
+            onClick={() => onStepChange(1)}
+            sx={{ cursor: 'pointer' }}
+          >
+            Review concept lists
+          </StepLabel>
+          <StepContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              {selectedReviewConceptIds.length
+                ? 'Only lists tagged with the selected review concepts are shown. The new concept list is hidden so it is not chosen twice.'
+                : 'Select review concepts above to see matching lists.'}
+            </Typography>
+            <StepperSelectionGrid
+              items={reviewConceptLists}
+              columns={LIST_COLUMNS}
+              selectedIds={reviewIds}
+              onChange={onReviewChange}
+              maxCount={3}
+              excludeIds={newConceptIds}
+              loading={loading || loadingLists}
+              noRowsLabel={
+                selectedReviewConceptIds.length
+                  ? 'No other lists available for the selected review concepts.'
+                  : 'Select review concepts above to filter lists.'
+              }
+              getItemLabel={(list) => list.name || 'Untitled list'}
+            />
+            <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+              <Button onClick={() => onStepChange(0)}>Back</Button>
+              <Button variant="contained" onClick={() => onStepChange(2)} disabled={!conceptsReady}>
+                Continue
+              </Button>
+            </Stack>
+          </StepContent>
+        </Step>
 
-      <Step completed={passageIds.length > 0}>
-        <StepLabel
-          optional={<Typography variant="caption">Up to 2</Typography>}
-          onClick={() => onStepChange(3)}
-          sx={{ cursor: 'pointer' }}
-        >
-          Passages
-        </StepLabel>
-        <StepContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            Select up to two passages, then create the lesson plan.
-          </Typography>
-          <StepperSelectionGrid
-            items={passages}
-            columns={PASSAGE_COLUMNS}
-            selectedIds={passageIds}
-            onChange={onPassagesChange}
-            maxCount={2}
-            loading={loading}
-            noRowsLabel="No passages yet for this student."
-            getItemLabel={(passage) => passage.title || truncate(passage.text, 60) || 'Untitled passage'}
-          />
-          {!canCreate ? (
-            <Alert severity="info" sx={{ mt: 1.5 }}>
-              Choose a new concept list and a lesson date before creating the lesson.
-            </Alert>
-          ) : null}
-          <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-            <Button onClick={() => onStepChange(2)}>Back</Button>
-            <Button
-              variant="contained"
-              color="secondary"
-              startIcon={<SaveIcon />}
-              onClick={() => void onCreate()}
-              disabled={!canCreate || creating}
-            >
-              {createLabel}
-            </Button>
-          </Stack>
-        </StepContent>
-      </Step>
-    </Stepper>
+        <Step completed={sentenceIds.length > 0}>
+          <StepLabel
+            optional={<Typography variant="caption">Up to 6</Typography>}
+            onClick={() => onStepChange(2)}
+            sx={{ cursor: 'pointer' }}
+          >
+            Sentences
+          </StepLabel>
+          <StepContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              Select up to six sentences for dictation.
+            </Typography>
+            <StepperSelectionGrid
+              items={sentences}
+              columns={SENTENCE_COLUMNS}
+              selectedIds={sentenceIds}
+              onChange={onSentencesChange}
+              maxCount={6}
+              loading={loading}
+              noRowsLabel="No sentences yet for this student."
+              getItemLabel={(sentence) => truncate(sentence.text, 60) || 'Untitled sentence'}
+            />
+            <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+              <Button onClick={() => onStepChange(1)}>Back</Button>
+              <Button variant="contained" onClick={() => onStepChange(3)}>
+                Continue
+              </Button>
+            </Stack>
+          </StepContent>
+        </Step>
+
+        <Step completed={passageIds.length > 0}>
+          <StepLabel
+            optional={<Typography variant="caption">Up to 2</Typography>}
+            onClick={() => onStepChange(3)}
+            sx={{ cursor: 'pointer' }}
+          >
+            Passages
+          </StepLabel>
+          <StepContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              Select up to two passages, then create the lesson plan.
+            </Typography>
+            <StepperSelectionGrid
+              items={passages}
+              columns={PASSAGE_COLUMNS}
+              selectedIds={passageIds}
+              onChange={onPassagesChange}
+              maxCount={2}
+              loading={loading}
+              noRowsLabel="No passages yet for this student."
+              getItemLabel={(passage) => passage.title || truncate(passage.text, 60) || 'Untitled passage'}
+            />
+            {!canCreate ? (
+              <Alert severity="info" sx={{ mt: 1.5 }}>
+                Choose a lesson date, new concept, review concepts, and a new concept list before
+                creating the lesson.
+              </Alert>
+            ) : null}
+            <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+              <Button onClick={() => onStepChange(2)}>Back</Button>
+              <Button
+                variant="contained"
+                color="secondary"
+                startIcon={<SaveIcon />}
+                onClick={() => void onCreate()}
+                disabled={!canCreate || creating}
+              >
+                {createLabel}
+              </Button>
+            </Stack>
+          </StepContent>
+        </Step>
+      </Stepper>
+    </Box>
   )
 }
