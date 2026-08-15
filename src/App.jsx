@@ -44,7 +44,8 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SaveIcon from '@mui/icons-material/Save'
 import SearchIcon from '@mui/icons-material/Search'
 import LessonPlanPanel from './components/LessonPlanPanel'
-import DataEntryPanel from './components/DataEntryPanel'
+import DataPanel from './components/DataPanel'
+import CreateMultiWordPanel from './components/CreateMultiWordPanel'
 import { fetchStudentLists } from './lib/fetchStudentLessonPlan'
 
 const client = generateClient()
@@ -52,6 +53,8 @@ const DRAWER_WIDTH = 300
 const TAB_LESSON_PLAN = 0
 const TAB_SCOPE = 1
 const TAB_CONCEPTS = 2
+const TAB_MULTI_WORD = 3
+const TAB_DATA = 4
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
 /** Sequential teal: unknown (lightest) → mastered (darkest). */
@@ -1389,7 +1392,8 @@ function AppShell({ user, signOut }) {
               <Tab label="Lesson Plan" />
               <Tab label="Scope & Sequence" />
               <Tab label="Concepts & Lists" />
-              <Tab label="Data Entry" />
+              <Tab label="Create Multi-Word" />
+              <Tab label="Data" />
             </Tabs>
 
             {mainTab === TAB_LESSON_PLAN ? (
@@ -1428,12 +1432,22 @@ function AppShell({ user, signOut }) {
                 onReloadLists={loadStudentLists}
                 setError={setError}
               />
-            ) : (
-              <DataEntryPanel
+            ) : mainTab === TAB_MULTI_WORD ? (
+              <CreateMultiWordPanel
                 student={selectedStudent}
+                concepts={concepts}
+                wordsByConceptId={wordsByConceptId}
+                loadingCatalog={loadingCatalog}
                 setError={setError}
               />
-            )}
+            ) : mainTab === TAB_DATA ? (
+              <DataPanel
+                student={selectedStudent}
+                concepts={concepts}
+                wordsByConceptId={wordsByConceptId}
+                setError={setError}
+              />
+            ) : null}
           </>
         )}
       </Box>
