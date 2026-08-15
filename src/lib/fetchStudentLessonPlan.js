@@ -18,6 +18,17 @@ const STUDENT_CORE_SELECTION = [
 
 const LIST_SELECTION = ['id', 'name', 'conceptID', 'studentID', 'listData', 'createdAt']
 
+const LESSON_SELECTION = [
+  'id',
+  'date',
+  'createdAt',
+  'lessonNumber',
+  'lessonData',
+  'studentID',
+  'concepts',
+  'comments',
+]
+
 async function paginate(request) {
   const items = []
   let nextToken
@@ -98,6 +109,86 @@ export async function fetchStudentLists(studentId) {
 
   const owned = await listAll(client.models.List, { selectionSet: LIST_SELECTION }).catch(() => [])
   return asListRecords(owned, studentId)
+}
+
+export function parseLessonData(value) {
+  let current = value
+  for (let i = 0; i < 3; i += 1) {
+    if (current && typeof current === 'object' && !Array.isArray(current)) return current
+    if (typeof current !== 'string') break
+    const trimmed = current.trim()
+    if (!trimmed) return {}
+    try {
+      current = JSON.parse(trimmed)
+    } catch {
+      return {}
+    }
+  }
+  return current && typeof current === 'object' && !Array.isArray(current) ? current : {}
+}
+
+export async function fetchStudentLessons(studentId) {
+  if (!studentId) return []
+
+  const byIndex = client.models.Lesson.listLessonByStudentID
+  if (typeof byIndex === 'function') {
+    try {
+      const indexed = await paginate((nextToken) =>
+        byIndex.call(client.models.Lesson, { studentID: studentId }, {
+          limit: 1000,
+          nextToken,
+          selectionSet: LESSON_SELECTION,
+        }),
+      )
+      return indexed.filter((item) => item?.id)
+    } catch {
+      // Fall through to a filtered list.
+    }
+  }
+
+  try {
+    const filtered = await listAll(client.models.Lesson, {
+      filter: { studentID: { eq: studentId } },
+      selectionSet: LESSON_SELECTION,
+    })
+    return filtered.filter((item) => item?.id)
+  } catch {
+    // Fall through to an owner-scoped unfiltered list.
+  }
+
+  const owned = await listAll(client.models.Lesson, { selectionSet: LESSON_SELECTION }).catch(() => [])
+  return (owned ?? []).filter((item) => item?.id && item.studentID === studentId)
+}
+
+export async function saveStudentLesson({
+  id,
+  studentID,
+  date,
+  lessonNumber,
+  conceptId,
+  lessonData,
+}) {
+  if (!studentID) throw new Error('Student is required to save a lesson plan')
+  if (!date) throw new Error('Lesson date is required')
+  if (!conceptId) throw new Error('Assign at least one list before saving so the lesson has a concept')
+
+  const payload = {
+    studentID,
+    date,
+    lessonNumber: Number.isFinite(Number(lessonNumber)) ? Number(lessonNumber) : 1,
+    concepts: conceptId,
+    lessonData: JSON.stringify(lessonData ?? {}),
+  }
+
+  const result = id
+    ? await client.models.Lesson.update({ id, ...payload }, { selectionSet: LESSON_SELECTION })
+    : await client.models.Lesson.create(payload, { selectionSet: LESSON_SELECTION })
+
+  if (result.errors?.length) {
+    throw new Error(result.errors.map((e) => e.message).join(', '))
+  }
+  if (!result.data?.id) throw new Error('Failed to save lesson plan')
+  return result.data
 }
 
 /**

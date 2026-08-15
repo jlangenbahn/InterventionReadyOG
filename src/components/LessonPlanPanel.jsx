@@ -1,13 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
-import { Alert, Box, Button, Chip, CircularProgress, Paper, Stack, Typography } from '@mui/material'
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
 import PrintIcon from '@mui/icons-material/Print'
+import SaveIcon from '@mui/icons-material/Save'
+import AddIcon from '@mui/icons-material/Add'
+import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import LessonPlanTemplate from './LessonPlanTemplate'
 import MergeSelectionCard from './MergeSelectionCard'
 import {
   fetchStudentLessonPlan,
+  fetchStudentLessons,
   nextLessonNumber,
+  parseLessonData,
   resolveListWords,
+  saveStudentLesson,
   studentDisplayName,
 } from '../lib/fetchStudentLessonPlan'
 
@@ -132,8 +148,88 @@ function toPlainListRow(list, wordLookup, conceptById) {
     id: list.id,
     name: list.name || 'Untitled list',
     concept: conceptById.get(list.conceptID)?.concept || 'Unknown concept',
+    conceptID: list.conceptID || null,
     wordCount: words.length,
     words,
+  }
+}
+
+function todayIso() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function toIsoDate(value) {
+  if (!value) return todayIso()
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return todayIso()
+    const year = value.getFullYear()
+    const month = String(value.getMonth() + 1).padStart(2, '0')
+    const day = String(value.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  const raw = String(value)
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10)
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) return todayIso()
+  return toIsoDate(parsed)
+}
+
+function formatLessonDate(value) {
+  if (!value) return ''
+  const iso = toIsoDate(value)
+  const [year, month, day] = iso.split('-').map(Number)
+  if (!year || !month || !day) return ''
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(year, month - 1, day))
+}
+
+function formatCreatedDate(value) {
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return formatLessonDate(value)
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(parsed)
+}
+
+function snapshotList(list) {
+  if (!list) return null
+  return {
+    id: list.id,
+    name: list.name || 'Untitled list',
+    concept: list.concept || '',
+    conceptID: list.conceptID || null,
+    words: Array.isArray(list.words) ? list.words.slice() : [],
+  }
+}
+
+function snapshotSentence(sentence) {
+  if (!sentence) return null
+  return {
+    id: sentence.id,
+    text: sentence.text || '',
+    wordCount: sentence.wordCount ?? 0,
+  }
+}
+
+function snapshotPassage(passage) {
+  if (!passage) return null
+  return {
+    id: passage.id,
+    title: passage.title || 'Untitled passage',
+    text: passage.text || '',
+    concept: passage.concept || '',
+    conceptID: passage.conceptID || null,
+    wordCount: passage.wordCount ?? 0,
   }
 }
 
@@ -143,6 +239,20 @@ function truncate(value, max = 80) {
   if (text.length <= max) return text
   return `${text.slice(0, max - 1)}…`
 }
+
+const SAVED_LESSON_COLUMNS = [
+  {
+    field: 'lessonNumber',
+    headerName: 'Lesson #',
+    type: 'number',
+    width: 90,
+    align: 'left',
+    headerAlign: 'left',
+  },
+  { field: 'lessonDateLabel', headerName: 'Lesson date', width: 140 },
+  { field: 'createdDateLabel', headerName: 'Created', width: 140 },
+  { field: 'newConcept', headerName: 'New concept', flex: 1, minWidth: 160 },
+]
 
 export default function LessonPlanPanel({
   student,
@@ -159,6 +269,13 @@ export default function LessonPlanPanel({
   const [listSlots, setListSlots] = useState(EMPTY_LIST_SLOTS)
   const [sentenceSlots, setSentenceSlots] = useState(EMPTY_SENTENCE_SLOTS)
   const [passageSlots, setPassageSlots] = useState(EMPTY_PASSAGE_SLOTS)
+  const [lessonDate, setLessonDate] = useState(todayIso)
+  const [loadedLesson, setLoadedLesson] = useState(null)
+  const [snapshots, setSnapshots] = useState(null)
+  const [savedLessons, setSavedLessons] = useState([])
+  const [loadingLessons, setLoadingLessons] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [notice, setNotice] = useState('')
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -183,14 +300,40 @@ export default function LessonPlanPanel({
     }
   }, [student?.id, setError])
 
+  const loadSavedLessons = useCallback(async () => {
+    if (!student?.id) {
+      setSavedLessons([])
+      return []
+    }
+    setLoadingLessons(true)
+    try {
+      const lessons = await fetchStudentLessons(student.id)
+      setSavedLessons(lessons)
+      return lessons
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load saved lesson plans')
+      return []
+    } finally {
+      setLoadingLessons(false)
+    }
+  }, [student?.id, setError])
+
   useEffect(() => {
     void load()
   }, [load])
 
   useEffect(() => {
+    void loadSavedLessons()
+  }, [loadSavedLessons])
+
+  useEffect(() => {
     setListSlots({ ...EMPTY_LIST_SLOTS })
     setSentenceSlots({ ...EMPTY_SENTENCE_SLOTS })
     setPassageSlots({ ...EMPTY_PASSAGE_SLOTS })
+    setLoadedLesson(null)
+    setSnapshots(null)
+    setLessonDate(todayIso())
+    setNotice('')
   }, [student?.id])
 
   const wordLookup = useMemo(() => buildWordLookup(wordsByConceptId), [wordsByConceptId])
@@ -229,6 +372,7 @@ export default function LessonPlanPanel({
           title: passage.title || 'Untitled passage',
           text: passage.text || '',
           concept: conceptById.get(passage.conceptID)?.concept || '',
+          conceptID: passage.conceptID || null,
           wordCount: passage.wordCount ?? 0,
         })),
     [payload?.passages, conceptById],
@@ -244,28 +388,74 @@ export default function LessonPlanPanel({
     [passages],
   )
 
-  const reviewLists = [
-    listsById.get(listSlots.review1) ?? null,
-    listsById.get(listSlots.review2) ?? null,
-    listsById.get(listSlots.review3) ?? null,
-  ]
-  const newConceptList = listsById.get(listSlots.newConcept) ?? null
-  const selectedSentences = [
-    sentencesById.get(sentenceSlots.sentence1) ?? null,
-    sentencesById.get(sentenceSlots.sentence2) ?? null,
-  ]
-  const selectedPassage = passagesById.get(passageSlots.passage1) ?? null
-
-  const lessonNumber = nextLessonNumber(payload?.lessons)
-  const dateLabel = useMemo(
+  const savedLessonRows = useMemo(
     () =>
-      new Intl.DateTimeFormat('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      }).format(new Date()),
-    [],
+      [...savedLessons]
+        .sort((a, b) => {
+          const byDate = String(b.date ?? '').localeCompare(String(a.date ?? ''))
+          if (byDate) return byDate
+          return String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? ''))
+        })
+        .map((lesson) => {
+          const data = parseLessonData(lesson.lessonData)
+          const newConcept =
+            data?.snapshots?.lists?.newConcept?.name
+            || data?.snapshots?.lists?.newConcept?.concept
+            || ''
+          return {
+            id: lesson.id,
+            lessonNumber: lesson.lessonNumber ?? '',
+            date: lesson.date,
+            createdAt: lesson.createdAt,
+            lessonDateLabel: formatLessonDate(lesson.date) || '—',
+            createdDateLabel: formatCreatedDate(lesson.createdAt) || '—',
+            newConcept: newConcept || '—',
+          }
+        }),
+    [savedLessons],
   )
+
+  function listForSlot(key) {
+    const id = listSlots[key]
+    if (!id) return null
+    const live = listsById.get(id)
+    if (live) return live
+    const snap = snapshots?.lists?.[key]
+    return snap?.id === id ? snap : null
+  }
+
+  function sentenceForSlot(key) {
+    const id = sentenceSlots[key]
+    if (!id) return null
+    const live = sentencesById.get(id)
+    if (live) return live
+    const snaps = snapshots?.sentences
+    const snap = Array.isArray(snaps)
+      ? snaps.find((item) => item?.id === id)
+      : snaps?.[key]
+    return snap?.id === id ? snap : null
+  }
+
+  function passageForSlot(key) {
+    const id = passageSlots[key]
+    if (!id) return null
+    const live = passagesById.get(id)
+    if (live) return live
+    const snap = snapshots?.passage
+    return snap?.id === id ? snap : null
+  }
+
+  const reviewLists = [
+    listForSlot('review1'),
+    listForSlot('review2'),
+    listForSlot('review3'),
+  ]
+  const newConceptList = listForSlot('newConcept')
+  const selectedSentences = [sentenceForSlot('sentence1'), sentenceForSlot('sentence2')]
+  const selectedPassage = passageForSlot('passage1')
+
+  const lessonNumber = loadedLesson?.lessonNumber ?? nextLessonNumber(savedLessons)
+  const dateLabel = formatLessonDate(lessonDate)
 
   const hasAnyMaterials = lists.length || sentences.length || passages.length
   const hasEmptySlots =
@@ -298,6 +488,109 @@ export default function LessonPlanPanel({
     }))
   }
 
+  function handleNew() {
+    setListSlots({ ...EMPTY_LIST_SLOTS })
+    setSentenceSlots({ ...EMPTY_SENTENCE_SLOTS })
+    setPassageSlots({ ...EMPTY_PASSAGE_SLOTS })
+    setLoadedLesson(null)
+    setSnapshots(null)
+    setLessonDate(todayIso())
+    setNotice('')
+    setError('')
+  }
+
+  function applyLesson(lesson) {
+    const data = parseLessonData(lesson?.lessonData)
+    const nextListSlots = {
+      ...EMPTY_LIST_SLOTS,
+      ...(data.slots?.listSlots ?? {}),
+    }
+    const nextSentenceSlots = {
+      ...EMPTY_SENTENCE_SLOTS,
+      ...(data.slots?.sentenceSlots ?? {}),
+    }
+    const nextPassageSlots = {
+      ...EMPTY_PASSAGE_SLOTS,
+      ...(data.slots?.passageSlots ?? {}),
+    }
+    if (!nextListSlots.newConcept && data.snapshots?.lists?.newConcept?.id) {
+      nextListSlots.newConcept = data.snapshots.lists.newConcept.id
+    }
+    ;['review1', 'review2', 'review3'].forEach((key) => {
+      if (!nextListSlots[key] && data.snapshots?.lists?.[key]?.id) {
+        nextListSlots[key] = data.snapshots.lists[key].id
+      }
+    })
+    if (!nextPassageSlots.passage1 && data.snapshots?.passage?.id) {
+      nextPassageSlots.passage1 = data.snapshots.passage.id
+    }
+    const sentenceSnaps = Array.isArray(data.snapshots?.sentences) ? data.snapshots.sentences : []
+    if (!nextSentenceSlots.sentence1 && sentenceSnaps[0]?.id) {
+      nextSentenceSlots.sentence1 = sentenceSnaps[0].id
+    }
+    if (!nextSentenceSlots.sentence2 && sentenceSnaps[1]?.id) {
+      nextSentenceSlots.sentence2 = sentenceSnaps[1].id
+    }
+
+    setListSlots(nextListSlots)
+    setSentenceSlots(nextSentenceSlots)
+    setPassageSlots(nextPassageSlots)
+    setSnapshots(data.snapshots ?? null)
+    setLoadedLesson(lesson)
+    setLessonDate(toIsoDate(lesson?.date))
+    setNotice('')
+    setError('')
+  }
+
+  async function handleSave() {
+    const conceptId =
+      newConceptList?.conceptID
+      || reviewLists.find((list) => list?.conceptID)?.conceptID
+      || selectedPassage?.conceptID
+      || null
+    if (!conceptId) {
+      setError('Assign at least one list before saving so the lesson has a concept.')
+      return
+    }
+
+    const lessonData = {
+      slots: { listSlots, sentenceSlots, passageSlots },
+      snapshots: {
+        lists: {
+          newConcept: snapshotList(newConceptList),
+          review1: snapshotList(reviewLists[0]),
+          review2: snapshotList(reviewLists[1]),
+          review3: snapshotList(reviewLists[2]),
+        },
+        sentences: selectedSentences.map(snapshotSentence),
+        passage: snapshotPassage(selectedPassage),
+      },
+      instructor,
+    }
+
+    setSaving(true)
+    try {
+      const saved = await saveStudentLesson({
+        id: loadedLesson?.id,
+        studentID: student.id,
+        date: lessonDate,
+        lessonNumber,
+        conceptId,
+        lessonData,
+      })
+      const lessons = await loadSavedLessons()
+      const refreshed = (lessons ?? []).find((item) => item.id === saved.id)
+      setLoadedLesson(refreshed ?? { ...saved, createdAt: saved.createdAt ?? loadedLesson?.createdAt })
+      setSnapshots(lessonData.snapshots)
+      setNotice(loadedLesson?.id ? 'Lesson plan updated.' : 'Lesson plan saved.')
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save lesson plan')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (!student) {
     return (
       <Typography color="text.secondary">Select a student to preview their lesson plan.</Typography>
@@ -324,16 +617,87 @@ export default function LessonPlanPanel({
           {lists.length ? (
             <Chip size="small" variant="outlined" label={`${lists.length} lists`} />
           ) : null}
-          {loading || loadingLists ? <CircularProgress size={16} /> : null}
+          <TextField
+            label="Lesson date"
+            type="date"
+            size="small"
+            value={lessonDate}
+            onChange={(event) => setLessonDate(event.target.value)}
+            slotProps={{ inputLabel: { shrink: true } }}
+            sx={{ width: 170 }}
+          />
+          {loadedLesson ? (
+            <Chip
+              size="small"
+              color="primary"
+              variant="outlined"
+              label={`Created ${formatCreatedDate(loadedLesson.createdAt)}`}
+            />
+          ) : (
+            <Chip size="small" variant="outlined" label="Unsaved" />
+          )}
+          {notice ? <Chip size="small" color="success" label={notice} /> : null}
+          {loading || loadingLists || loadingLessons || saving ? <CircularProgress size={16} /> : null}
         </Stack>
-        <Button
-          variant="contained"
-          startIcon={<PrintIcon />}
-          onClick={handlePrint}
-          disabled={loading}
-        >
-          Print Lesson Plan
-        </Button>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Button variant="outlined" startIcon={<AddIcon />} onClick={handleNew} disabled={saving}>
+            New
+          </Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            startIcon={<SaveIcon />}
+            onClick={() => void handleSave()}
+            disabled={saving || loading}
+          >
+            {loadedLesson ? 'Update' : 'Save'}
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<PrintIcon />}
+            onClick={handlePrint}
+            disabled={loading}
+          >
+            Print Lesson Plan
+          </Button>
+        </Stack>
+      </Paper>
+
+      <Paper sx={{ p: 2, mb: 2, '@media print': { display: 'none' } }}>
+        <Typography variant="subtitle1">Saved lesson plans</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          Click a row to load that plan. Lesson date is when it is taught; Created is when you saved it.
+        </Typography>
+        <Box sx={{ height: 280, width: '100%' }}>
+          <DataGridPro
+            rows={savedLessonRows}
+            columns={SAVED_LESSON_COLUMNS}
+            getRowId={(row) => row.id}
+            onRowClick={(params) => {
+              const lesson = savedLessons.find((item) => item.id === params.id)
+              if (lesson) applyLesson(lesson)
+            }}
+            getRowClassName={(params) => (params.id === loadedLesson?.id ? 'Mui-selected' : '')}
+            loading={loadingLessons}
+            pagination
+            pageSizeOptions={[10, 25, 50]}
+            initialState={{
+              pagination: { paginationModel: { pageSize: 10 } },
+              sorting: { sortModel: [{ field: 'lessonDateLabel', sort: 'desc' }] },
+            }}
+            slots={{ toolbar: GridToolbar }}
+            slotProps={{
+              toolbar: {
+                showQuickFilter: true,
+                quickFilterProps: { debounceMs: 300 },
+              },
+            }}
+            density="compact"
+            localeText={{
+              noRowsLabel: 'No saved lesson plans yet. Assign lists and click Save.',
+            }}
+          />
+        </Box>
       </Paper>
 
       <Box
