@@ -39,13 +39,16 @@ import AddIcon from '@mui/icons-material/Add'
 import LockIcon from '@mui/icons-material/Lock'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
+import GroupsIcon from '@mui/icons-material/Groups'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SaveIcon from '@mui/icons-material/Save'
 import LessonPlanPanel from './components/LessonPlanPanel'
 import DataPanel from './components/DataPanel'
 import ContentPanel from './components/ContentPanel'
 import ConceptsCatalogPanel from './components/ConceptsCatalogPanel'
+import GroupPanel from './components/GroupPanel'
 import { fetchStudentLists } from './lib/fetchStudentLessonPlan'
+import { fetchInstructorGroups, saveInstructorGroup } from './lib/groups'
 
 const client = generateClient()
 const DRAWER_WIDTH = 300
@@ -698,6 +701,11 @@ function AppShell({ user, signOut }) {
   const [error, setError] = useState('')
   const [studentLists, setStudentLists] = useState([])
   const [loadingLists, setLoadingLists] = useState(false)
+  const [groups, setGroups] = useState([])
+  const [loadingGroups, setLoadingGroups] = useState(false)
+  const [selectedGroupId, setSelectedGroupId] = useState(null)
+  const [creatingGroup, setCreatingGroup] = useState(false)
+  const [savingGroup, setSavingGroup] = useState(false)
   const [studentDialogOpen, setStudentDialogOpen] = useState(false)
   const [newStudent, setNewStudent] = useState({
     firstName: '',
@@ -713,6 +721,11 @@ function AppShell({ user, signOut }) {
   const selectedStudent = useMemo(
     () => students.find((s) => s.id === selectedStudentId) ?? null,
     [students, selectedStudentId],
+  )
+
+  const selectedGroup = useMemo(
+    () => groups.find((group) => group.id === selectedGroupId) ?? null,
+    [groups, selectedGroupId],
   )
 
   const handleScopeUpdated = useCallback((updatedStudent) => {
@@ -813,6 +826,23 @@ function AppShell({ user, signOut }) {
     void loadStudentLists()
   }, [loadStudentLists])
 
+  const loadGroups = useCallback(async () => {
+    setLoadingGroups(true)
+    try {
+      const items = await fetchInstructorGroups()
+      setGroups(items)
+    } catch (err) {
+      setGroups([])
+      setError(err instanceof Error ? err.message : 'Failed to load groups')
+    } finally {
+      setLoadingGroups(false)
+    }
+  }, [setError])
+
+  useEffect(() => {
+    void loadGroups()
+  }, [loadGroups])
+
   useEffect(() => {
     setScopeLocked(true)
   }, [selectedStudentId])
@@ -827,11 +857,48 @@ function AppShell({ user, signOut }) {
   }
 
   function handleSelectStudent(studentId) {
-    if (studentId === selectedStudentId) return
+    if (studentId === selectedStudentId && !creatingGroup && !selectedGroupId) return
     requestNavigation(() => {
       setSelectedStudentId(studentId)
+      setSelectedGroupId(null)
+      setCreatingGroup(false)
       setScopeLocked(true)
     })
+  }
+
+  function handleSelectGroup(groupId) {
+    if (groupId === selectedGroupId && !creatingGroup) return
+    requestNavigation(() => {
+      setSelectedGroupId(groupId)
+      setSelectedStudentId(null)
+      setCreatingGroup(false)
+      setScopeLocked(true)
+    })
+  }
+
+  function handleStartCreateGroup() {
+    requestNavigation(() => {
+      setCreatingGroup(true)
+      setSelectedGroupId(null)
+      setSelectedStudentId(null)
+      setScopeLocked(true)
+    })
+  }
+
+  async function handleSaveGroup(payload) {
+    setSavingGroup(true)
+    try {
+      const saved = await saveInstructorGroup(payload)
+      const items = await fetchInstructorGroups()
+      setGroups(items)
+      setCreatingGroup(false)
+      setSelectedGroupId(saved.id)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save group')
+    } finally {
+      setSavingGroup(false)
+    }
   }
 
   function handleMainTabChange(_event, value) {
@@ -920,6 +987,8 @@ function AppShell({ user, signOut }) {
             boxSizing: 'border-box',
             borderRight: '1px solid',
             borderColor: 'divider',
+            display: 'flex',
+            flexDirection: 'column',
           },
         }}
       >
@@ -955,13 +1024,13 @@ function AppShell({ user, signOut }) {
             </Button>
           </Box>
         ) : (
-          <List dense sx={{ overflow: 'auto' }}>
+          <List dense sx={{ overflow: 'auto', flex: '1 1 50%' }}>
             {students.map((student) => {
               const name = studentDisplayName(student)
               return (
                 <ListItemButton
                   key={student.id}
-                  selected={student.id === selectedStudentId}
+                  selected={!creatingGroup && !selectedGroupId && student.id === selectedStudentId}
                   onClick={() => handleSelectStudent(student.id)}
                 >
                   <PersonIcon fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
@@ -974,6 +1043,46 @@ function AppShell({ user, signOut }) {
             })}
           </List>
         )}
+        <Divider />
+        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography variant="subtitle1">Groups</Typography>
+          <IconButton
+            color="primary"
+            size="small"
+            aria-label="Add group"
+            onClick={handleStartCreateGroup}
+          >
+            <AddIcon />
+          </IconButton>
+        </Box>
+        <Divider />
+        {loadingGroups ? (
+          <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
+            <CircularProgress size={22} />
+          </Box>
+        ) : groups.length === 0 ? (
+          <Box sx={{ p: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              No groups yet. Click + to bundle students.
+            </Typography>
+          </Box>
+        ) : (
+          <List dense sx={{ overflow: 'auto', flex: '1 1 50%' }}>
+            {groups.map((group) => (
+              <ListItemButton
+                key={group.id}
+                selected={!creatingGroup && group.id === selectedGroupId}
+                onClick={() => handleSelectGroup(group.id)}
+              >
+                <GroupsIcon fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
+                <ListItemText
+                  primary={group.name || 'Untitled group'}
+                  secondary={`${(group.studentIds ?? []).length} students`}
+                />
+              </ListItemButton>
+            ))}
+          </List>
+        )}
       </Drawer>
 
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
@@ -984,12 +1093,34 @@ function AppShell({ user, signOut }) {
           </Paper>
         ) : null}
 
-        {!selectedStudent ? (
+        {!selectedStudent && !creatingGroup && !selectedGroup ? (
           <Paper sx={{ p: 3 }}>
             <Typography color="text.secondary">
-              Select or add a student to open their Lesson Plan.
+              Select a student, choose a group, or click Groups + to create one.
             </Typography>
           </Paper>
+        ) : creatingGroup || selectedGroup ? (
+          <>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap">
+              <Typography variant="h5">
+                {creatingGroup ? 'New group' : selectedGroup?.name || 'Group'}
+              </Typography>
+              {!creatingGroup ? (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={`${(selectedGroup?.studentIds ?? []).length} students`}
+                />
+              ) : null}
+            </Stack>
+            <GroupPanel
+              group={creatingGroup ? null : selectedGroup}
+              students={students}
+              saving={savingGroup}
+              setError={setError}
+              onSave={(payload) => void handleSaveGroup(payload)}
+            />
+          </>
         ) : (
           <>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap">
@@ -1020,6 +1151,8 @@ function AppShell({ user, signOut }) {
                 wordsByConceptId={wordsByConceptId}
                 instructor={user?.signInDetails?.loginId ?? user?.username ?? ''}
                 setError={setError}
+                students={students}
+                groups={groups}
               />
             ) : mainTab === TAB_SCOPE ? (
               <ScopeAndSequencePanel

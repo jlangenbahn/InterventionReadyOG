@@ -5,6 +5,7 @@ import {
   Button,
   Chip,
   CircularProgress,
+  IconButton,
   Paper,
   Stack,
   Tab,
@@ -15,10 +16,12 @@ import PrintIcon from '@mui/icons-material/Print'
 import AddIcon from '@mui/icons-material/Add'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import GradingIcon from '@mui/icons-material/Grading'
+import ShareIcon from '@mui/icons-material/Share'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import LessonPlanTemplate from './LessonPlanTemplate'
 import CreateLessonStepper from './CreateLessonStepper'
 import DataEntryPanel from './DataEntryPanel'
+import ShareLessonDialog from './ShareLessonDialog'
 import {
   fetchStudentLessonPlan,
   fetchStudentLessons,
@@ -30,6 +33,7 @@ import {
   resolvePassageFocusId,
   resolveListWords,
   saveStudentLesson,
+  copyLessonToStudents,
   studentDisplayName,
 } from '../lib/fetchStudentLessonPlan'
 
@@ -232,7 +236,8 @@ const GRADE_LESSON_COLUMNS = [
 
 const LESSON_MODE_VIEW = 0
 const LESSON_MODE_GRADE = 1
-const LESSON_MODE_CREATE = 2
+const LESSON_MODE_SHARE = 2
+const LESSON_MODE_CREATE = 3
 
 export default function LessonPlanPanel({
   student,
@@ -242,6 +247,8 @@ export default function LessonPlanPanel({
   wordsByConceptId,
   instructor,
   setError,
+  students = [],
+  groups = [],
 }) {
   const printRef = useRef(null)
   const [loading, setLoading] = useState(false)
@@ -262,6 +269,8 @@ export default function LessonPlanPanel({
   const [selectedReviewConceptIds, setSelectedReviewConceptIds] = useState([])
   const [lessonNotes, setLessonNotes] = useState('')
   const [lessonName, setLessonName] = useState('')
+  const [shareLesson, setShareLesson] = useState(null)
+  const [sharing, setSharing] = useState(false)
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -326,6 +335,7 @@ export default function LessonPlanPanel({
     setSelectedReviewConceptIds([])
     setLessonNotes('')
     setLessonName('')
+    setShareLesson(null)
   }, [student?.id])
 
   const wordLookup = useMemo(() => buildWordLookup(wordsByConceptId), [wordsByConceptId])
@@ -482,6 +492,34 @@ export default function LessonPlanPanel({
             scoreLabel,
           }
         }),
+    [savedLessons],
+  )
+
+  const viewColumns = useMemo(
+    () => [
+      ...SAVED_LESSON_COLUMNS,
+      {
+        field: 'actions',
+        headerName: 'Share',
+        width: 80,
+        sortable: false,
+        filterable: false,
+        disableColumnMenu: true,
+        renderCell: (params) => (
+          <IconButton
+            size="small"
+            aria-label={`Share ${params.row.name || 'lesson'}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              const lesson = savedLessons.find((item) => item.id === params.id)
+              if (lesson) setShareLesson(lesson)
+            }}
+          >
+            <ShareIcon fontSize="small" />
+          </IconButton>
+        ),
+      },
+    ],
     [savedLessons],
   )
 
@@ -776,6 +814,21 @@ export default function LessonPlanPanel({
     }
   }
 
+  async function handleShare(targetStudentIds) {
+    if (!shareLesson) return
+    setSharing(true)
+    try {
+      const copied = await copyLessonToStudents(shareLesson, targetStudentIds)
+      setNotice(`Copied this lesson to ${copied.length} student${copied.length === 1 ? '' : 's'}.`)
+      setShareLesson(null)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to share lesson plan')
+    } finally {
+      setSharing(false)
+    }
+  }
+
   if (!student) {
     return (
       <Typography color="text.secondary">Select a student to preview their lesson plan.</Typography>
@@ -813,6 +866,7 @@ export default function LessonPlanPanel({
           >
             <Tab icon={<ViewListIcon />} iconPosition="start" label="View lesson plans" />
             <Tab icon={<GradingIcon />} iconPosition="start" label="Grade Lesson Plans" />
+            <Tab icon={<ShareIcon />} iconPosition="start" label="Share Lessons" />
             <Tab icon={<AddIcon />} iconPosition="start" label="Create lesson" />
           </Tabs>
 
@@ -861,12 +915,18 @@ export default function LessonPlanPanel({
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 {lessonMode === LESSON_MODE_GRADE
                   ? 'Select a saved plan to score lists, sentences, and passages on the right. Lesson scores stay at the bottom of that panel.'
-                  : 'Select a saved plan to preview it on the right. Lesson date is when it is taught; Created is when you saved it.'}
+                  : lessonMode === LESSON_MODE_SHARE
+                    ? 'Copy a saved plan onto other students. Each copy belongs to that student and is scored separately.'
+                    : 'Select a saved plan to preview it on the right. Lesson date is when it is taught; Created is when you saved it.'}
               </Typography>
               <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
                 <DataGridPro
                   rows={savedLessonRows}
-                  columns={lessonMode === LESSON_MODE_GRADE ? GRADE_LESSON_COLUMNS : SAVED_LESSON_COLUMNS}
+                  columns={
+                    lessonMode === LESSON_MODE_GRADE
+                      ? GRADE_LESSON_COLUMNS
+                      : viewColumns
+                  }
                   getRowId={(row) => row.id}
                   onRowClick={(params) => {
                     const lesson = savedLessons.find((item) => item.id === params.id)
@@ -892,7 +952,9 @@ export default function LessonPlanPanel({
                     noRowsLabel:
                       lessonMode === LESSON_MODE_GRADE
                         ? 'No saved lesson plans yet. Switch to Create lesson to make one, then grade it here.'
-                        : 'No saved lesson plans yet. Switch to Create lesson to make one.',
+                        : lessonMode === LESSON_MODE_SHARE
+                          ? 'No saved lesson plans yet. Create a plan first, then share it here.'
+                          : 'No saved lesson plans yet. Switch to Create lesson to make one.',
                   }}
                 />
               </Box>
@@ -965,6 +1027,16 @@ export default function LessonPlanPanel({
           </>
         )}
       </Box>
+      <ShareLessonDialog
+        open={Boolean(shareLesson)}
+        lesson={shareLesson}
+        students={students}
+        groups={groups}
+        currentStudentId={student.id}
+        sharing={sharing}
+        onClose={() => setShareLesson(null)}
+        onShare={(ids) => void handleShare(ids)}
+      />
     </Box>
   )
 }

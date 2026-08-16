@@ -205,6 +205,46 @@ export async function saveStudentLesson({
   return result.data
 }
 
+export async function copyLessonToStudents(sourceLesson, targetStudentIds = []) {
+  if (!sourceLesson?.id) throw new Error('Select a lesson plan to share.')
+  const uniqueIds = [...new Set((targetStudentIds ?? []).filter(Boolean))]
+    .filter((id) => id !== sourceLesson.studentID)
+  if (!uniqueIds.length) throw new Error('Select at least one other student.')
+
+  const parsed = parseLessonData(sourceLesson.lessonData)
+  const copiedData = {
+    ...parsed,
+    scores: {},
+    scoreSummary: null,
+    sharedFrom: {
+      lessonId: sourceLesson.id,
+      studentID: sourceLesson.studentID,
+    },
+  }
+  const conceptId =
+    sourceLesson.concepts
+    || parsed.snapshots?.lists?.newConcept?.conceptID
+    || parsed.conceptSlots?.newConceptId
+    || null
+  if (!conceptId) throw new Error('This lesson plan is missing a concept and cannot be shared.')
+
+  const copied = []
+  for (const studentID of uniqueIds) {
+    const existing = await fetchStudentLessons(studentID)
+    const saved = await saveStudentLesson({
+      studentID,
+      date: sourceLesson.date,
+      lessonNumber: nextLessonNumber(existing),
+      conceptId,
+      lessonData: copiedData,
+      comments: sourceLesson.comments ?? parsed.notes ?? null,
+      name: sourceLesson.name || parsed.name || null,
+    })
+    copied.push(saved)
+  }
+  return copied
+}
+
 async function listStudentPassages(studentId) {
   const filter = { studentID: { eq: studentId } }
   const core = ['id', 'title', 'text', 'wordCount', 'conceptID', 'createdAt', 'studentID']

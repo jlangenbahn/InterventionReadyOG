@@ -36,7 +36,26 @@ const schema = a.schema({
       Sentences: a.hasMany('Sentence', 'studentID'),
       Passages: a.hasMany('Passage', 'studentID'),
       Concepts: a.hasMany('StudentConcept', 'studentId'),
+      Groups: a.hasMany('GroupStudent', 'studentId'),
     })
+    .authorization((allow) => [allow.owner()]),
+
+  Group: a
+    .model({
+      name: a.string().required(),
+      groupData: a.json(),
+      students: a.hasMany('GroupStudent', 'groupId'),
+    })
+    .authorization((allow) => [allow.owner()]),
+
+  GroupStudent: a
+    .model({
+      groupId: a.id().required(),
+      studentId: a.id().required(),
+      group: a.belongsTo('Group', 'groupId'),
+      student: a.belongsTo('Student', 'studentId'),
+    })
+    .secondaryIndexes((index) => [index('groupId'), index('studentId')])
     .authorization((allow) => [allow.owner()]),
 
   Passage: a
