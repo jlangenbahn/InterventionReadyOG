@@ -205,6 +205,19 @@ export async function saveStudentLesson({
   return result.data
 }
 
+async function listStudentPassages(studentId) {
+  const filter = { studentID: { eq: studentId } }
+  const core = ['id', 'title', 'text', 'wordCount', 'conceptID', 'createdAt', 'studentID']
+  try {
+    return await listAll(client.models.Passage, {
+      filter,
+      selectionSet: [...core, 'passageData'],
+    })
+  } catch {
+    return listAll(client.models.Passage, { filter, selectionSet: core }).catch(() => [])
+  }
+}
+
 async function listStudentSentences(studentId) {
   const filter = { studentID: { eq: studentId } }
   const core = ['id', 'text', 'wordCount', 'createdAt', 'studentID', 'sentenceData']
@@ -242,10 +255,7 @@ export async function fetchStudentLessonPlan(studentId) {
 
   const [sentenceItems, passageItems] = await Promise.all([
     listStudentSentences(studentId),
-    listAll(client.models.Passage, {
-      filter: { studentID: { eq: studentId } },
-      selectionSet: ['id', 'title', 'text', 'wordCount', 'conceptID', 'createdAt', 'studentID'],
-    }).catch(() => []),
+    listStudentPassages(studentId),
   ])
 
   const lists = []
@@ -310,8 +320,16 @@ export function formatLessonDisplayName(customName, conceptName, lessonNumber) {
 }
 
 export function resolveSentenceFocusId(sentence) {
-  if (sentence?.conceptID) return sentence.conceptID
-  const data = parseListData(sentence?.sentenceData)
+  return resolveFocusConceptId(sentence, 'sentenceData')
+}
+
+export function resolvePassageFocusId(passage) {
+  return resolveFocusConceptId(passage, 'passageData')
+}
+
+function resolveFocusConceptId(record, dataField) {
+  if (record?.conceptID) return record.conceptID
+  const data = parseListData(record?.[dataField])
   return data.focusConceptId || data.tags?.conceptCounts?.[0]?.id || null
 }
 

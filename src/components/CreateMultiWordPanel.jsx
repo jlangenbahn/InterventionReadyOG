@@ -123,26 +123,28 @@ export default function CreateMultiWordPanel({
       setError('Enter some text to tag and save.')
       return
     }
-    if (kind === 'sentence' && !focusConceptId) {
-      setError('Choose a focus concept for this sentence. That is the unifying concept used when creating lessons.')
-      return
-    }
-    if (kind === 'passage' && !tagged.topConcept?.id) {
-      setError('A passage needs at least one catalog concept. Add words that exist in the word bank.')
+    if (!focusConceptId) {
+      setError(
+        `Choose a focus concept for this ${kind}. That is the unifying concept used when creating lessons.`,
+      )
       return
     }
 
     setSaving(true)
     try {
       const payload = serializeTagResult(tagged)
+      const focusName = focusValue?.name || tagged.topConcept?.name
       if (kind === 'passage') {
         const { data, errors } = await client.models.Passage.create({
-          title: title.trim() || tagged.topConcept?.name || 'Untitled passage',
+          title: title.trim() || focusName || 'Untitled passage',
           text: trimmed,
           wordCount: tagged.tokenCount,
           studentID: student.id,
-          conceptID: tagged.topConcept.id,
-          passageData: JSON.stringify({ tags: payload }),
+          conceptID: focusConceptId,
+          passageData: JSON.stringify({
+            tags: payload,
+            focusConceptId,
+          }),
         })
         if (errors?.length) throw new Error(errors.map((item) => item.message).join(', '))
         if (!data?.id) throw new Error('Failed to save passage')
@@ -246,33 +248,35 @@ export default function CreateMultiWordPanel({
                 : 'Write a sentence, or a list of words separated by spaces…'
             }
           />
-          {kind === 'sentence' ? (
-            <Autocomplete
-              options={focusOptions}
-              value={focusValue}
-              onChange={(_event, next) => {
-                setFocusTouched(true)
-                setFocusConceptId(next?.id ?? null)
-              }}
-              getOptionLabel={(option) => option?.name || ''}
-              isOptionEqualToValue={(option, selected) => option.id === selected.id}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Focus concept"
-                  size="small"
-                  required
-                  helperText="The unifying concept for this sentence. Lesson creation filters sentences by this."
-                />
-              )}
-            />
-          ) : null}
+          <Autocomplete
+            options={focusOptions}
+            value={focusValue}
+            onChange={(_event, next) => {
+              setFocusTouched(true)
+              setFocusConceptId(next?.id ?? null)
+            }}
+            getOptionLabel={(option) => option?.name || ''}
+            isOptionEqualToValue={(option, selected) => option.id === selected.id}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Focus concept"
+                size="small"
+                required
+                helperText={
+                  kind === 'passage'
+                    ? 'The unifying concept for this passage. Lesson creation filters passages by this.'
+                    : 'The unifying concept for this sentence. Lesson creation filters sentences by this.'
+                }
+              />
+            )}
+          />
           <Stack direction="row" spacing={1} justifyContent="flex-end">
             <Button
               variant="contained"
               startIcon={<SaveIcon />}
               onClick={() => void handleSave()}
-              disabled={saving || loadingCatalog || !text.trim() || (kind === 'sentence' && !focusConceptId)}
+              disabled={saving || loadingCatalog || !text.trim() || !focusConceptId}
             >
               {kind === 'passage' ? 'Save tagged passage' : 'Save tagged sentence'}
             </Button>

@@ -48,6 +48,10 @@ const schema = a.schema({
       downvotes: a.integer(),
       upvotes: a.integer(),
       gptPrompt: a.string(),
+      /**
+       * Singular unifying focus concept for this passage.
+       * Other tagged concepts live in passageData.tags.
+       */
       conceptID: a.id().required(),
       concept: a.belongsTo('Concept', 'conceptID'),
       // Optional so catalog passages remain shared; set when assigning to a student.

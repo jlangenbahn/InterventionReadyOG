@@ -43,7 +43,7 @@ const SENTENCE_COLUMNS = [
 
 const PASSAGE_COLUMNS = [
   { field: 'title', headerName: 'Title', flex: 1, minWidth: 90 },
-  { field: 'concept', headerName: 'Concept', flex: 1, minWidth: 90 },
+  { field: 'focusConcept', headerName: 'Focus concept', flex: 1, minWidth: 110 },
   { field: 'text', headerName: 'Text', flex: 1.4, minWidth: 120 },
   {
     field: 'wordCount',
@@ -455,7 +455,7 @@ export default function CreateLessonStepper({
           </StepLabel>
           <StepContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Select up to two passages, then create the lesson plan.
+              Only passages whose focus concept matches the new or review concepts above are shown.
             </Typography>
             <StepperSelectionGrid
               items={passages}
@@ -464,7 +464,11 @@ export default function CreateLessonStepper({
               onChange={onPassagesChange}
               maxCount={2}
               loading={loading}
-              noRowsLabel="No passages yet for this student."
+              noRowsLabel={
+                selectedNewConceptId
+                  ? 'No passages with those focus concepts. Tag passages on Create Multi-Word.'
+                  : 'Select new and review concepts above to filter passages by focus concept.'
+              }
               getItemLabel={(passage) => passage.title || truncate(passage.text, 60) || 'Untitled passage'}
             />
             {!canCreate ? (

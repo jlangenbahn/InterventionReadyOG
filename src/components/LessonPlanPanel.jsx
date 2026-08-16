@@ -25,6 +25,7 @@ import {
   parseScopeAndSequence,
   formatLessonDisplayName,
   resolveSentenceFocusId,
+  resolvePassageFocusId,
   resolveListWords,
   saveStudentLesson,
   studentDisplayName,
@@ -200,8 +201,9 @@ function snapshotPassage(passage) {
     id: passage.id,
     title: passage.title || 'Untitled passage',
     text: passage.text || '',
-    concept: passage.concept || '',
-    conceptID: passage.conceptID || null,
+    concept: passage.concept || passage.focusConcept || '',
+    conceptID: passage.conceptID || passage.focusConceptId || null,
+    focusConcept: passage.focusConcept || passage.concept || '',
     wordCount: passage.wordCount ?? 0,
   }
 }
@@ -384,14 +386,19 @@ export default function LessonPlanPanel({
     () =>
       (payload?.passages ?? [])
         .filter((passage) => passage?.id)
-        .map((passage) => ({
-          id: passage.id,
-          title: passage.title || 'Untitled passage',
-          text: passage.text || '',
-          concept: conceptById.get(passage.conceptID)?.concept || '',
-          conceptID: passage.conceptID || null,
-          wordCount: passage.wordCount ?? 0,
-        })),
+        .map((passage) => {
+          const focusConceptId = resolvePassageFocusId(passage)
+          return {
+            id: passage.id,
+            title: passage.title || 'Untitled passage',
+            text: passage.text || '',
+            concept: conceptById.get(focusConceptId)?.concept || '',
+            conceptID: focusConceptId,
+            focusConceptId,
+            focusConcept: conceptById.get(focusConceptId)?.concept || '',
+            wordCount: passage.wordCount ?? 0,
+          }
+        }),
     [payload?.passages, conceptById],
   )
 
@@ -429,6 +436,12 @@ export default function LessonPlanPanel({
     const allowed = new Set(focusConceptIds)
     return sentences.filter((sentence) => allowed.has(sentence.focusConceptId))
   }, [sentences, focusConceptIds])
+
+  const lessonPassages = useMemo(() => {
+    if (!focusConceptIds.length) return []
+    const allowed = new Set(focusConceptIds)
+    return passages.filter((passage) => allowed.has(passage.focusConceptId))
+  }, [passages, focusConceptIds])
 
   const savedLessonRows = useMemo(
     () =>
@@ -533,7 +546,7 @@ export default function LessonPlanPanel({
       return prev
     })
     const nextFocus = [conceptId, ...selectedReviewConceptIds.filter((id) => id !== conceptId)].filter(Boolean)
-    pruneSentenceSlots(nextFocus)
+    pruneFocusSlots(nextFocus)
   }
 
   function handleSelectedReviewConceptsChange(conceptIds) {
@@ -549,10 +562,10 @@ export default function LessonPlanPanel({
       }).filter(Boolean)
       return { ...prev, ...slotsFromIds(REVIEW_SLOT_KEYS, kept) }
     })
-    pruneSentenceSlots([selectedNewConceptId, ...nextIds])
+    pruneFocusSlots([selectedNewConceptId, ...nextIds])
   }
 
-  function pruneSentenceSlots(nextFocusIds) {
+  function pruneFocusSlots(nextFocusIds) {
     const allowed = new Set((nextFocusIds ?? []).filter(Boolean))
     setSentenceSlots((prev) => {
       const kept = SENTENCE_SLOT_KEYS.map((key) => {
@@ -562,6 +575,15 @@ export default function LessonPlanPanel({
         return sentence && allowed.has(sentence.focusConceptId) ? id : null
       }).filter(Boolean)
       return slotsFromIds(SENTENCE_SLOT_KEYS, kept)
+    })
+    setPassageSlots((prev) => {
+      const kept = PASSAGE_SLOT_KEYS.map((key) => {
+        const id = prev[key]
+        if (!id) return null
+        const passage = passagesById.get(id)
+        return passage && allowed.has(passage.focusConceptId) ? id : null
+      }).filter(Boolean)
+      return slotsFromIds(PASSAGE_SLOT_KEYS, kept)
     })
   }
 
@@ -863,7 +885,7 @@ export default function LessonPlanPanel({
                 newConceptLists={newConceptLists}
                 reviewConceptLists={reviewConceptLists}
                 sentences={lessonSentences}
-                passages={passages}
+                passages={lessonPassages}
                 loading={loading}
                 loadingLists={loadingLists}
                 newConceptIds={newConceptIds}
