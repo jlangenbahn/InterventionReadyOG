@@ -19,6 +19,7 @@ import {
   serializeTagResult,
   tagMultiWordText,
 } from '../lib/tagMultiWordText'
+import { updatePassage, updateSentence } from '../lib/crudRecords'
 
 const client = generateClient()
 
@@ -33,15 +34,33 @@ export default function CreateMultiWordPanel({
   onPreviewChange,
   onSaved,
   embedded = false,
+  editItem = null,
 }) {
-  const [kindState, setKindState] = useState('sentence')
+  const [kindState, setKindState] = useState(editItem?.kind || 'sentence')
   const kind = kindProp ?? kindState
-  const [text, setText] = useState('')
-  const [title, setTitle] = useState('')
+  const [text, setText] = useState(editItem?.text || '')
+  const [title, setTitle] = useState(editItem?.title || '')
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
-  const [focusConceptId, setFocusConceptId] = useState(null)
-  const [focusTouched, setFocusTouched] = useState(false)
+  const [focusConceptId, setFocusConceptId] = useState(editItem?.focusConceptId ?? null)
+  const [focusTouched, setFocusTouched] = useState(Boolean(editItem?.id))
+  const editing = Boolean(editItem?.id)
+
+  useEffect(() => {
+    if (!editItem?.id) {
+      setText('')
+      setTitle('')
+      setFocusConceptId(null)
+      setFocusTouched(false)
+      setNotice('')
+      return
+    }
+    setText(editItem.text || '')
+    setTitle(editItem.title || '')
+    setFocusConceptId(editItem.focusConceptId || null)
+    setFocusTouched(Boolean(editItem.focusConceptId))
+    setNotice('')
+  }, [editItem?.id, editItem?.kind, editItem?.text, editItem?.title, editItem?.focusConceptId])
 
   const catalogIndex = useMemo(
     () => buildWordCatalogIndex(concepts, wordsByConceptId),
@@ -103,23 +122,46 @@ export default function CreateMultiWordPanel({
     try {
       const payload = serializeTagResult(tagged)
       const focusName = focusValue?.name || tagged.topConcept?.name
-      let savedId = null
+      let savedId = editItem?.id || null
       if (kind === 'passage') {
-        const { data, errors } = await client.models.Passage.create({
-          title: title.trim() || focusName || 'Untitled passage',
+        if (editing) {
+          await updatePassage({
+            id: editItem.id,
+            title: title.trim() || focusName || 'Untitled passage',
+            text: trimmed,
+            wordCount: tagged.tokenCount,
+            conceptID: focusConceptId,
+            tagged,
+          })
+          savedId = editItem.id
+          setNotice('Passage updated.')
+        } else {
+          const { data, errors } = await client.models.Passage.create({
+            title: title.trim() || focusName || 'Untitled passage',
+            text: trimmed,
+            wordCount: tagged.tokenCount,
+            studentID: student.id,
+            conceptID: focusConceptId,
+            passageData: JSON.stringify({
+              tags: payload,
+              focusConceptId,
+            }),
+          })
+          if (errors?.length) throw new Error(errors.map((item) => item.message).join(', '))
+          if (!data?.id) throw new Error('Failed to save passage')
+          savedId = data.id
+          setNotice('Passage saved and tagged against the word-concept catalog.')
+        }
+      } else if (editing) {
+        await updateSentence({
+          id: editItem.id,
           text: trimmed,
           wordCount: tagged.tokenCount,
-          studentID: student.id,
           conceptID: focusConceptId,
-          passageData: JSON.stringify({
-            tags: payload,
-            focusConceptId,
-          }),
+          tagged,
         })
-        if (errors?.length) throw new Error(errors.map((item) => item.message).join(', '))
-        if (!data?.id) throw new Error('Failed to save passage')
-        savedId = data.id
-        setNotice('Passage saved and tagged against the word-concept catalog.')
+        savedId = editItem.id
+        setNotice('Sentence updated.')
       } else {
         const sentencePayload = {
           text: trimmed,
@@ -192,6 +234,7 @@ export default function CreateMultiWordPanel({
             exclusive
             size="small"
             value={kind}
+            disabled={editing}
             onChange={(_event, value) => setKindValue(value)}
           >
             <ToggleButton value="sentence">Sentence</ToggleButton>
@@ -252,7 +295,13 @@ export default function CreateMultiWordPanel({
               onClick={() => void handleSave()}
               disabled={saving || loadingCatalog || !text.trim() || !focusConceptId}
             >
-              {kind === 'passage' ? 'Save tagged passage' : 'Save tagged sentence'}
+              {kind === 'passage'
+                ? editing
+                  ? 'Save passage changes'
+                  : 'Save tagged passage'
+                : editing
+                  ? 'Save sentence changes'
+                  : 'Save tagged sentence'}
             </Button>
           </Stack>
         </Stack>

@@ -15,10 +15,13 @@ import {
   Typography,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
+import EditIcon from '@mui/icons-material/Edit'
 import ViewListIcon from '@mui/icons-material/ViewList'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGridPro, GridActionsCellItem, GridToolbar } from '@mui/x-data-grid-pro'
 import CreateMultiWordPanel from './CreateMultiWordPanel'
 import MultiWordPreview from './MultiWordPreview'
+import ConfirmDeleteDialog from './ConfirmDeleteDialog'
 import {
   fetchStudentSentencesAndPassages,
   parseListData,
@@ -26,6 +29,7 @@ import {
   resolvePassageFocusId,
   resolveSentenceFocusId,
 } from '../lib/fetchStudentLessonPlan'
+import { deletePassage, deleteSentence } from '../lib/crudRecords'
 import { buildWordCatalogIndex, tagMultiWordText } from '../lib/tagMultiWordText'
 
 const MODE_VIEW = 0
@@ -173,6 +177,9 @@ export default function MultiWordPanel({
   const [alsoConceptIds, setAlsoConceptIds] = useState([])
   const [createPreview, setCreatePreview] = useState(null)
   const [notice, setNotice] = useState('')
+  const [editItem, setEditItem] = useState(null)
+  const [itemToDelete, setItemToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
     if (!student?.id) {
@@ -207,6 +214,8 @@ export default function MultiWordPanel({
     setAlsoConceptIds([])
     setCreatePreview(null)
     setNotice('')
+    setEditItem(null)
+    setItemToDelete(null)
   }, [student?.id])
 
   const catalogIndex = useMemo(
@@ -368,6 +377,40 @@ export default function MultiWordPanel({
         headerAlign: 'left',
       })
     }
+    base.push({
+      field: 'actions',
+      type: 'actions',
+      headerName: '',
+      width: 80,
+      getActions: (params) => [
+        <GridActionsCellItem
+          key="edit"
+          icon={<EditIcon />}
+          label="Edit"
+          onClick={() => {
+            const row = params.row
+            if (!row?.id) return
+            setKind(row.kind)
+            setEditItem({
+              id: row.id,
+              kind: row.kind,
+              title: row.title || '',
+              text: row.text || '',
+              focusConceptId: row.focusConceptId || null,
+            })
+            setSelectedId(row.id)
+            setMode(MODE_CREATE)
+            setNotice('')
+          }}
+        />,
+        <GridActionsCellItem
+          key="delete"
+          icon={<DeleteOutlineIcon />}
+          label="Delete"
+          onClick={() => setItemToDelete(params.row)}
+        />,
+      ],
+    })
     return base
   }, [kind, alsoConceptIds.length])
 
@@ -412,12 +455,50 @@ export default function MultiWordPanel({
   }
 
   function handleNew() {
+    setEditItem(null)
     setMode(MODE_CREATE)
     setNotice('')
   }
 
+  function handleEditItem(row) {
+    if (!row?.id) return
+    setKind(row.kind)
+    setEditItem({
+      id: row.id,
+      kind: row.kind,
+      title: row.title || '',
+      text: row.text || '',
+      focusConceptId: row.focusConceptId || null,
+    })
+    setSelectedId(row.id)
+    setMode(MODE_CREATE)
+    setNotice('')
+  }
+
+  async function handleConfirmDeleteItem() {
+    const item = itemToDelete
+    if (!item?.id) return
+    setDeleting(true)
+    try {
+      if (item.kind === 'passage') await deletePassage(item.id)
+      else await deleteSentence(item.id)
+      if (selectedId === item.id) setSelectedId(null)
+      if (editItem?.id === item.id) setEditItem(null)
+      setItemToDelete(null)
+      setNotice(item.kind === 'passage' ? 'Passage deleted.' : 'Sentence deleted.')
+      setError('')
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to delete ${item.kind}`)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   async function handleSaved({ kind: savedKind, id }) {
     setNotice(savedKind === 'passage' ? 'Passage saved.' : 'Sentence saved.')
+    setEditItem(null)
+    setMode(MODE_VIEW)
     const data = await load()
     const list = savedKind === 'passage' ? data.passages : data.sentences
     if (savedKind) setKind(savedKind)
@@ -472,12 +553,20 @@ export default function MultiWordPanel({
 
           <Tabs
             value={mode}
-            onChange={(_event, value) => setMode(value)}
+            onChange={(_event, value) => {
+              setMode(value)
+              if (value === MODE_VIEW) setEditItem(null)
+              if (value === MODE_CREATE && !editItem) setNotice('')
+            }}
             variant="fullWidth"
             sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
           >
             <Tab icon={<ViewListIcon />} iconPosition="start" label="View multi word" />
-            <Tab icon={<AddIcon />} iconPosition="start" label="Create multi word" />
+            <Tab
+              icon={<AddIcon />}
+              iconPosition="start"
+              label={editItem ? 'Edit multi word' : 'Create multi word'}
+            />
           </Tabs>
 
           {mode === MODE_VIEW ? (
@@ -546,7 +635,9 @@ export default function MultiWordPanel({
           ) : (
             <>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                Type a sentence or passage. Tagging and concept weight update on the right as you go.
+                {editItem
+                  ? 'Update the text or focus concept, then save. Tagging and concept weight update on the right as you go.'
+                  : 'Type a sentence or passage. Tagging and concept weight update on the right as you go.'}
               </Typography>
               <CreateMultiWordPanel
                 student={student}
@@ -559,6 +650,7 @@ export default function MultiWordPanel({
                 onPreviewChange={setCreatePreview}
                 onSaved={(payload) => void handleSaved(payload)}
                 embedded
+                editItem={editItem}
               />
             </>
           )}
@@ -574,8 +666,27 @@ export default function MultiWordPanel({
           overflow: { md: 'auto' },
         }}
       >
-        <MultiWordPreview {...preview} />
+        <MultiWordPreview
+          {...preview}
+          onEdit={mode === MODE_VIEW && selectedItem ? () => handleEditItem(selectedItem) : undefined}
+          onDelete={mode === MODE_VIEW && selectedItem ? () => setItemToDelete(selectedItem) : undefined}
+          deleting={deleting}
+        />
       </Box>
+
+      <ConfirmDeleteDialog
+        open={Boolean(itemToDelete)}
+        title={itemToDelete?.kind === 'passage' ? 'Delete this passage?' : 'Delete this sentence?'}
+        description={
+          itemToDelete
+            ? `Delete ${itemToDelete.kind === 'passage' ? `“${itemToDelete.title || 'this passage'}”` : 'this sentence'}? This cannot be undone.`
+            : ''
+        }
+        confirmLabel={itemToDelete?.kind === 'passage' ? 'Delete passage' : 'Delete sentence'}
+        deleting={deleting}
+        onClose={() => !deleting && setItemToDelete(null)}
+        onConfirm={() => void handleConfirmDeleteItem()}
+      />
     </Box>
   )
 }

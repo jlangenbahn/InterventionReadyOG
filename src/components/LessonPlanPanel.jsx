@@ -17,11 +17,13 @@ import AddIcon from '@mui/icons-material/Add'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import GradingIcon from '@mui/icons-material/Grading'
 import ShareIcon from '@mui/icons-material/Share'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import LessonPlanTemplate from './LessonPlanTemplate'
 import CreateLessonStepper from './CreateLessonStepper'
 import DataEntryPanel from './DataEntryPanel'
 import ShareLessonDialog from './ShareLessonDialog'
+import ConfirmDeleteDialog from './ConfirmDeleteDialog'
 import {
   fetchStudentLessonPlan,
   fetchStudentLessons,
@@ -36,6 +38,7 @@ import {
   copyLessonToStudents,
   studentDisplayName,
 } from '../lib/fetchStudentLessonPlan'
+import { deleteLesson } from '../lib/crudRecords'
 
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
@@ -259,6 +262,8 @@ export default function LessonPlanPanel({
   const [lessonName, setLessonName] = useState('')
   const [shareLesson, setShareLesson] = useState(null)
   const [sharing, setSharing] = useState(false)
+  const [lessonToDelete, setLessonToDelete] = useState(null)
+  const [deletingLesson, setDeletingLesson] = useState(false)
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -324,6 +329,7 @@ export default function LessonPlanPanel({
     setLessonNotes('')
     setLessonName('')
     setShareLesson(null)
+    setLessonToDelete(null)
   }, [student?.id])
 
   const wordLookup = useMemo(() => buildWordLookup(wordsByConceptId), [wordsByConceptId])
@@ -482,17 +488,16 @@ export default function LessonPlanPanel({
     [savedLessons],
   )
 
-  const viewColumns = useMemo(
-    () => [
-      ...SAVED_LESSON_COLUMNS,
-      {
-        field: 'actions',
-        headerName: 'Share',
-        width: 80,
-        sortable: false,
-        filterable: false,
-        disableColumnMenu: true,
-        renderCell: (params) => (
+  const lessonActionColumn = useMemo(
+    () => ({
+      field: 'actions',
+      headerName: '',
+      width: 96,
+      sortable: false,
+      filterable: false,
+      disableColumnMenu: true,
+      renderCell: (params) => (
+        <Stack direction="row" spacing={0}>
           <IconButton
             size="small"
             aria-label={`Share ${params.row.name || 'lesson'}`}
@@ -504,10 +509,30 @@ export default function LessonPlanPanel({
           >
             <ShareIcon fontSize="small" />
           </IconButton>
-        ),
-      },
-    ],
+          <IconButton
+            size="small"
+            aria-label={`Delete ${params.row.name || 'lesson'}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              setLessonToDelete(params.row)
+            }}
+          >
+            <DeleteOutlineIcon fontSize="small" />
+          </IconButton>
+        </Stack>
+      ),
+    }),
     [savedLessons],
+  )
+
+  const viewColumns = useMemo(
+    () => [...SAVED_LESSON_COLUMNS, lessonActionColumn],
+    [lessonActionColumn],
+  )
+
+  const gradeColumns = useMemo(
+    () => [...GRADE_LESSON_COLUMNS, lessonActionColumn],
+    [lessonActionColumn],
   )
 
   function listForSlot(key) {
@@ -816,6 +841,25 @@ export default function LessonPlanPanel({
     }
   }
 
+  async function handleConfirmDeleteLesson() {
+    const row = lessonToDelete
+    if (!row?.id) return
+    setDeletingLesson(true)
+    try {
+      await deleteLesson(row.id)
+      if (loadedLesson?.id === row.id) startNewLesson()
+      if (shareLesson?.id === row.id) setShareLesson(null)
+      setLessonToDelete(null)
+      setNotice('Lesson plan deleted.')
+      setError('')
+      await loadSavedLessons()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete lesson plan')
+    } finally {
+      setDeletingLesson(false)
+    }
+  }
+
   if (!student) {
     return (
       <Typography color="text.secondary">Select a student to preview their lesson plan.</Typography>
@@ -901,14 +945,14 @@ export default function LessonPlanPanel({
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 {lessonMode === LESSON_MODE_GRADE
                   ? 'Select a saved plan to score lists, sentences, and passages on the right. Lesson scores stay at the bottom of that panel.'
-                  : 'Select a saved plan to preview it on the right. Use the share icon to copy a plan onto other students.'}
+                  : 'Select a saved plan to preview it on the right. Share copies a plan onto other students. Delete removes it from this student.'}
               </Typography>
               <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
                 <DataGridPro
                   rows={savedLessonRows}
                   columns={
                     lessonMode === LESSON_MODE_GRADE
-                      ? GRADE_LESSON_COLUMNS
+                      ? gradeColumns
                       : viewColumns
                   }
                   getRowId={(row) => row.id}
@@ -980,9 +1024,26 @@ export default function LessonPlanPanel({
           <>
             <Stack
               direction="row"
+              spacing={1}
               justifyContent="flex-end"
               sx={{ mb: 1, '@media print': { display: 'none' } }}
             >
+              {loadedLesson ? (
+                <Button
+                  color="error"
+                  variant="outlined"
+                  startIcon={<DeleteOutlineIcon />}
+                  onClick={() =>
+                    setLessonToDelete({
+                      id: loadedLesson.id,
+                      name: lessonDisplayName || 'this lesson',
+                    })
+                  }
+                  disabled={deletingLesson}
+                >
+                  Delete
+                </Button>
+              ) : null}
               <Button
                 variant="contained"
                 startIcon={<PrintIcon />}
@@ -1018,6 +1079,19 @@ export default function LessonPlanPanel({
         sharing={sharing}
         onClose={() => setShareLesson(null)}
         onShare={(ids) => void handleShare(ids)}
+      />
+      <ConfirmDeleteDialog
+        open={Boolean(lessonToDelete)}
+        title="Are you sure?"
+        description={
+          lessonToDelete
+            ? `Delete “${lessonToDelete.name || 'this lesson'}”? This permanently removes the lesson plan and its scores. Lists, sentences, and passages stay in the catalog.`
+            : ''
+        }
+        confirmLabel="Delete lesson"
+        deleting={deletingLesson}
+        onClose={() => !deletingLesson && setLessonToDelete(null)}
+        onConfirm={() => void handleConfirmDeleteLesson()}
       />
     </Box>
   )

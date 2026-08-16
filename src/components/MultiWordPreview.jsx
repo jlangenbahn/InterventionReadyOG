@@ -1,11 +1,14 @@
 import {
   Alert,
   Box,
+  Button,
   Chip,
   Paper,
   Stack,
   Typography,
 } from '@mui/material'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
+import EditIcon from '@mui/icons-material/Edit'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import ConceptCountChart from './ConceptCountChart'
 
@@ -71,6 +74,9 @@ export default function MultiWordPreview({
   focusConceptId = null,
   focusName = '',
   emptyLabel = 'Select a sentence or passage to see focus and concept weight.',
+  onEdit,
+  onDelete,
+  deleting = false,
 }) {
   const hasText = Boolean(String(text ?? '').trim())
   const conceptRows = (tagged?.conceptRows ?? []).map((row) => ({
@@ -93,7 +99,14 @@ export default function MultiWordPreview({
   return (
     <Stack spacing={1.5}>
       <Paper variant="outlined" sx={{ p: 2 }}>
-        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+        <Stack
+          direction="row"
+          spacing={0.75}
+          alignItems="center"
+          flexWrap="wrap"
+          useFlexGap
+          sx={{ mb: 1 }}
+        >
           <Chip size="small" label={kind === 'passage' ? 'Passage' : 'Sentence'} />
           {focusName ? (
             <Chip size="small" color="primary" label={`Focus: ${focusName}`} />
@@ -105,6 +118,23 @@ export default function MultiWordPreview({
             variant="outlined"
             label={`${tagged?.conceptCount ?? 0} concepts`}
           />
+          {onEdit || onDelete ? <Box sx={{ flexGrow: 1 }} /> : null}
+          {onEdit ? (
+            <Button size="small" startIcon={<EditIcon />} onClick={onEdit} disabled={deleting}>
+              Edit
+            </Button>
+          ) : null}
+          {onDelete ? (
+            <Button
+              size="small"
+              color="error"
+              startIcon={<DeleteOutlineIcon />}
+              onClick={onDelete}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          ) : null}
         </Stack>
         {kind === 'passage' ? (
           <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 0.75 }}>

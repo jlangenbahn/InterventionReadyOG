@@ -153,7 +153,7 @@ function passageText(passage) {
   return `${title}${passage.text || ''}`.trim()
 }
 
-function WordListExhibit({ lists, columns }) {
+function WordListExhibit({ lists, columns, showHeaders = true }) {
   const wordColumns = lists.map((list) => listWordLabels(list))
   const rowCount = Math.max(1, ...wordColumns.map((words) => words.length))
   const columnWidth = `${100 / Math.max(columns.length, 1)}%`
@@ -162,15 +162,17 @@ function WordListExhibit({ lists, columns }) {
 
   return (
     <Box component="table" sx={exhibitTableSx}>
-      <Box component="thead">
-        <Box component="tr">
-          {columns.map((column, index) => (
-            <Box component="th" key={column.key} sx={headerSx}>
-              {listDisplayName(lists[index], column.fallback)}
-            </Box>
-          ))}
+      {showHeaders ? (
+        <Box component="thead">
+          <Box component="tr">
+            {columns.map((column, index) => (
+              <Box component="th" key={column.key} sx={headerSx}>
+                {listDisplayName(lists[index], column.fallback)}
+              </Box>
+            ))}
+          </Box>
         </Box>
-      </Box>
+      ) : null}
       <Box component="tbody">
         {Array.from({ length: rowCount }, (_, row) => (
           <Box component="tr" key={row}>
@@ -407,7 +409,7 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
       </Paper>
 
       <ExhibitPage pageNumber={2} label="Review concepts">
-        <WordListExhibit lists={paddedReview} columns={REVIEW_COLUMNS} />
+        <WordListExhibit lists={paddedReview} columns={REVIEW_COLUMNS} showHeaders={false} />
       </ExhibitPage>
 
       <ExhibitPage pageNumber={3} label="New concept">

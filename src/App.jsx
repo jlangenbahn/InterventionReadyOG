@@ -21,6 +21,7 @@ import {
   FormLabel,
   IconButton,
   List,
+  ListItem,
   ListItemButton,
   ListItemText,
   Paper,
@@ -36,6 +37,8 @@ import {
 } from '@mui/material'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import AddIcon from '@mui/icons-material/Add'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
+import EditIcon from '@mui/icons-material/Edit'
 import LockIcon from '@mui/icons-material/Lock'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
@@ -47,8 +50,10 @@ import DataPanel from './components/DataPanel'
 import ContentPanel from './components/ContentPanel'
 import ConceptsCatalogPanel from './components/ConceptsCatalogPanel'
 import GroupPanel from './components/GroupPanel'
+import ConfirmDeleteDialog from './components/ConfirmDeleteDialog'
 import { fetchStudentLists } from './lib/fetchStudentLessonPlan'
 import { fetchInstructorGroups, saveInstructorGroup } from './lib/groups'
+import { deleteStudentCascade, updateStudent } from './lib/crudRecords'
 
 const client = generateClient()
 const DRAWER_WIDTH = 300
@@ -707,13 +712,16 @@ function AppShell({ user, signOut }) {
   const [creatingGroup, setCreatingGroup] = useState(false)
   const [savingGroup, setSavingGroup] = useState(false)
   const [studentDialogOpen, setStudentDialogOpen] = useState(false)
-  const [newStudent, setNewStudent] = useState({
+  const [studentFormMode, setStudentFormMode] = useState('create')
+  const [studentForm, setStudentForm] = useState({
     firstName: '',
     lastName: '',
     customID: '',
     comments: '',
   })
   const [savingStudent, setSavingStudent] = useState(false)
+  const [studentToDelete, setStudentToDelete] = useState(null)
+  const [deletingStudent, setDeletingStudent] = useState(false)
   const [scopeLocked, setScopeLocked] = useState(true)
   const [navBlock, setNavBlock] = useState(null)
   const scopeSaveRef = useRef(null)
@@ -917,33 +925,103 @@ function AppShell({ user, signOut }) {
     if (typeof action === 'function') action()
   }
 
-  async function handleCreateStudent(event) {
+  function emptyStudentForm() {
+    return { firstName: '', lastName: '', customID: '', comments: '' }
+  }
+
+  function openCreateStudent() {
+    setStudentFormMode('create')
+    setStudentForm(emptyStudentForm())
+    setStudentDialogOpen(true)
+  }
+
+  function openEditStudent() {
+    if (!selectedStudent) return
+    setStudentFormMode('edit')
+    setStudentForm({
+      firstName: selectedStudent.firstName || '',
+      lastName: selectedStudent.lastName || '',
+      customID: selectedStudent.customID || '',
+      comments: selectedStudent.comments || '',
+    })
+    setStudentDialogOpen(true)
+  }
+
+  function askDeleteStudent(student) {
+    if (!student?.id) return
+    setStudentToDelete(student)
+  }
+
+  async function handleSaveStudent(event) {
     event.preventDefault()
-    if (!newStudent.firstName.trim() && !newStudent.lastName.trim()) return
+    if (!studentForm.firstName.trim() && !studentForm.lastName.trim()) return
     setSavingStudent(true)
     try {
-      const inventory = concepts.length ? buildScopeAndSequence(concepts, []) : []
-      const { data, errors } = await client.models.Student.create({
-        firstName: newStudent.firstName.trim() || null,
-        lastName: newStudent.lastName.trim() || null,
-        customID: newStudent.customID.trim() || null,
-        comments: newStudent.comments.trim() || null,
-        scopeAndSequence: inventory.length ? serializeScopeAndSequence(inventory) : null,
-      })
-      if (errors?.length) {
-        throw new Error(errors.map((e) => e.message).join(', '))
+      if (studentFormMode === 'edit' && selectedStudent?.id) {
+        const data = await updateStudent({
+          id: selectedStudent.id,
+          ...studentForm,
+        })
+        setStudents((prev) =>
+          prev.map((student) =>
+            student.id === data.id ? { ...student, ...data } : student,
+          ),
+        )
+      } else {
+        const inventory = concepts.length ? buildScopeAndSequence(concepts, []) : []
+        const { data, errors } = await client.models.Student.create({
+          firstName: studentForm.firstName.trim() || null,
+          lastName: studentForm.lastName.trim() || null,
+          customID: studentForm.customID.trim() || null,
+          comments: studentForm.comments.trim() || null,
+          scopeAndSequence: inventory.length ? serializeScopeAndSequence(inventory) : null,
+        })
+        if (errors?.length) {
+          throw new Error(errors.map((e) => e.message).join(', '))
+        }
+        await loadStudents()
+        if (data?.id) {
+          setSelectedStudentId(data.id)
+          setScopeLocked(true)
+        }
       }
       setStudentDialogOpen(false)
-      setNewStudent({ firstName: '', lastName: '', customID: '', comments: '' })
-      await loadStudents()
-      if (data?.id) {
-        setSelectedStudentId(data.id)
-        setScopeLocked(true)
-      }
+      setStudentForm(emptyStudentForm())
+      setError('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create student')
+      setError(
+        err instanceof Error
+          ? err.message
+          : studentFormMode === 'edit'
+            ? 'Failed to update student'
+            : 'Failed to create student',
+      )
     } finally {
       setSavingStudent(false)
+    }
+  }
+
+  async function handleConfirmDeleteStudent() {
+    const student = studentToDelete
+    if (!student?.id) return
+    setDeletingStudent(true)
+    try {
+      await deleteStudentCascade(student.id)
+      const remaining = students.filter((item) => item.id !== student.id)
+      setStudents(remaining)
+      if (selectedStudentId === student.id) {
+        setSelectedStudentId(remaining[0]?.id ?? null)
+        setSelectedGroupId(null)
+        setCreatingGroup(false)
+        setScopeLocked(true)
+      }
+      setStudentToDelete(null)
+      setError('')
+      await loadGroups()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete student')
+    } finally {
+      setDeletingStudent(false)
     }
   }
 
@@ -999,7 +1077,7 @@ function AppShell({ user, signOut }) {
             color="primary"
             size="small"
             aria-label="Add student"
-            onClick={() => setStudentDialogOpen(true)}
+            onClick={openCreateStudent}
           >
             <AddIcon />
           </IconButton>
@@ -1018,7 +1096,7 @@ function AppShell({ user, signOut }) {
               fullWidth
               variant="outlined"
               startIcon={<AddIcon />}
-              onClick={() => setStudentDialogOpen(true)}
+              onClick={openCreateStudent}
             >
               Add student
             </Button>
@@ -1028,17 +1106,36 @@ function AppShell({ user, signOut }) {
             {students.map((student) => {
               const name = studentDisplayName(student)
               return (
-                <ListItemButton
+                <ListItem
                   key={student.id}
-                  selected={!creatingGroup && !selectedGroupId && student.id === selectedStudentId}
-                  onClick={() => handleSelectStudent(student.id)}
+                  disablePadding
+                  secondaryAction={
+                    <Tooltip title={`Delete ${name}`}>
+                      <IconButton
+                        edge="end"
+                        size="small"
+                        aria-label={`Delete ${name}`}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          askDeleteStudent(student)
+                        }}
+                      >
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  }
                 >
-                  <PersonIcon fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
-                  <ListItemText
-                    primary={name}
-                    secondary={student.customID ? `ID ${student.customID}` : null}
-                  />
-                </ListItemButton>
+                  <ListItemButton
+                    selected={!creatingGroup && !selectedGroupId && student.id === selectedStudentId}
+                    onClick={() => handleSelectStudent(student.id)}
+                  >
+                    <PersonIcon fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
+                    <ListItemText
+                      primary={name}
+                      secondary={student.customID ? `ID ${student.customID}` : null}
+                    />
+                  </ListItemButton>
+                </ListItem>
               )
             })}
           </List>
@@ -1128,6 +1225,18 @@ function AppShell({ user, signOut }) {
               {selectedStudent.customID ? (
                 <Chip size="small" label={`ID ${selectedStudent.customID}`} />
               ) : null}
+              <Box sx={{ flexGrow: 1 }} />
+              <Button size="small" startIcon={<EditIcon />} onClick={openEditStudent}>
+                Edit
+              </Button>
+              <Button
+                size="small"
+                color="error"
+                startIcon={<DeleteOutlineIcon />}
+                onClick={() => askDeleteStudent(selectedStudent)}
+              >
+                Delete
+              </Button>
             </Stack>
 
             <Tabs
@@ -1197,29 +1306,29 @@ function AppShell({ user, signOut }) {
       </Box>
 
       <Dialog open={studentDialogOpen} onClose={() => setStudentDialogOpen(false)} fullWidth maxWidth="xs">
-        <Box component="form" onSubmit={handleCreateStudent}>
-          <DialogTitle>Add student</DialogTitle>
+        <Box component="form" onSubmit={handleSaveStudent}>
+          <DialogTitle>{studentFormMode === 'edit' ? 'Edit student' : 'Add student'}</DialogTitle>
           <DialogContent sx={{ display: 'grid', gap: 2, pt: 1 }}>
             <TextField
               label="First name"
-              value={newStudent.firstName}
-              onChange={(e) => setNewStudent((s) => ({ ...s, firstName: e.target.value }))}
+              value={studentForm.firstName}
+              onChange={(e) => setStudentForm((s) => ({ ...s, firstName: e.target.value }))}
               autoFocus
             />
             <TextField
               label="Last name"
-              value={newStudent.lastName}
-              onChange={(e) => setNewStudent((s) => ({ ...s, lastName: e.target.value }))}
+              value={studentForm.lastName}
+              onChange={(e) => setStudentForm((s) => ({ ...s, lastName: e.target.value }))}
             />
             <TextField
               label="Custom ID"
-              value={newStudent.customID}
-              onChange={(e) => setNewStudent((s) => ({ ...s, customID: e.target.value }))}
+              value={studentForm.customID}
+              onChange={(e) => setStudentForm((s) => ({ ...s, customID: e.target.value }))}
             />
             <TextField
               label="Comments"
-              value={newStudent.comments}
-              onChange={(e) => setNewStudent((s) => ({ ...s, comments: e.target.value }))}
+              value={studentForm.comments}
+              onChange={(e) => setStudentForm((s) => ({ ...s, comments: e.target.value }))}
               multiline
               minRows={2}
             />
@@ -1232,6 +1341,20 @@ function AppShell({ user, signOut }) {
           </DialogActions>
         </Box>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        open={Boolean(studentToDelete)}
+        title="Are you sure?"
+        description={
+          studentToDelete
+            ? `Delete ${studentDisplayName(studentToDelete)}? This permanently removes this student and their lesson plans, word lists, sentences, and passages. This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete student"
+        deleting={deletingStudent}
+        onClose={() => !deletingStudent && setStudentToDelete(null)}
+        onConfirm={() => void handleConfirmDeleteStudent()}
+      />
 
       <Dialog open={Boolean(navBlock)} onClose={() => setNavBlock(null)}>
         <DialogTitle>Save Scope and Sequence?</DialogTitle>

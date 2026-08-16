@@ -15,9 +15,13 @@ import {
   Typography,
 } from '@mui/material'
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
+import EditIcon from '@mui/icons-material/Edit'
+import { DataGridPro, GridActionsCellItem, GridToolbar } from '@mui/x-data-grid-pro'
 import { generateClient } from 'aws-amplify/data'
 import { parseListData, studentDisplayName } from '../lib/fetchStudentLessonPlan'
+import { deleteWordList, updateWordList } from '../lib/crudRecords'
+import ConfirmDeleteDialog from './ConfirmDeleteDialog'
 
 const client = generateClient()
 
@@ -89,6 +93,11 @@ export default function WordListsPanel({
   const [createListOpen, setCreateListOpen] = useState(false)
   const [listName, setListName] = useState('')
   const [creatingList, setCreatingList] = useState(false)
+  const [listToRename, setListToRename] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [renamingList, setRenamingList] = useState(false)
+  const [listToDelete, setListToDelete] = useState(null)
+  const [deletingList, setDeletingList] = useState(false)
 
   const selectedConcept = useMemo(
     () => concepts.find((item) => item.id === selectedConceptId) ?? null,
@@ -143,6 +152,36 @@ export default function WordListsPanel({
     [studentLists, conceptById],
   )
 
+  const listColumns = useMemo(
+    () => [
+      ...LIST_COLUMNS,
+      {
+        field: 'actions',
+        type: 'actions',
+        headerName: '',
+        width: 80,
+        getActions: (params) => [
+          <GridActionsCellItem
+            key="rename"
+            icon={<EditIcon />}
+            label="Rename"
+            onClick={() => {
+              setListToRename(params.row)
+              setRenameValue(params.row.name || '')
+            }}
+          />,
+          <GridActionsCellItem
+            key="delete"
+            icon={<DeleteOutlineIcon />}
+            label="Delete"
+            onClick={() => setListToDelete(params.row)}
+          />,
+        ],
+      },
+    ],
+    [],
+  )
+
   const loadLists = useCallback(async () => {
     if (onReloadLists) await onReloadLists()
   }, [onReloadLists])
@@ -161,6 +200,38 @@ export default function WordListsPanel({
     if (!selectedConcept || selectedWordRows.length === 0) return
     setListName(selectedConcept.concept || '')
     setCreateListOpen(true)
+  }
+
+  async function handleRenameList(event) {
+    event.preventDefault()
+    const name = renameValue.trim()
+    if (!listToRename?.id || !name) return
+    setRenamingList(true)
+    try {
+      await updateWordList({ id: listToRename.id, name })
+      setError('')
+      setListToRename(null)
+      await loadLists()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to rename list')
+    } finally {
+      setRenamingList(false)
+    }
+  }
+
+  async function handleConfirmDeleteList() {
+    if (!listToDelete?.id) return
+    setDeletingList(true)
+    try {
+      await deleteWordList(listToDelete.id)
+      setError('')
+      setListToDelete(null)
+      await loadLists()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete list')
+    } finally {
+      setDeletingList(false)
+    }
   }
 
   async function handleCreateList(event) {
@@ -258,14 +329,14 @@ export default function WordListsPanel({
             overflow: { md: 'auto' },
           }}
         >
-          {!selectedConcept ? (
-            <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography color="text.secondary">
-                Select a concept on the left to see tagged words and create a list.
-              </Typography>
-            </Paper>
-          ) : (
-            <Stack spacing={1.5}>
+          <Stack spacing={1.5}>
+            {!selectedConcept ? (
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography color="text.secondary">
+                  Select a concept on the left to see tagged words and create a list.
+                </Typography>
+              </Paper>
+            ) : (
               <Paper sx={{ p: 2 }}>
                 <Typography variant="h6" sx={{ lineHeight: 1.3 }}>
                   {selectedConcept.concept}
@@ -335,35 +406,38 @@ export default function WordListsPanel({
                   />
                 </Box>
               </Paper>
+            )}
 
-              <Paper sx={{ p: 2 }}>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap">
-                  <Typography variant="subtitle1">My lists</Typography>
-                  <Chip size="small" variant="outlined" label={`${myListRows.length} lists`} />
-                  {loadingLists ? <CircularProgress size={16} /> : null}
-                </Stack>
-                <Box sx={{ height: 240, width: '100%' }}>
-                  <DataGridPro
-                    rows={myListRows}
-                    columns={LIST_COLUMNS}
-                    getRowId={(row) => row.id}
-                    disableRowSelectionOnClick
-                    pagination
-                    pageSizeOptions={[25, 50, 100]}
-                    initialState={{
-                      pagination: { paginationModel: { pageSize: 25 } },
-                    }}
-                    slots={{ toolbar: GridToolbar }}
-                    slotProps={{ toolbar: { showQuickFilter: true } }}
-                    density="compact"
-                    localeText={{
-                      noRowsLabel: 'No lists yet. Select words and click Create list.',
-                    }}
-                  />
-                </Box>
-              </Paper>
-            </Stack>
-          )}
+            <Paper sx={{ p: 2 }}>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap">
+                <Typography variant="subtitle1">My lists</Typography>
+                <Chip size="small" variant="outlined" label={`${myListRows.length} lists`} />
+                {loadingLists ? <CircularProgress size={16} /> : null}
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Rename or delete a list with the icons on each row.
+              </Typography>
+              <Box sx={{ height: 240, width: '100%' }}>
+                <DataGridPro
+                  rows={myListRows}
+                  columns={listColumns}
+                  getRowId={(row) => row.id}
+                  disableRowSelectionOnClick
+                  pagination
+                  pageSizeOptions={[25, 50, 100]}
+                  initialState={{
+                    pagination: { paginationModel: { pageSize: 25 } },
+                  }}
+                  slots={{ toolbar: GridToolbar }}
+                  slotProps={{ toolbar: { showQuickFilter: true } }}
+                  density="compact"
+                  localeText={{
+                    noRowsLabel: 'No lists yet. Select words and click Create list.',
+                  }}
+                />
+              </Box>
+            </Paper>
+          </Stack>
         </Box>
       </Box>
 
@@ -396,6 +470,49 @@ export default function WordListsPanel({
           </DialogActions>
         </Box>
       </Dialog>
+
+      <Dialog
+        open={Boolean(listToRename)}
+        onClose={() => !renamingList && setListToRename(null)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <Box component="form" onSubmit={handleRenameList}>
+          <DialogTitle>Rename list</DialogTitle>
+          <DialogContent sx={{ display: 'grid', gap: 2, pt: 1 }}>
+            <TextField
+              label="List name"
+              value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)}
+              autoFocus
+              required
+              disabled={renamingList}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setListToRename(null)} disabled={renamingList}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="contained" disabled={renamingList || !renameValue.trim()}>
+              {renamingList ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
+      <ConfirmDeleteDialog
+        open={Boolean(listToDelete)}
+        title="Delete this list?"
+        description={
+          listToDelete
+            ? `Delete “${listToDelete.name}”? Words stay in the catalog. This list will no longer be available for new lesson plans.`
+            : ''
+        }
+        confirmLabel="Delete list"
+        deleting={deletingList}
+        onClose={() => !deletingList && setListToDelete(null)}
+        onConfirm={() => void handleConfirmDeleteList()}
+      />
     </>
   )
 }
