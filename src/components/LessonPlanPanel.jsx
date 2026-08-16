@@ -231,8 +231,8 @@ const GRADE_LESSON_COLUMNS = [
 ]
 
 const LESSON_MODE_VIEW = 0
-const LESSON_MODE_CREATE = 1
-const LESSON_MODE_GRADE = 2
+const LESSON_MODE_GRADE = 1
+const LESSON_MODE_CREATE = 2
 
 export default function LessonPlanPanel({
   student,
@@ -624,7 +624,7 @@ export default function LessonPlanPanel({
     setPassageSlots(slotsFromIds(PASSAGE_SLOT_KEYS, ids))
   }
 
-  function handleNew() {
+  function startNewLesson() {
     setListSlots({ ...EMPTY_LIST_SLOTS })
     setSentenceSlots({ ...EMPTY_SENTENCE_SLOTS })
     setPassageSlots({ ...EMPTY_PASSAGE_SLOTS })
@@ -634,7 +634,6 @@ export default function LessonPlanPanel({
     setNotice('')
     setError('')
     setActiveStep(0)
-    setLessonMode(LESSON_MODE_CREATE)
     setSelectedNewConceptId(null)
     setSelectedReviewConceptIds([])
     setLessonNotes('')
@@ -796,54 +795,32 @@ export default function LessonPlanPanel({
     >
       <Box sx={{ gridArea: 'work', minWidth: 0, '@media print': { display: 'none' } }}>
         <Paper sx={{ p: 2 }}>
-          <Stack
-            direction="row"
-            spacing={1}
-            alignItems="center"
-            justifyContent="space-between"
-            flexWrap="wrap"
-            useFlexGap
-            sx={{ mb: 1 }}
-          >
-            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-              {lists.length ? (
-                <Chip size="small" variant="outlined" label={`${lists.length} lists`} />
-              ) : null}
-              {loadedLesson ? (
-                <Chip
-                  size="small"
-                  color="primary"
-                  variant="outlined"
-                  label={`Created ${formatCreatedDate(loadedLesson.createdAt)}`}
-                />
-              ) : (
-                <Chip size="small" variant="outlined" label="Unsaved" />
-              )}
+          {(notice || loading || loadingLists || loadingLessons || saving) ? (
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
               {notice ? <Chip size="small" color="success" label={notice} /> : null}
               {loading || loadingLists || loadingLessons || saving ? <CircularProgress size={16} /> : null}
             </Stack>
-            <Button variant="outlined" startIcon={<AddIcon />} onClick={handleNew} disabled={saving}>
-              New
-            </Button>
-          </Stack>
+          ) : null}
 
           <Tabs
             value={lessonMode}
-            onChange={(_event, value) => setLessonMode(value)}
+            onChange={(_event, value) => {
+              setLessonMode(value)
+              if (value === LESSON_MODE_CREATE) startNewLesson()
+            }}
             variant="fullWidth"
             sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
           >
             <Tab icon={<ViewListIcon />} iconPosition="start" label="View lesson plans" />
-            <Tab icon={<AddIcon />} iconPosition="start" label="Create lesson" />
             <Tab icon={<GradingIcon />} iconPosition="start" label="Grade Lesson Plans" />
+            <Tab icon={<AddIcon />} iconPosition="start" label="Create lesson" />
           </Tabs>
 
           {lessonMode === LESSON_MODE_CREATE ? (
             <>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                {loadedLesson
-                  ? 'This saved plan is loaded. Change materials and update it, or click New to start another plan.'
-                  : 'Walk through each step to choose materials, then create the lesson. The preview on the right updates as you go.'}
+                Walk through each step to choose materials, then create the lesson. The preview on
+                the right updates as you go.
               </Typography>
               <CreateLessonStepper
                 activeStep={activeStep}
@@ -884,7 +861,7 @@ export default function LessonPlanPanel({
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 {lessonMode === LESSON_MODE_GRADE
                   ? 'Select a saved plan to score lists, sentences, and passages on the right. Lesson scores stay at the bottom of that panel.'
-                  : 'Select a saved plan to preview it on the right. Switch to Create lesson to edit it. Lesson date is when it is taught; Created is when you saved it.'}
+                  : 'Select a saved plan to preview it on the right. Lesson date is when it is taught; Created is when you saved it.'}
               </Typography>
               <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
                 <DataGridPro
