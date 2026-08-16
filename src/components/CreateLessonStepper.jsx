@@ -355,7 +355,7 @@ export default function CreateLessonStepper({
               loading={loading || loadingLists}
               noRowsLabel={
                 selectedNewConceptId
-                  ? 'No lists for this concept yet. Create one on the Concepts & Lists tab.'
+                  ? 'No lists for this concept yet. Create one on the Content tab.'
                   : 'Select a new concept above to filter lists.'
               }
               getItemLabel={(list) => list.name || 'Untitled list'}
@@ -431,7 +431,7 @@ export default function CreateLessonStepper({
               loading={loading}
               noRowsLabel={
                 selectedNewConceptId
-                  ? 'No sentences with those focus concepts. Tag sentences on the Multi Word tab.'
+                  ? 'No sentences with those focus concepts. Tag sentences on the Content tab.'
                   : 'Select new and review concepts above to filter sentences by focus concept.'
               }
               getItemLabel={(sentence) => truncate(sentence.text, 60) || 'Untitled sentence'}
@@ -466,7 +466,7 @@ export default function CreateLessonStepper({
               loading={loading}
               noRowsLabel={
                 selectedNewConceptId
-                  ? 'No passages with those focus concepts. Tag passages on the Multi Word tab.'
+                  ? 'No passages with those focus concepts. Tag passages on the Content tab.'
                   : 'Select new and review concepts above to filter passages by focus concept.'
               }
               getItemLabel={(passage) => passage.title || truncate(passage.text, 60) || 'Untitled passage'}

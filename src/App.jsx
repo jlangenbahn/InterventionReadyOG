@@ -39,13 +39,12 @@ import AddIcon from '@mui/icons-material/Add'
 import LockIcon from '@mui/icons-material/Lock'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
-import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SaveIcon from '@mui/icons-material/Save'
-import SearchIcon from '@mui/icons-material/Search'
 import LessonPlanPanel from './components/LessonPlanPanel'
 import DataPanel from './components/DataPanel'
-import MultiWordPanel from './components/MultiWordPanel'
+import ContentPanel from './components/ContentPanel'
+import ConceptsCatalogPanel from './components/ConceptsCatalogPanel'
 import { fetchStudentLists } from './lib/fetchStudentLessonPlan'
 
 const client = generateClient()
@@ -53,7 +52,7 @@ const DRAWER_WIDTH = 300
 const TAB_LESSON_PLAN = 0
 const TAB_SCOPE = 1
 const TAB_CONCEPTS = 2
-const TAB_MULTI_WORD = 3
+const TAB_CONTENT = 3
 const TAB_DATA = 4
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
@@ -94,33 +93,6 @@ const theme = createTheme({
   },
   shape: { borderRadius: 10 },
 })
-
-const wordColumns = [
-  { field: 'word', headerName: 'Word', flex: 1, minWidth: 120 },
-  {
-    field: 'isNonsenseWord',
-    headerName: 'Nonsense',
-    width: 100,
-    type: 'boolean',
-  },
-]
-
-const myListColumns = [
-  { field: 'name', headerName: 'List', flex: 1.2, minWidth: 110 },
-  { field: 'concept', headerName: 'Concept', flex: 1, minWidth: 110 },
-  {
-    field: 'wordCount',
-    headerName: 'Words',
-    type: 'number',
-    width: 80,
-    align: 'left',
-    headerAlign: 'left',
-  },
-]
-
-function emptyWordSelection() {
-  return { type: 'include', ids: new Set() }
-}
 
 const scopeColumnDefs = (locked) => [
   {
@@ -242,34 +214,6 @@ function buildWordsByConceptId(conceptWords, wordsById) {
   return map
 }
 
-function parseListData(value) {
-  let current = value
-  for (let i = 0; i < 3; i += 1) {
-    if (current && typeof current === 'object' && !Array.isArray(current)) return current
-    if (typeof current !== 'string') break
-    const trimmed = current.trim()
-    if (!trimmed) return {}
-    try {
-      current = JSON.parse(trimmed)
-    } catch {
-      return {}
-    }
-  }
-  return current && typeof current === 'object' && !Array.isArray(current) ? current : {}
-}
-
-function listWordCount(list) {
-  const data = parseListData(list?.listData)
-  if (Array.isArray(data.conceptWordIds)) return data.conceptWordIds.length
-  if (Array.isArray(data.wordIds)) return data.wordIds.length
-  if (Array.isArray(list?.words)) return list.words.length
-  return 0
-}
-
-function wordRowId(row) {
-  return row?.conceptWordId || row?.id
-}
-
 function normalizeSequence(value) {
   if (value === null || value === undefined || value === '') return null
   const n = Number(value)
@@ -334,341 +278,6 @@ function serializeScopeAndSequence(inventory) {
 function studentDisplayName(student) {
   return (
     [student?.firstName, student?.lastName].filter(Boolean).join(' ') || 'Unnamed student'
-  )
-}
-
-function ConceptsWordsPanel({
-  student,
-  concepts,
-  selectedConceptId,
-  setSelectedConceptId,
-  conceptQuery,
-  setConceptQuery,
-  wordsByConceptId,
-  loadingCatalog,
-  studentLists = [],
-  loadingLists = false,
-  onReloadLists,
-  setError,
-}) {
-  const [wordSelection, setWordSelection] = useState(emptyWordSelection)
-  const [createListOpen, setCreateListOpen] = useState(false)
-  const [listName, setListName] = useState('')
-  const [creatingList, setCreatingList] = useState(false)
-
-  const selectedConcept = useMemo(
-    () => concepts.find((c) => c.id === selectedConceptId) ?? null,
-    [concepts, selectedConceptId],
-  )
-
-  const filteredConcepts = useMemo(() => {
-    const q = conceptQuery.trim().toLowerCase()
-    if (!q) return concepts
-    return concepts.filter((item) =>
-      [item.concept, item.category, item.subcategory, item.level]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(q),
-    )
-  }, [concepts, conceptQuery])
-
-  const selectedWords = useMemo(() => {
-    if (!selectedConceptId) return []
-    const words = wordsByConceptId.get(selectedConceptId)
-    return words ? words.slice() : []
-  }, [wordsByConceptId, selectedConceptId])
-
-  const selectedWordRows = useMemo(() => {
-    const ids = wordSelection?.ids
-    if (!ids?.size) {
-      return wordSelection?.type === 'exclude' ? selectedWords : []
-    }
-    if (wordSelection.type === 'exclude') {
-      return selectedWords.filter((row) => !ids.has(wordRowId(row)))
-    }
-    return selectedWords.filter((row) => ids.has(wordRowId(row)))
-  }, [wordSelection, selectedWords])
-
-  const conceptById = useMemo(
-    () => new Map(concepts.map((concept) => [concept.id, concept])),
-    [concepts],
-  )
-
-  const myListRows = useMemo(
-    () =>
-      studentLists.map((list) => ({
-        id: list.id,
-        name: list.name || 'Untitled list',
-        concept: conceptById.get(list.conceptID)?.concept || 'Unknown concept',
-        wordCount: listWordCount(list),
-      })),
-    [studentLists, conceptById],
-  )
-
-  const loadLists = useCallback(async () => {
-    if (onReloadLists) await onReloadLists()
-  }, [onReloadLists])
-
-  useEffect(() => {
-    setWordSelection(emptyWordSelection())
-    setCreateListOpen(false)
-  }, [selectedConceptId])
-
-  function openCreateList() {
-    if (!selectedConcept || selectedWordRows.length === 0) return
-    setListName(selectedConcept.concept || '')
-    setCreateListOpen(true)
-  }
-
-  async function handleCreateList(event) {
-    event.preventDefault()
-    const name = listName.trim()
-    if (!student?.id || !selectedConcept || !name || selectedWordRows.length === 0) return
-
-    setCreatingList(true)
-    try {
-      const conceptWordIds = selectedWordRows.map((row) => row.conceptWordId).filter(Boolean)
-      const wordIds = selectedWordRows.map((row) => row.wordId || row.id).filter(Boolean)
-      const { data, errors } = await client.models.List.create({
-        name,
-        conceptID: selectedConcept.id,
-        studentID: student.id,
-        listData: JSON.stringify({
-          conceptId: selectedConcept.id,
-          conceptWordIds,
-          wordIds,
-        }),
-      })
-      if (errors?.length) throw new Error(errors.map((e) => e.message).join(', '))
-      if (!data?.id) throw new Error('Failed to create list')
-
-      const linkResults = await Promise.all(
-        wordIds.map((wordId) => client.models.WordList.create({ wordId, listId: data.id })),
-      )
-      const linkErrors = linkResults.flatMap((result) => result.errors ?? [])
-      if (linkErrors.length) throw new Error(linkErrors.map((e) => e.message).join(', '))
-
-      setError('')
-      setCreateListOpen(false)
-      setWordSelection(emptyWordSelection())
-      await loadLists()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create list')
-    } finally {
-      setCreatingList(false)
-    }
-  }
-
-  const panelSx = {
-    minWidth: 0,
-    minHeight: { xs: 320, lg: 0 },
-    p: 2,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-  }
-
-  return (
-    <>
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr 1fr' },
-          gap: 2,
-          height: { lg: 'calc(100vh - 220px)' },
-          minHeight: 480,
-          alignItems: 'stretch',
-        }}
-      >
-        <Paper sx={panelSx}>
-          <Typography variant="h6" sx={{ mb: 1 }}>
-            Concepts
-          </Typography>
-          <TextField
-            size="small"
-            placeholder="Filter concepts…"
-            value={conceptQuery}
-            onChange={(e) => setConceptQuery(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <SearchIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-              ),
-            }}
-            sx={{ mb: 1.5 }}
-          />
-          {loadingCatalog ? (
-            <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
-              <CircularProgress size={28} />
-            </Box>
-          ) : (
-            <List dense sx={{ overflow: 'auto', flex: 1 }}>
-              {filteredConcepts.map((concept) => {
-                const count = wordsByConceptId.get(concept.id)?.length ?? 0
-                return (
-                  <ListItemButton
-                    key={concept.id}
-                    selected={concept.id === selectedConceptId}
-                    onClick={() => setSelectedConceptId(concept.id)}
-                  >
-                    <ListItemText
-                      primary={concept.concept}
-                      secondary={[
-                        concept.level && `Level ${concept.level}`,
-                        concept.category,
-                        `${count} words`,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    />
-                  </ListItemButton>
-                )
-              })}
-            </List>
-          )}
-        </Paper>
-
-        <Paper sx={panelSx}>
-          {!selectedConcept ? (
-            <Typography color="text.secondary">Select a concept to see tagged words.</Typography>
-          ) : (
-            <>
-              <Box sx={{ mb: 1.5 }}>
-                <Typography variant="h6" sx={{ lineHeight: 1.3 }}>
-                  {selectedConcept.concept}
-                </Typography>
-                {selectedConcept.subcategory ? (
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-                    {selectedConcept.subcategory}
-                  </Typography>
-                ) : null}
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  alignItems="center"
-                  sx={{ mt: 1 }}
-                  flexWrap="wrap"
-                  useFlexGap
-                >
-                  {selectedConcept.level ? (
-                    <Chip size="small" label={`Level ${selectedConcept.level}`} />
-                  ) : null}
-                  {selectedConcept.category ? (
-                    <Chip size="small" variant="outlined" label={selectedConcept.category} />
-                  ) : null}
-                  <Chip
-                    size="small"
-                    color="primary"
-                    variant="outlined"
-                    label={`${selectedWords.length} words`}
-                  />
-                  <Chip
-                    size="small"
-                    variant="outlined"
-                    label={`${selectedWordRows.length} selected`}
-                  />
-                  <Button
-                    size="small"
-                    variant="contained"
-                    color="success"
-                    startIcon={<PlaylistAddIcon />}
-                    disabled={selectedWordRows.length === 0 || creatingList}
-                    onClick={openCreateList}
-                    sx={{ ml: 'auto' }}
-                  >
-                    Create list
-                  </Button>
-                </Stack>
-              </Box>
-
-              <Box sx={{ flex: 1, minHeight: 240, width: '100%' }}>
-                <DataGridPro
-                  key={selectedConceptId}
-                  rows={selectedWords}
-                  columns={wordColumns}
-                  getRowId={wordRowId}
-                  checkboxSelection
-                  disableRowSelectionExcludeModel
-                  disableRowSelectionOnClick
-                  hideFooterSelectedRowCount
-                  rowSelectionModel={wordSelection}
-                  onRowSelectionModelChange={(model) => setWordSelection(model)}
-                  pagination
-                  pageSizeOptions={[25, 50, 100]}
-                  initialState={{
-                    pagination: { paginationModel: { pageSize: 50 } },
-                  }}
-                  slots={{ toolbar: GridToolbar }}
-                  slotProps={{
-                    toolbar: { showQuickFilter: true },
-                  }}
-                  density="compact"
-                />
-              </Box>
-            </>
-          )}
-        </Paper>
-
-        <Paper sx={panelSx}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap">
-            <Typography variant="h6">My Lists</Typography>
-            <Chip size="small" variant="outlined" label={`${myListRows.length} lists`} />
-            {loadingLists ? <CircularProgress size={16} /> : null}
-          </Stack>
-          <Box sx={{ flex: 1, minHeight: 240, width: '100%' }}>
-            <DataGridPro
-              rows={myListRows}
-              columns={myListColumns}
-              getRowId={(row) => row.id}
-              disableRowSelectionOnClick
-              pagination
-              pageSizeOptions={[25, 50, 100]}
-              initialState={{
-                pagination: { paginationModel: { pageSize: 25 } },
-              }}
-              slots={{ toolbar: GridToolbar }}
-              slotProps={{
-                toolbar: { showQuickFilter: true },
-              }}
-              density="compact"
-              localeText={{
-                noRowsLabel: 'No lists yet. Select words and click Create list.',
-              }}
-            />
-          </Box>
-        </Paper>
-      </Box>
-
-      <Dialog open={createListOpen} onClose={() => !creatingList && setCreateListOpen(false)} fullWidth maxWidth="xs">
-        <Box component="form" onSubmit={handleCreateList}>
-          <DialogTitle>Create list</DialogTitle>
-          <DialogContent sx={{ display: 'grid', gap: 2, pt: 1 }}>
-            <DialogContentText>
-              Save {selectedWordRows.length} word
-              {selectedWordRows.length === 1 ? '' : 's'} under {selectedConcept?.concept || 'this concept'} for{' '}
-              {studentDisplayName(student)}. The list will store this concept and the selected
-              concept-word links.
-            </DialogContentText>
-            <TextField
-              label="List name"
-              value={listName}
-              onChange={(e) => setListName(e.target.value)}
-              autoFocus
-              required
-              disabled={creatingList}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setCreateListOpen(false)} disabled={creatingList}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="contained" color="success" disabled={creatingList || !listName.trim()}>
-              {creatingList ? 'Creating…' : 'Create list'}
-            </Button>
-          </DialogActions>
-        </Box>
-      </Dialog>
-    </>
   )
 }
 
@@ -1082,9 +691,7 @@ function AppShell({ user, signOut }) {
   const [selectedStudentId, setSelectedStudentId] = useState(null)
   const [mainTab, setMainTab] = useState(0)
   const [concepts, setConcepts] = useState([])
-  const [selectedConceptId, setSelectedConceptId] = useState(null)
   const [wordsByConceptId, setWordsByConceptId] = useState(() => new Map())
-  const [conceptQuery, setConceptQuery] = useState('')
   const [loadingStudents, setLoadingStudents] = useState(true)
   const [loadingCatalog, setLoadingCatalog] = useState(true)
   const [catalogStatus, setCatalogStatus] = useState('Loading concept/word catalog…')
@@ -1113,6 +720,15 @@ function AppShell({ user, signOut }) {
       prev.map((student) =>
         student.id === updatedStudent.id ? { ...student, ...updatedStudent } : student,
       ),
+    )
+  }, [])
+
+  const handleConceptUpdated = useCallback((updatedConcept) => {
+    if (!updatedConcept?.id) return
+    setConcepts((prev) =>
+      [...prev.map((concept) =>
+        concept.id === updatedConcept.id ? { ...concept, ...updatedConcept } : concept,
+      )].sort((a, b) => String(a.concept ?? '').localeCompare(String(b.concept ?? ''))),
     )
   }, [])
 
@@ -1214,7 +830,6 @@ function AppShell({ user, signOut }) {
     if (studentId === selectedStudentId) return
     requestNavigation(() => {
       setSelectedStudentId(studentId)
-      setSelectedConceptId(null)
       setScopeLocked(true)
     })
   }
@@ -1391,8 +1006,8 @@ function AppShell({ user, signOut }) {
             >
               <Tab label="Lesson Plan" />
               <Tab label="Scope & Sequence" />
-              <Tab label="Concepts & Lists" />
-              <Tab label="Multi Word" />
+              <Tab label="Concepts" />
+              <Tab label="Content" />
               <Tab label="Data" />
             </Tabs>
 
@@ -1418,26 +1033,22 @@ function AppShell({ user, signOut }) {
                 saveRef={scopeSaveRef}
               />
             ) : mainTab === TAB_CONCEPTS ? (
-              <ConceptsWordsPanel
+              <ConceptsCatalogPanel
+                concepts={concepts}
+                wordsByConceptId={wordsByConceptId}
+                loadingCatalog={loadingCatalog}
+                setError={setError}
+                onConceptUpdated={handleConceptUpdated}
+              />
+            ) : mainTab === TAB_CONTENT ? (
+              <ContentPanel
                 student={selectedStudent}
                 concepts={concepts}
-                selectedConceptId={selectedConceptId}
-                setSelectedConceptId={setSelectedConceptId}
-                conceptQuery={conceptQuery}
-                setConceptQuery={setConceptQuery}
                 wordsByConceptId={wordsByConceptId}
                 loadingCatalog={loadingCatalog}
                 studentLists={studentLists}
                 loadingLists={loadingLists}
                 onReloadLists={loadStudentLists}
-                setError={setError}
-              />
-            ) : mainTab === TAB_MULTI_WORD ? (
-              <MultiWordPanel
-                student={selectedStudent}
-                concepts={concepts}
-                wordsByConceptId={wordsByConceptId}
-                loadingCatalog={loadingCatalog}
                 setError={setError}
               />
             ) : mainTab === TAB_DATA ? (
