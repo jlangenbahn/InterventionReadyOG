@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   Box,
@@ -12,38 +12,18 @@ import {
 import DoneAllIcon from '@mui/icons-material/DoneAll'
 import SaveIcon from '@mui/icons-material/Save'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import {
   SCORE_CORRECT,
   SCORE_INCORRECT,
   SCORE_UNSCORED,
   buildLessonScoreMaterials,
   countConceptExposures,
-  fetchStudentLessons,
   formatScoreTally,
   nextScoreState,
   parseLessonData,
   saveStudentLesson,
-  studentDisplayName,
   tallyScores,
-  formatLessonDisplayName,
 } from '../lib/fetchStudentLessonPlan'
-
-const SAVED_LESSON_COLUMNS = [
-  {
-    field: 'lessonNumber',
-    headerName: 'Lesson #',
-    type: 'number',
-    width: 90,
-    align: 'left',
-    headerAlign: 'left',
-  },
-  { field: 'lessonDateLabel', headerName: 'Lesson date', width: 120 },
-  { field: 'name', headerName: 'Lesson', flex: 1.2, minWidth: 160 },
-  { field: 'newConcept', headerName: 'New concept', flex: 1, minWidth: 120 },
-  { field: 'createdDateLabel', headerName: 'Created', width: 120 },
-  { field: 'scoreLabel', headerName: 'Score', width: 130 },
-]
 
 function todayIso() {
   const now = new Date()
@@ -79,17 +59,6 @@ function formatLessonDate(value) {
     month: 'short',
     day: 'numeric',
   }).format(new Date(year, month - 1, day))
-}
-
-function formatCreatedDate(value) {
-  if (!value) return ''
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return formatLessonDate(value)
-  return new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(parsed)
 }
 
 function scoreButtonSx(state) {
@@ -159,49 +128,110 @@ function ScoreStat({ label, tally }) {
   )
 }
 
-const EMPTY_TALLY = { correct: 0, incorrect: 0, unscored: 0, total: 0, scored: 0, accuracy: null }
-
-export default function DataEntryPanel({ student, setError }) {
-  const [savedLessons, setSavedLessons] = useState([])
-  const [loadingLessons, setLoadingLessons] = useState(false)
-  const [loadedLesson, setLoadedLesson] = useState(null)
+export default function DataEntryPanel({
+  student,
+  lesson = null,
+  savedLessons = [],
+  setError,
+  onLessonsChanged,
+  onLessonUpdated,
+}) {
   const [scores, setScores] = useState({})
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
+  const scoresRef = useRef(scores)
+  const dirtyRef = useRef(dirty)
+  const lessonRef = useRef(lesson)
 
-  const loadSavedLessons = useCallback(async () => {
-    if (!student?.id) {
-      setSavedLessons([])
-      return []
+  scoresRef.current = scores
+  dirtyRef.current = dirty
+
+  const applyLesson = useCallback((nextLesson) => {
+    if (!nextLesson) {
+      setScores({})
+      setDirty(false)
+      setNotice('')
+      return
     }
-    setLoadingLessons(true)
-    try {
-      const lessons = await fetchStudentLessons(student.id)
-      setSavedLessons(lessons)
-      return lessons
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load saved lesson plans')
-      return []
-    } finally {
-      setLoadingLessons(false)
-    }
-  }, [student?.id, setError])
-
-  useEffect(() => {
-    void loadSavedLessons()
-  }, [loadSavedLessons])
-
-  useEffect(() => {
-    setLoadedLesson(null)
-    setScores({})
+    const next = buildLessonScoreMaterials(nextLesson)
+    setScores(next.scores ?? {})
     setDirty(false)
     setNotice('')
-  }, [student?.id])
+    setError('')
+  }, [setError])
+
+  const persistScores = useCallback(async (currentLesson = lessonRef.current, nextScores = scoresRef.current) => {
+    if (!currentLesson?.id || !student?.id) return null
+    const parsed = parseLessonData(currentLesson.lessonData)
+    const nextMaterials = buildLessonScoreMaterials({
+      ...currentLesson,
+      lessonData: JSON.stringify({ ...parsed, scores: nextScores }),
+    })
+    const summary = tallyScores(nextMaterials.allKeys, nextScores)
+    const lessonData = {
+      ...parsed,
+      scores: nextScores,
+      scoreSummary: summary,
+    }
+    const conceptId =
+      currentLesson.concepts
+      || parsed.snapshots?.lists?.newConcept?.conceptID
+      || parsed.snapshots?.lists?.review1?.conceptID
+      || parsed.snapshots?.lists?.review2?.conceptID
+      || parsed.snapshots?.lists?.review3?.conceptID
+    const saved = await saveStudentLesson({
+      id: currentLesson.id,
+      studentID: student.id,
+      date: toIsoDate(currentLesson.date),
+      lessonNumber: currentLesson.lessonNumber,
+      conceptId,
+      lessonData,
+    })
+    const lessons = (await onLessonsChanged?.()) ?? savedLessons
+    const refreshed = (lessons ?? []).find((item) => item.id === saved.id)
+    return refreshed ?? { ...currentLesson, ...saved, lessonData: JSON.stringify(lessonData) }
+  }, [student?.id, onLessonsChanged, savedLessons])
+
+  const persistRef = useRef(persistScores)
+  const applyRef = useRef(applyLesson)
+  const onUpdatedRef = useRef(onLessonUpdated)
+  const lessonPropRef = useRef(lesson)
+  persistRef.current = persistScores
+  applyRef.current = applyLesson
+  onUpdatedRef.current = onLessonUpdated
+  lessonPropRef.current = lesson
+
+  useEffect(() => {
+    const previous = lessonRef.current
+    const next = lessonPropRef.current
+    async function syncLesson() {
+      if (dirtyRef.current && previous?.id && previous.id !== next?.id) {
+        try {
+          const refreshed = await persistRef.current(previous, scoresRef.current)
+          if (refreshed && previous.id === refreshed.id) onUpdatedRef.current?.(refreshed)
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to save scores before switching lessons')
+          return
+        }
+      }
+      applyRef.current(next)
+      lessonRef.current = next
+    }
+    void syncLesson()
+  }, [lesson?.id, setError])
+
+  useEffect(() => {
+    return () => {
+      if (dirtyRef.current && lessonRef.current?.id) {
+        void persistRef.current(lessonRef.current, scoresRef.current)
+      }
+    }
+  }, [])
 
   const materials = useMemo(
-    () => (loadedLesson ? buildLessonScoreMaterials(loadedLesson) : null),
-    [loadedLesson],
+    () => (lesson ? buildLessonScoreMaterials({ ...lesson, lessonData: lesson.lessonData }) : null),
+    [lesson],
   )
 
   const allKeys = materials?.allKeys ?? []
@@ -228,92 +258,6 @@ export default function DataEntryPanel({ student, setError }) {
   const sentenceTally = useMemo(() => tallyScores(sentenceKeys, scores), [sentenceKeys, scores])
   const passageTally = useMemo(() => tallyScores(passageKeys, scores), [passageKeys, scores])
 
-  const savedLessonRows = useMemo(
-    () =>
-      [...savedLessons]
-        .sort((a, b) => {
-          const byDate = String(b.date ?? '').localeCompare(String(a.date ?? ''))
-          if (byDate) return byDate
-          return String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? ''))
-        })
-        .map((lesson) => {
-          const data = parseLessonData(lesson.lessonData)
-          const newConcept =
-            data?.snapshots?.lists?.newConcept?.concept
-            || data?.snapshots?.lists?.newConcept?.name
-            || ''
-          const customName = data?.name || lesson.name || ''
-          const summary = data?.scoreSummary
-          const scoreLabel = summary?.scored
-            ? `${summary.correct}/${summary.scored}${summary.accuracy != null ? ` (${Math.round(summary.accuracy * 100)}%)` : ''}`
-            : '—'
-          return {
-            id: lesson.id,
-            lessonNumber: lesson.lessonNumber ?? '',
-            lessonDateLabel: formatLessonDate(lesson.date) || '—',
-            createdDateLabel: formatCreatedDate(lesson.createdAt) || '—',
-            newConcept: newConcept || '—',
-            name: formatLessonDisplayName(customName, newConcept, lesson.lessonNumber) || '—',
-            scoreLabel,
-          }
-        }),
-    [savedLessons],
-  )
-
-  function applyLesson(lesson) {
-    const next = buildLessonScoreMaterials(lesson)
-    setLoadedLesson(lesson)
-    setScores(next.scores ?? {})
-    setDirty(false)
-    setNotice('')
-    setError('')
-  }
-
-  async function persistScores(lesson = loadedLesson, nextScores = scores) {
-    if (!lesson?.id || !student?.id) return null
-    const parsed = parseLessonData(lesson.lessonData)
-    const nextMaterials = buildLessonScoreMaterials({
-      ...lesson,
-      lessonData: JSON.stringify({ ...parsed, scores: nextScores }),
-    })
-    const summary = tallyScores(nextMaterials.allKeys, nextScores)
-    const lessonData = {
-      ...parsed,
-      scores: nextScores,
-      scoreSummary: summary,
-    }
-    const conceptId =
-      lesson.concepts
-      || parsed.snapshots?.lists?.newConcept?.conceptID
-      || parsed.snapshots?.lists?.review1?.conceptID
-      || parsed.snapshots?.lists?.review2?.conceptID
-      || parsed.snapshots?.lists?.review3?.conceptID
-    const saved = await saveStudentLesson({
-      id: lesson.id,
-      studentID: student.id,
-      date: toIsoDate(lesson.date),
-      lessonNumber: lesson.lessonNumber,
-      conceptId,
-      lessonData,
-    })
-    const lessons = await loadSavedLessons()
-    const refreshed = (lessons ?? []).find((item) => item.id === saved.id)
-    return refreshed ?? { ...lesson, ...saved, lessonData: JSON.stringify(lessonData) }
-  }
-
-  async function selectLesson(lesson) {
-    if (!lesson) return
-    if (dirty && loadedLesson?.id && loadedLesson.id !== lesson.id) {
-      try {
-        await persistScores()
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to save scores before switching lessons')
-        return
-      }
-    }
-    applyLesson(lesson)
-  }
-
   function toggleWord(key) {
     setScores((prev) => ({
       ...prev,
@@ -338,11 +282,14 @@ export default function DataEntryPanel({ student, setError }) {
   }
 
   async function handleSave() {
-    if (!loadedLesson) return
+    if (!lesson) return
     setSaving(true)
     try {
-      const refreshed = await persistScores()
-      if (refreshed) setLoadedLesson(refreshed)
+      const refreshed = await persistScores(lesson, scores)
+      if (refreshed) {
+        lessonRef.current = refreshed
+        onLessonUpdated?.(refreshed)
+      }
       setDirty(false)
       setNotice('Scores saved.')
       setError('')
@@ -353,311 +300,236 @@ export default function DataEntryPanel({ student, setError }) {
     }
   }
 
-  if (!student) {
+  if (!lesson) {
     return (
-      <Typography color="text.secondary">Select a student to enter lesson data.</Typography>
+      <Paper variant="outlined" sx={{ p: 2 }}>
+        <Alert severity="info">
+          Select a saved lesson plan on the left to score lists, sentences, and passages.
+        </Alert>
+      </Paper>
     )
   }
 
   return (
-    <Box sx={{ pb: 10 }}>
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-          <Typography variant="h6">Data Entry</Typography>
-          <Chip size="small" label={studentDisplayName(student)} />
-          {loadedLesson ? (
+    <Stack spacing={1.5}>
+      <Paper sx={{ p: 1.5, position: 'sticky', top: 0, zIndex: 2 }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          justifyContent="space-between"
+          flexWrap="wrap"
+          useFlexGap
+        >
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
             <Chip
               size="small"
               color="primary"
               variant="outlined"
-              label={`Lesson ${loadedLesson.lessonNumber ?? '—'} · ${formatLessonDate(loadedLesson.date)}`}
+              label={`Lesson ${lesson.lessonNumber ?? '—'} · ${formatLessonDate(lesson.date)}`}
             />
-          ) : null}
-          {dirty ? <Chip size="small" color="warning" label="Unsaved scores" /> : null}
-          {notice ? <Chip size="small" color="success" label={notice} /> : null}
-          {loadingLessons || saving ? <CircularProgress size={16} /> : null}
+            {dirty ? <Chip size="small" color="warning" label="Unsaved scores" /> : null}
+            {notice ? <Chip size="small" color="success" label={notice} /> : null}
+            {saving ? <CircularProgress size={16} /> : null}
+          </Stack>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<DoneAllIcon />}
+              onClick={markAllCorrect}
+              disabled={!allKeys.length}
+            >
+              Mark all correct
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<RestartAltIcon />}
+              onClick={clearScores}
+              disabled={!allKeys.length}
+            >
+              Clear scores
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<SaveIcon />}
+              onClick={() => void handleSave()}
+              disabled={!dirty || saving}
+            >
+              Save scores
+            </Button>
+          </Stack>
+        </Stack>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }} flexWrap="wrap" useFlexGap>
+          <Typography variant="caption" color="text.secondary">
+            Click a word to cycle Not scored → Correct → Incorrect.
+          </Typography>
+          <Chip size="small" variant="outlined" label="Not scored" />
+          <Chip size="small" sx={{ bgcolor: '#2e7d32', color: '#fff' }} label="Correct" />
+          <Chip size="small" sx={{ bgcolor: '#c62828', color: '#fff' }} label="Incorrect" />
         </Stack>
       </Paper>
 
+      <Typography variant="subtitle1">Lists</Typography>
       <Box
         sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: 'minmax(260px, 32%) minmax(0, 1fr)' },
-          gap: 2,
-          mb: 2,
-          alignItems: 'stretch',
+          display: 'flex',
+          gap: 1.5,
+          overflowX: 'auto',
+          alignItems: 'flex-start',
+          pb: 1,
         }}
       >
-        <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', minHeight: { md: 280 } }}>
-          <Typography variant="subtitle1">Lesson scores</Typography>
-          {loadedLesson ? (
-            <>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Totals for the selected lesson. Click a word below to score it.
+        {(materials?.lists ?? []).map((column) => {
+          const exposure = countConceptExposures(
+            savedLessons,
+            lesson,
+            column.conceptID,
+            column.concept,
+          )
+          const tally = tallyScores(column.words.map((item) => item.key), scores)
+          return (
+            <Paper
+              key={column.key}
+              variant="outlined"
+              sx={{ width: 176, flexShrink: 0, p: 1.25 }}
+            >
+              <Typography variant="subtitle2">{column.label}</Typography>
+              <Typography variant="body2" noWrap title={column.name || 'No list assigned'}>
+                {column.name || 'No list assigned'}
               </Typography>
-              <ScoreStat label="Total" tally={totalTally} />
-              <ScoreStat label="New concept" tally={newConceptTally} />
-              <ScoreStat label="Review concepts" tally={reviewTally} />
-              <ScoreStat label="Sentences" tally={sentenceTally} />
-              <ScoreStat label="Passage" tally={passageTally} />
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5 }} flexWrap="wrap" useFlexGap>
-                <Typography variant="caption" color="text.secondary">
-                  Legend
+              {column.concept ? (
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {column.concept}
                 </Typography>
-                <Chip size="small" variant="outlined" label="Not scored" />
-                <Chip size="small" sx={{ bgcolor: '#2e7d32', color: '#fff' }} label="Correct" />
-                <Chip size="small" sx={{ bgcolor: '#c62828', color: '#fff' }} label="Incorrect" />
+              ) : null}
+              <Stack direction="row" spacing={0.5} sx={{ mt: 0.75, mb: 1 }} flexWrap="wrap" useFlexGap>
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={exposure === 0 ? 'First exposure' : `Exposed ${exposure}×`}
+                />
+                <Chip size="small" variant="outlined" label={formatScoreTally(tally)} />
               </Stack>
-            </>
-          ) : (
-            <>
-              <ScoreStat label="Total" tally={EMPTY_TALLY} />
-              <ScoreStat label="New concept" tally={EMPTY_TALLY} />
-              <ScoreStat label="Review concepts" tally={EMPTY_TALLY} />
-              <ScoreStat label="Sentences" tally={EMPTY_TALLY} />
-              <ScoreStat label="Passage" tally={EMPTY_TALLY} />
-              <Alert severity="info" sx={{ mt: 1.5 }}>
-                Select a saved lesson plan to enter word-level scores.
-              </Alert>
-            </>
-          )}
-        </Paper>
-
-        <Paper sx={{ p: 2, minWidth: 0 }}>
-          <Typography variant="subtitle1">Saved lesson plans</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Click a row to score that lesson. Click a word to cycle Not scored → Correct → Incorrect.
-          </Typography>
-          <Box sx={{ height: 280, width: '100%' }}>
-            <DataGridPro
-              rows={savedLessonRows}
-              columns={SAVED_LESSON_COLUMNS}
-              getRowId={(row) => row.id}
-              onRowClick={(params) => {
-                const lesson = savedLessons.find((item) => item.id === params.id)
-                if (lesson) void selectLesson(lesson)
-              }}
-              getRowClassName={(params) => (params.id === loadedLesson?.id ? 'Mui-selected' : '')}
-              loading={loadingLessons}
-              pagination
-              pageSizeOptions={[10, 25, 50]}
-              initialState={{
-                pagination: { paginationModel: { pageSize: 10 } },
-                sorting: { sortModel: [{ field: 'lessonDateLabel', sort: 'desc' }] },
-              }}
-              slots={{ toolbar: GridToolbar }}
-              slotProps={{
-                toolbar: {
-                  showQuickFilter: true,
-                  quickFilterProps: { debounceMs: 300 },
-                },
-              }}
-              density="compact"
-              localeText={{
-                noRowsLabel: 'No saved lesson plans yet. Save a plan on the Lesson Plan tab first.',
-              }}
-            />
-          </Box>
-        </Paper>
+              <Stack spacing={0.5}>
+                {column.words.length ? (
+                  column.words.map((item) => (
+                    <ScoreWordButton
+                      key={item.key}
+                      word={item.word}
+                      state={scores[item.key] || SCORE_UNSCORED}
+                      onToggle={() => toggleWord(item.key)}
+                      fullWidth
+                    />
+                  ))
+                ) : (
+                  <Typography variant="caption" color="text.secondary">
+                    No words
+                  </Typography>
+                )}
+              </Stack>
+            </Paper>
+          )
+        })}
       </Box>
 
-      {loadedLesson ? (
-        <>
-          <Typography variant="subtitle1" sx={{ mb: 1 }}>
-            Lists
-          </Typography>
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 1.5,
-              overflowX: 'auto',
-              alignItems: 'flex-start',
-              pb: 1,
-              mb: 2,
-            }}
-          >
-            {(materials?.lists ?? []).map((column) => {
-              const exposure = countConceptExposures(
-                savedLessons,
-                loadedLesson,
-                column.conceptID,
-                column.concept,
-              )
-              const tally = tallyScores(column.words.map((item) => item.key), scores)
-              return (
-                <Paper
-                  key={column.key}
+      <Typography variant="subtitle1">Sentences</Typography>
+      <Stack spacing={1.5}>
+        {(materials?.sentences ?? []).length ? (
+          materials.sentences.map((sentence) => (
+            <Paper key={sentence.key} variant="outlined" sx={{ p: 1.5 }}>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap" useFlexGap>
+                <Typography variant="subtitle2">{sentence.label}</Typography>
+                <Chip
+                  size="small"
                   variant="outlined"
-                  sx={{ width: 176, flexShrink: 0, p: 1.25 }}
-                >
-                  <Typography variant="subtitle2">{column.label}</Typography>
-                  <Typography variant="body2" noWrap title={column.name || 'No list assigned'}>
-                    {column.name || 'No list assigned'}
+                  label={formatScoreTally(tallyScores(sentence.words.map((item) => item.key), scores))}
+                />
+              </Stack>
+              <Stack direction="row" flexWrap="wrap" useFlexGap spacing={0.75}>
+                {sentence.words.map((item) => (
+                  <ScoreWordButton
+                    key={item.key}
+                    word={item.word}
+                    state={scores[item.key] || SCORE_UNSCORED}
+                    onToggle={() => toggleWord(item.key)}
+                  />
+                ))}
+              </Stack>
+            </Paper>
+          ))
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            No sentence assigned
+          </Typography>
+        )}
+      </Stack>
+
+      <Typography variant="subtitle1">Passages</Typography>
+      <Stack spacing={1.5}>
+        {(materials?.passages ?? []).length ? (
+          materials.passages.map((item) => {
+            const exposure = countConceptExposures(
+              savedLessons,
+              lesson,
+              item.conceptID,
+              item.concept,
+            )
+            return (
+              <Paper key={item.key} variant="outlined" sx={{ p: 1.5 }}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap" useFlexGap>
+                  <Typography variant="subtitle2">
+                    {item.title || item.label || 'Passage'}
                   </Typography>
-                  {column.concept ? (
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      {column.concept}
-                    </Typography>
+                  {item.concept ? (
+                    <Chip size="small" variant="outlined" label={item.concept} />
                   ) : null}
-                  <Stack direction="row" spacing={0.5} sx={{ mt: 0.75, mb: 1 }} flexWrap="wrap" useFlexGap>
+                  {item.concept || item.conceptID ? (
                     <Chip
                       size="small"
                       variant="outlined"
                       label={exposure === 0 ? 'First exposure' : `Exposed ${exposure}×`}
                     />
-                    <Chip size="small" variant="outlined" label={formatScoreTally(tally)} />
-                  </Stack>
-                  <Stack spacing={0.5}>
-                    {column.words.length ? (
-                      column.words.map((item) => (
-                        <ScoreWordButton
-                          key={item.key}
-                          word={item.word}
-                          state={scores[item.key] || SCORE_UNSCORED}
-                          onToggle={() => toggleWord(item.key)}
-                          fullWidth
-                        />
-                      ))
-                    ) : (
-                      <Typography variant="caption" color="text.secondary">
-                        No words
-                      </Typography>
-                    )}
-                  </Stack>
-                </Paper>
-              )
-            })}
-          </Box>
-
-          <Typography variant="subtitle1" sx={{ mb: 1 }}>
-            Sentences
-          </Typography>
-          <Stack spacing={1.5} sx={{ mb: 2 }}>
-            {(materials?.sentences ?? []).length ? (
-              (materials.sentences).map((sentence) => (
-                <Paper key={sentence.key} variant="outlined" sx={{ p: 1.5 }}>
-                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap" useFlexGap>
-                    <Typography variant="subtitle2">{sentence.label}</Typography>
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      label={formatScoreTally(tallyScores(sentence.words.map((item) => item.key), scores))}
+                  ) : null}
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={formatScoreTally(tallyScores(item.words.map((word) => word.key), scores))}
+                  />
+                </Stack>
+                <Stack direction="row" flexWrap="wrap" useFlexGap spacing={0.75}>
+                  {item.words.map((word) => (
+                    <ScoreWordButton
+                      key={word.key}
+                      word={word.word}
+                      state={scores[word.key] || SCORE_UNSCORED}
+                      onToggle={() => toggleWord(word.key)}
                     />
-                  </Stack>
-                  <Stack direction="row" flexWrap="wrap" useFlexGap spacing={0.75}>
-                    {sentence.words.map((item) => (
-                      <ScoreWordButton
-                        key={item.key}
-                        word={item.word}
-                        state={scores[item.key] || SCORE_UNSCORED}
-                        onToggle={() => toggleWord(item.key)}
-                      />
-                    ))}
-                  </Stack>
-                </Paper>
-              ))
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                No sentence assigned
-              </Typography>
-            )}
-          </Stack>
-
-          <Typography variant="subtitle1" sx={{ mb: 1 }}>
-            Passages
+                  ))}
+                </Stack>
+              </Paper>
+            )
+          })
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            No passage assigned
           </Typography>
-          <Stack spacing={1.5}>
-            {(materials?.passages ?? []).length ? (
-              materials.passages.map((item) => {
-                const exposure = countConceptExposures(
-                  savedLessons,
-                  loadedLesson,
-                  item.conceptID,
-                  item.concept,
-                )
-                return (
-                  <Paper key={item.key} variant="outlined" sx={{ p: 1.5 }}>
-                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap" useFlexGap>
-                      <Typography variant="subtitle2">
-                        {item.title || item.label || 'Passage'}
-                      </Typography>
-                      {item.concept ? (
-                        <Chip size="small" variant="outlined" label={item.concept} />
-                      ) : null}
-                      {item.concept || item.conceptID ? (
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          label={exposure === 0 ? 'First exposure' : `Exposed ${exposure}×`}
-                        />
-                      ) : null}
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        label={formatScoreTally(tallyScores(item.words.map((word) => word.key), scores))}
-                      />
-                    </Stack>
-                    <Stack direction="row" flexWrap="wrap" useFlexGap spacing={0.75}>
-                      {item.words.map((word) => (
-                        <ScoreWordButton
-                          key={word.key}
-                          word={word.word}
-                          state={scores[word.key] || SCORE_UNSCORED}
-                          onToggle={() => toggleWord(word.key)}
-                        />
-                      ))}
-                    </Stack>
-                  </Paper>
-                )
-              })
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                No passage assigned
-              </Typography>
-            )}
-          </Stack>
-        </>
-      ) : null}
+        )}
+      </Stack>
 
-      <Paper
-        elevation={8}
-        sx={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          zIndex: (theme) => theme.zIndex.snackbar,
-          p: 1,
-          display: 'flex',
-          gap: 1,
-          flexWrap: 'wrap',
-          maxWidth: 'calc(100vw - 48px)',
-        }}
-      >
-        <Button
-          variant="outlined"
-          startIcon={<DoneAllIcon />}
-          onClick={markAllCorrect}
-          disabled={!loadedLesson || !allKeys.length}
-        >
-          Mark all correct
-        </Button>
-        <Button
-          variant="outlined"
-          startIcon={<RestartAltIcon />}
-          onClick={clearScores}
-          disabled={!loadedLesson || !allKeys.length}
-        >
-          Clear scores
-        </Button>
-        <Button
-          variant="contained"
-          startIcon={<SaveIcon />}
-          onClick={() => void handleSave()}
-          disabled={!loadedLesson || !dirty || saving}
-        >
-          Save scores
-        </Button>
+      <Paper variant="outlined" sx={{ p: 2 }}>
+        <Typography variant="subtitle1">Lesson scores</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          Totals for this lesson after scoring lists, sentences, and passages.
+        </Typography>
+        <ScoreStat label="Total" tally={totalTally} />
+        <ScoreStat label="New concept" tally={newConceptTally} />
+        <ScoreStat label="Review concepts" tally={reviewTally} />
+        <ScoreStat label="Sentences" tally={sentenceTally} />
+        <ScoreStat label="Passages" tally={passageTally} />
       </Paper>
-    </Box>
+    </Stack>
   )
 }

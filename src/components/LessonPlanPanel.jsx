@@ -14,9 +14,11 @@ import {
 import PrintIcon from '@mui/icons-material/Print'
 import AddIcon from '@mui/icons-material/Add'
 import ViewListIcon from '@mui/icons-material/ViewList'
+import GradingIcon from '@mui/icons-material/Grading'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import LessonPlanTemplate from './LessonPlanTemplate'
 import CreateLessonStepper from './CreateLessonStepper'
+import DataEntryPanel from './DataEntryPanel'
 import {
   fetchStudentLessonPlan,
   fetchStudentLessons,
@@ -223,8 +225,14 @@ const SAVED_LESSON_COLUMNS = [
   { field: 'createdDateLabel', headerName: 'Created', width: 140 },
 ]
 
+const GRADE_LESSON_COLUMNS = [
+  ...SAVED_LESSON_COLUMNS,
+  { field: 'scoreLabel', headerName: 'Score', width: 130 },
+]
+
 const LESSON_MODE_VIEW = 0
 const LESSON_MODE_CREATE = 1
+const LESSON_MODE_GRADE = 2
 
 export default function LessonPlanPanel({
   student,
@@ -458,6 +466,10 @@ export default function LessonPlanPanel({
             || data?.snapshots?.lists?.newConcept?.name
             || ''
           const customName = data?.name || lesson.name || ''
+          const summary = data?.scoreSummary
+          const scoreLabel = summary?.scored
+            ? `${summary.correct}/${summary.scored}${summary.accuracy != null ? ` (${Math.round(summary.accuracy * 100)}%)` : ''}`
+            : '—'
           return {
             id: lesson.id,
             lessonNumber: lesson.lessonNumber ?? '',
@@ -467,6 +479,7 @@ export default function LessonPlanPanel({
             createdDateLabel: formatCreatedDate(lesson.createdAt) || '—',
             newConcept: newConcept || '—',
             name: formatLessonDisplayName(customName, newConcept, lesson.lessonNumber) || '—',
+            scoreLabel,
           }
         }),
     [savedLessons],
@@ -822,46 +835,10 @@ export default function LessonPlanPanel({
           >
             <Tab icon={<ViewListIcon />} iconPosition="start" label="View lesson plans" />
             <Tab icon={<AddIcon />} iconPosition="start" label="Create lesson" />
+            <Tab icon={<GradingIcon />} iconPosition="start" label="Grade Lesson Plans" />
           </Tabs>
 
-          {lessonMode === LESSON_MODE_VIEW ? (
-            <>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                Select a saved plan to preview it on the right. Switch to Create lesson to edit it.
-                Lesson date is when it is taught; Created is when you saved it.
-              </Typography>
-              <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
-                <DataGridPro
-                  rows={savedLessonRows}
-                  columns={SAVED_LESSON_COLUMNS}
-                  getRowId={(row) => row.id}
-                  onRowClick={(params) => {
-                    const lesson = savedLessons.find((item) => item.id === params.id)
-                    if (lesson) applyLesson(lesson)
-                  }}
-                  getRowClassName={(params) => (params.id === loadedLesson?.id ? 'Mui-selected' : '')}
-                  loading={loadingLessons}
-                  pagination
-                  pageSizeOptions={[10, 25, 50]}
-                  initialState={{
-                    pagination: { paginationModel: { pageSize: 10 } },
-                    sorting: { sortModel: [{ field: 'lessonDateLabel', sort: 'desc' }] },
-                  }}
-                  slots={{ toolbar: GridToolbar }}
-                  slotProps={{
-                    toolbar: {
-                      showQuickFilter: true,
-                      quickFilterProps: { debounceMs: 300 },
-                    },
-                  }}
-                  density="compact"
-                  localeText={{
-                    noRowsLabel: 'No saved lesson plans yet. Switch to Create lesson to make one.',
-                  }}
-                />
-              </Box>
-            </>
-          ) : (
+          {lessonMode === LESSON_MODE_CREATE ? (
             <>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 {loadedLesson
@@ -902,6 +879,47 @@ export default function LessonPlanPanel({
                 canCreate={canCreate}
               />
             </>
+          ) : (
+            <>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                {lessonMode === LESSON_MODE_GRADE
+                  ? 'Select a saved plan to score lists, sentences, and passages on the right. Lesson scores stay at the bottom of that panel.'
+                  : 'Select a saved plan to preview it on the right. Switch to Create lesson to edit it. Lesson date is when it is taught; Created is when you saved it.'}
+              </Typography>
+              <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
+                <DataGridPro
+                  rows={savedLessonRows}
+                  columns={lessonMode === LESSON_MODE_GRADE ? GRADE_LESSON_COLUMNS : SAVED_LESSON_COLUMNS}
+                  getRowId={(row) => row.id}
+                  onRowClick={(params) => {
+                    const lesson = savedLessons.find((item) => item.id === params.id)
+                    if (lesson) applyLesson(lesson)
+                  }}
+                  getRowClassName={(params) => (params.id === loadedLesson?.id ? 'Mui-selected' : '')}
+                  loading={loadingLessons}
+                  pagination
+                  pageSizeOptions={[10, 25, 50]}
+                  initialState={{
+                    pagination: { paginationModel: { pageSize: 10 } },
+                    sorting: { sortModel: [{ field: 'lessonDateLabel', sort: 'desc' }] },
+                  }}
+                  slots={{ toolbar: GridToolbar }}
+                  slotProps={{
+                    toolbar: {
+                      showQuickFilter: true,
+                      quickFilterProps: { debounceMs: 300 },
+                    },
+                  }}
+                  density="compact"
+                  localeText={{
+                    noRowsLabel:
+                      lessonMode === LESSON_MODE_GRADE
+                        ? 'No saved lesson plans yet. Switch to Create lesson to make one, then grade it here.'
+                        : 'No saved lesson plans yet. Switch to Create lesson to make one.',
+                  }}
+                />
+              </Box>
+            </>
           )}
         </Paper>
       </Box>
@@ -913,9 +931,9 @@ export default function LessonPlanPanel({
           top: { md: 88 },
           maxHeight: { md: 'calc(100vh - 104px)' },
           overflow: { md: 'auto' },
-          bgcolor: '#f5f5f6',
-          py: 1.5,
-          px: { xs: 1, sm: 1.5 },
+          bgcolor: lessonMode === LESSON_MODE_GRADE ? 'transparent' : '#f5f5f6',
+          py: lessonMode === LESSON_MODE_GRADE ? 0 : 1.5,
+          px: lessonMode === LESSON_MODE_GRADE ? 0 : { xs: 1, sm: 1.5 },
           borderRadius: 1,
           '@media print': {
             position: 'static',
@@ -926,34 +944,49 @@ export default function LessonPlanPanel({
           },
         }}
       >
-        <Stack
-          direction="row"
-          justifyContent="flex-end"
-          sx={{ mb: 1, '@media print': { display: 'none' } }}
-        >
-          <Button
-            variant="contained"
-            startIcon={<PrintIcon />}
-            onClick={handlePrint}
-            disabled={loading}
-          >
-            Print Lesson Plan
-          </Button>
-        </Stack>
-        <LessonPlanTemplate
-          ref={printRef}
-          student={payload?.student ?? student}
-          reviewLists={reviewLists}
-          newConceptList={newConceptList}
-          sentences={selectedSentences}
-          passages={selectedPassages}
-          passage={selectedPassage}
-          date={dateLabel}
-          lessonNumber={lessonNumber}
-          lessonName={lessonDisplayName}
-          instructor={instructor}
-          soapNotes={lessonNotes}
-        />
+        {lessonMode === LESSON_MODE_GRADE ? (
+          <DataEntryPanel
+            student={student}
+            lesson={loadedLesson}
+            savedLessons={savedLessons}
+            setError={setError}
+            onLessonsChanged={loadSavedLessons}
+            onLessonUpdated={(next) => {
+              if (next) setLoadedLesson(next)
+            }}
+          />
+        ) : (
+          <>
+            <Stack
+              direction="row"
+              justifyContent="flex-end"
+              sx={{ mb: 1, '@media print': { display: 'none' } }}
+            >
+              <Button
+                variant="contained"
+                startIcon={<PrintIcon />}
+                onClick={handlePrint}
+                disabled={loading}
+              >
+                Print Lesson Plan
+              </Button>
+            </Stack>
+            <LessonPlanTemplate
+              ref={printRef}
+              student={payload?.student ?? student}
+              reviewLists={reviewLists}
+              newConceptList={newConceptList}
+              sentences={selectedSentences}
+              passages={selectedPassages}
+              passage={selectedPassage}
+              date={dateLabel}
+              lessonNumber={lessonNumber}
+              lessonName={lessonDisplayName}
+              instructor={instructor}
+              soapNotes={lessonNotes}
+            />
+          </>
+        )}
       </Box>
     </Box>
   )
