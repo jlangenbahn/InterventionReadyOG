@@ -197,6 +197,9 @@ export default function ReportingPanel({ student, concepts = [], wordsByConceptI
 
   return (
     <Box>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+        Word encounters and concept mastery for this student.
+      </Typography>
       <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
         {loading ? <CircularProgress size={14} /> : null}
         {MASTERY_STATUSES.map((status) => {
@@ -234,14 +237,7 @@ export default function ReportingPanel({ student, concepts = [], wordsByConceptI
         </Alert>
       ) : null}
 
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: 'minmax(220px, 34%) minmax(0, 1fr)' },
-          gap: 1,
-          mb: 1,
-        }}
-      >
+      <Box sx={{ mb: 1.5 }}>
         <ConceptCountChart
           compact
           rows={masteryInventory.chartRows}
@@ -251,40 +247,46 @@ export default function ReportingPanel({ student, concepts = [], wordsByConceptI
           emptyLabel="Mark concepts in Scope & Sequence to see mastery here."
           maxBars={3}
         />
-        <Paper variant="outlined" sx={{ p: 1, minWidth: 0 }}>
-          <Box sx={{ height: 180, width: '100%' }}>
-            <DataGridPro
-              rows={masteryInventory.rows}
-              columns={MASTERY_COLUMNS}
-              getRowId={(row) => row.id}
-              density="compact"
-              hideFooterSelectedRowCount
-              pagination
-              pageSizeOptions={[10, 25]}
-              initialState={{
-                pagination: { paginationModel: { pageSize: 10 } },
-                sorting: { sortModel: [{ field: 'masteryStatus', sort: 'asc' }] },
-              }}
-              slots={{ toolbar: GridToolbar }}
-              slotProps={{ toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 300 } } }}
-              localeText={{ noRowsLabel: 'No in-scope concepts yet.' }}
-              getRowClassName={(params) => `mastery-row-${params.row.masteryStatus}`}
-              sx={{
-                '& .mastery-row-new': { bgcolor: MASTERY_ROW_COLORS.new.bg },
-                '& .mastery-row-review': { bgcolor: MASTERY_ROW_COLORS.review.bg, color: MASTERY_ROW_COLORS.review.color },
-                '& .mastery-row-mastered': {
-                  bgcolor: MASTERY_ROW_COLORS.mastered.bg,
-                  color: MASTERY_ROW_COLORS.mastered.color,
-                  '& .MuiDataGrid-cell': { color: MASTERY_ROW_COLORS.mastered.color },
-                },
-              }}
-            />
-          </Box>
-        </Paper>
       </Box>
 
+      <Paper variant="outlined" sx={{ p: 1, mb: 1.5, minWidth: 0 }}>
+        <Box
+          sx={{
+            height: { xs: 420, md: 'clamp(420px, calc(100vh - 360px), 640px)' },
+            width: '100%',
+          }}
+        >
+          <DataGridPro
+            rows={masteryInventory.rows}
+            columns={MASTERY_COLUMNS}
+            getRowId={(row) => row.id}
+            density="compact"
+            hideFooterSelectedRowCount
+            pagination
+            pageSizeOptions={[25, 50, 100]}
+            initialState={{
+              pagination: { paginationModel: { pageSize: 25 } },
+              sorting: { sortModel: [{ field: 'masteryStatus', sort: 'asc' }] },
+            }}
+            slots={{ toolbar: GridToolbar }}
+            slotProps={{ toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 300 } } }}
+            localeText={{ noRowsLabel: 'No in-scope concepts yet.' }}
+            getRowClassName={(params) => `mastery-row-${params.row.masteryStatus}`}
+            sx={{
+              '& .mastery-row-new': { bgcolor: MASTERY_ROW_COLORS.new.bg },
+              '& .mastery-row-review': { bgcolor: MASTERY_ROW_COLORS.review.bg, color: MASTERY_ROW_COLORS.review.color },
+              '& .mastery-row-mastered': {
+                bgcolor: MASTERY_ROW_COLORS.mastered.bg,
+                color: MASTERY_ROW_COLORS.mastered.color,
+                '& .MuiDataGrid-cell': { color: MASTERY_ROW_COLORS.mastered.color },
+              },
+            }}
+          />
+        </Box>
+      </Paper>
+
       <Paper variant="outlined" sx={{ p: 1 }}>
-        <Box sx={{ height: 260, width: '100%' }}>
+        <Box sx={{ height: { xs: 320, md: 400 }, width: '100%' }}>
           <DataGridPro
             rows={wordRows}
             columns={WORD_COLUMNS}
