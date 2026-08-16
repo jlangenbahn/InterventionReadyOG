@@ -160,6 +160,18 @@ export async function fetchStudentLessons(studentId) {
   return (owned ?? []).filter((item) => item?.id && item.studentID === studentId)
 }
 
+export async function fetchLessonsForStudents(studentIds = []) {
+  const uniqueIds = [...new Set((studentIds ?? []).filter(Boolean))]
+  if (!uniqueIds.length) return []
+  const results = await Promise.all(uniqueIds.map((studentId) => fetchStudentLessons(studentId)))
+  return results.flatMap((lessons, index) =>
+    (lessons ?? []).map((lesson) => ({
+      ...lesson,
+      studentID: lesson.studentID || uniqueIds[index],
+    })),
+  )
+}
+
 export async function saveStudentLesson({
   id,
   studentID,

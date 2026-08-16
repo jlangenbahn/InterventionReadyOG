@@ -168,17 +168,6 @@ function formatLessonDate(value) {
   }).format(new Date(year, month - 1, day))
 }
 
-function formatCreatedDate(value) {
-  if (!value) return ''
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return formatLessonDate(value)
-  return new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(parsed)
-}
-
 function snapshotList(list) {
   if (!list) return null
   return {
@@ -226,7 +215,6 @@ const SAVED_LESSON_COLUMNS = [
   { field: 'lessonDateLabel', headerName: 'Lesson date', width: 130 },
   { field: 'name', headerName: 'Lesson', flex: 1.2, minWidth: 180 },
   { field: 'newConcept', headerName: 'New concept', flex: 1, minWidth: 140 },
-  { field: 'createdDateLabel', headerName: 'Created', width: 140 },
 ]
 
 const GRADE_LESSON_COLUMNS = [
@@ -236,8 +224,7 @@ const GRADE_LESSON_COLUMNS = [
 
 const LESSON_MODE_VIEW = 0
 const LESSON_MODE_GRADE = 1
-const LESSON_MODE_SHARE = 2
-const LESSON_MODE_CREATE = 3
+const LESSON_MODE_CREATE = 2
 
 export default function LessonPlanPanel({
   student,
@@ -486,7 +473,6 @@ export default function LessonPlanPanel({
             date: lesson.date,
             createdAt: lesson.createdAt,
             lessonDateLabel: formatLessonDate(lesson.date) || '—',
-            createdDateLabel: formatCreatedDate(lesson.createdAt) || '—',
             newConcept: newConcept || '—',
             name: formatLessonDisplayName(customName, newConcept, lesson.lessonNumber) || '—',
             scoreLabel,
@@ -866,7 +852,6 @@ export default function LessonPlanPanel({
           >
             <Tab icon={<ViewListIcon />} iconPosition="start" label="View lesson plans" />
             <Tab icon={<GradingIcon />} iconPosition="start" label="Grade Lesson Plans" />
-            <Tab icon={<ShareIcon />} iconPosition="start" label="Share Lessons" />
             <Tab icon={<AddIcon />} iconPosition="start" label="Create lesson" />
           </Tabs>
 
@@ -915,9 +900,7 @@ export default function LessonPlanPanel({
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 {lessonMode === LESSON_MODE_GRADE
                   ? 'Select a saved plan to score lists, sentences, and passages on the right. Lesson scores stay at the bottom of that panel.'
-                  : lessonMode === LESSON_MODE_SHARE
-                    ? 'Copy a saved plan onto other students. Each copy belongs to that student and is scored separately.'
-                    : 'Select a saved plan to preview it on the right. Lesson date is when it is taught; Created is when you saved it.'}
+                  : 'Select a saved plan to preview it on the right. Use the share icon to copy a plan onto other students.'}
               </Typography>
               <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
                 <DataGridPro
@@ -952,9 +935,7 @@ export default function LessonPlanPanel({
                     noRowsLabel:
                       lessonMode === LESSON_MODE_GRADE
                         ? 'No saved lesson plans yet. Switch to Create lesson to make one, then grade it here.'
-                        : lessonMode === LESSON_MODE_SHARE
-                          ? 'No saved lesson plans yet. Create a plan first, then share it here.'
-                          : 'No saved lesson plans yet. Switch to Create lesson to make one.',
+                        : 'No saved lesson plans yet. Switch to Create lesson to make one.',
                   }}
                 />
               </Box>
