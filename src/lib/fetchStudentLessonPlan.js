@@ -231,6 +231,17 @@ async function listStudentSentences(studentId) {
   }
 }
 
+export async function fetchStudentSentencesAndPassages(studentId) {
+  if (!studentId) return { sentences: [], passages: [] }
+  const [sentences, passages] = await Promise.all([
+    listStudentSentences(studentId),
+    listStudentPassages(studentId),
+  ])
+  sentences.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
+  passages.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
+  return { sentences, passages }
+}
+
 /**
  * Load a student plus their sentences, passages, and lessons.
  * Lists are loaded separately via fetchStudentLists so a Student.get failure
@@ -253,19 +264,9 @@ export async function fetchStudentLessonPlan(studentId) {
     student = { id: studentId }
   }
 
-  const [sentenceItems, passageItems] = await Promise.all([
-    listStudentSentences(studentId),
-    listStudentPassages(studentId),
-  ])
-
+  const { sentences, passages } = await fetchStudentSentencesAndPassages(studentId)
   const lists = []
-  const sentences = sentenceItems
-  const passages = passageItems
   const lessons = asArray(student?.Lessons)
-
-  lists.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
-  sentences.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
-  passages.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
 
   return {
     student,

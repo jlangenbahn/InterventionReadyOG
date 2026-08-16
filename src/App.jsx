@@ -45,7 +45,7 @@ import SaveIcon from '@mui/icons-material/Save'
 import SearchIcon from '@mui/icons-material/Search'
 import LessonPlanPanel from './components/LessonPlanPanel'
 import DataPanel from './components/DataPanel'
-import CreateMultiWordPanel from './components/CreateMultiWordPanel'
+import MultiWordPanel from './components/MultiWordPanel'
 import { fetchStudentLists } from './lib/fetchStudentLessonPlan'
 
 const client = generateClient()
@@ -1392,7 +1392,7 @@ function AppShell({ user, signOut }) {
               <Tab label="Lesson Plan" />
               <Tab label="Scope & Sequence" />
               <Tab label="Concepts & Lists" />
-              <Tab label="Create Multi-Word" />
+              <Tab label="Multi Word" />
               <Tab label="Data" />
             </Tabs>
 
@@ -1433,7 +1433,7 @@ function AppShell({ user, signOut }) {
                 setError={setError}
               />
             ) : mainTab === TAB_MULTI_WORD ? (
-              <CreateMultiWordPanel
+              <MultiWordPanel
                 student={selectedStudent}
                 concepts={concepts}
                 wordsByConceptId={wordsByConceptId}
