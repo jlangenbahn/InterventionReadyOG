@@ -60,7 +60,8 @@ const PRINT_PAGE_STYLE = `
     max-width: 100% !important;
     border-radius: 0 !important;
   }
-  .lesson-plan-page-2 {
+  .lesson-plan-page-2,
+  .lesson-plan-page-3 {
     break-before: page;
     page-break-before: always;
   }

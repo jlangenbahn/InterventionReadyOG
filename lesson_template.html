@@ -105,8 +105,17 @@
             table-layout: fixed;
         }
 
+        .exhibit-words.exhibit-review th,
+        .exhibit-words.exhibit-review td {
+            width: 33.33%;
+        }
+
+        .exhibit-words.exhibit-new th,
+        .exhibit-words.exhibit-new td {
+            width: 100%;
+        }
+
         .exhibit-words th {
-            width: 25%;
             text-align: left;
             vertical-align: bottom;
             padding: 0 10px 6px 0;
@@ -116,18 +125,18 @@
         }
 
         .exhibit-words td {
-            width: 25%;
             vertical-align: top;
             padding: 0 10px 0 0;
             line-height: 2;
             font-size: 14px;
         }
 
-        .page-2 {
+        .page-2,
+        .page-3 {
             margin-top: 24px;
         }
 
-        /* Print: cover sheet then student exhibit on a second page */
+        /* Print: cover sheet, three review lists, then new concept on its own page */
         @media print {
             body {
                 background-color: transparent;
@@ -142,7 +151,8 @@
                 border: 1px solid var(--border);
                 background: transparent;
             }
-            .page-2 {
+            .page-2,
+            .page-3 {
                 break-before: page;
                 page-break-before: always;
                 margin-top: 0;
@@ -265,18 +275,17 @@
         </div>
     </div>
 
-    <!-- PAGE 2: STUDENT EXHIBIT -->
+    <!-- PAGE 2: THREE REVIEW CONCEPTS -->
     <div class="paper page-2">
         <div class="screen-only" style="font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(0,0,0,0.54); margin-bottom: 10px;">
-            Page 2 · Student exhibit
+            Page 2 · Review concepts
         </div>
-        <table class="exhibit-words">
+        <table class="exhibit-words exhibit-review">
             <thead>
                 <tr>
                     <th>Review concept #1</th>
                     <th>Review concept #2</th>
                     <th>Review concept #3</th>
-                    <th>The new concept list</th>
                 </tr>
             </thead>
             <tbody>
@@ -284,6 +293,24 @@
                     <td>&nbsp;</td>
                     <td>&nbsp;</td>
                     <td>&nbsp;</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- PAGE 3: NEW CONCEPT -->
+    <div class="paper page-3">
+        <div class="screen-only" style="font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(0,0,0,0.54); margin-bottom: 10px;">
+            Page 3 · New concept
+        </div>
+        <table class="exhibit-words exhibit-new">
+            <thead>
+                <tr>
+                    <th>The new concept list</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
                     <td>&nbsp;</td>
                 </tr>
             </tbody>

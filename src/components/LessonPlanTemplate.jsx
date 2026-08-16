@@ -4,12 +4,13 @@ import { Box, Paper, Typography } from '@mui/material'
 const WHAT_SPELLS = ['/a/ cat', '/e/ pet', '/i/ itch', '/o/ octopus', '/u/ up', '/ck/ luck', '/sk/ mask', '/ft/ gift']
 const SIMULTANEOUS_ORAL = ['task', 'shaft', 'pluck']
 
-const EXHIBIT_COLUMNS = [
+const REVIEW_COLUMNS = [
   { key: 'review1', fallback: 'Review concept #1' },
   { key: 'review2', fallback: 'Review concept #2' },
   { key: 'review3', fallback: 'Review concept #3' },
-  { key: 'newConcept', fallback: 'The new concept list' },
 ]
+
+const NEW_CONCEPT_COLUMN = { key: 'newConcept', fallback: 'The new concept list' }
 
 const paperSx = {
   bgcolor: '#ffffff',
@@ -83,7 +84,6 @@ const exhibitTableSx = {
 }
 
 const exhibitHeaderSx = {
-  width: '25%',
   verticalAlign: 'bottom',
   pr: '10px',
   pb: '6px',
@@ -93,7 +93,6 @@ const exhibitHeaderSx = {
 }
 
 const exhibitCellSx = {
-  width: '25%',
   verticalAlign: 'top',
   pr: '10px',
   py: 0,
@@ -154,22 +153,19 @@ function passageText(passage) {
   return `${title}${passage.text || ''}`.trim()
 }
 
-function StudentExhibit({ reviewLists, newConceptList }) {
-  const lists = [
-    reviewLists[0],
-    reviewLists[1],
-    reviewLists[2],
-    newConceptList,
-  ]
-  const columns = lists.map((list) => listWordLabels(list))
-  const rowCount = Math.max(1, ...columns.map((words) => words.length))
+function WordListExhibit({ lists, columns }) {
+  const wordColumns = lists.map((list) => listWordLabels(list))
+  const rowCount = Math.max(1, ...wordColumns.map((words) => words.length))
+  const columnWidth = `${100 / Math.max(columns.length, 1)}%`
+  const headerSx = { ...exhibitHeaderSx, width: columnWidth }
+  const cellSx = { ...exhibitCellSx, width: columnWidth }
 
   return (
     <Box component="table" sx={exhibitTableSx}>
       <Box component="thead">
         <Box component="tr">
-          {EXHIBIT_COLUMNS.map((column, index) => (
-            <Box component="th" key={column.key} sx={exhibitHeaderSx}>
+          {columns.map((column, index) => (
+            <Box component="th" key={column.key} sx={headerSx}>
               {listDisplayName(lists[index], column.fallback)}
             </Box>
           ))}
@@ -178,8 +174,8 @@ function StudentExhibit({ reviewLists, newConceptList }) {
       <Box component="tbody">
         {Array.from({ length: rowCount }, (_, row) => (
           <Box component="tr" key={row}>
-            {columns.map((words, col) => (
-              <Box component="td" key={col} sx={exhibitCellSx}>
+            {wordColumns.map((words, col) => (
+              <Box component="td" key={col} sx={cellSx}>
                 {words[row] || '\u00a0'}
               </Box>
             ))}
@@ -190,8 +186,45 @@ function StudentExhibit({ reviewLists, newConceptList }) {
   )
 }
 
+function ExhibitPage({ pageNumber, label, children }) {
+  return (
+    <Paper
+      elevation={0}
+      className={`lesson-plan-page lesson-plan-page-${pageNumber}`}
+      sx={{
+        ...paperSx,
+        mb: 2,
+        '@media print': {
+          ...paperSx['@media print'],
+          mb: 0,
+          breakBefore: 'page',
+          pageBreakBefore: 'always',
+        },
+      }}
+    >
+      <Typography
+        className="lesson-plan-screen-only"
+        component="div"
+        sx={{
+          fontSize: '10px',
+          fontWeight: 700,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: 'rgba(0,0,0,0.54)',
+          mb: '10px',
+          '@media print': { display: 'none' },
+        }}
+      >
+        Page {pageNumber} · {label}
+      </Typography>
+      {children}
+    </Paper>
+  )
+}
+
 /**
- * Printable lesson-plan layout: cover sheet (page 1) plus student word-list exhibit (page 2).
+ * Printable lesson-plan layout: cover sheet (page 1), three review lists (page 2),
+ * and the new concept list (page 3).
  */
 const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
   {
@@ -373,35 +406,13 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
         </Box>
       </Paper>
 
-      <Paper
-        elevation={0}
-        className="lesson-plan-page lesson-plan-page-2"
-        sx={{
-          ...paperSx,
-          '@media print': {
-            ...paperSx['@media print'],
-            breakBefore: 'page',
-            pageBreakBefore: 'always',
-          },
-        }}
-      >
-        <Typography
-          className="lesson-plan-screen-only"
-          component="div"
-          sx={{
-            fontSize: '10px',
-            fontWeight: 700,
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-            color: 'rgba(0,0,0,0.54)',
-            mb: '10px',
-            '@media print': { display: 'none' },
-          }}
-        >
-          Page 2 · Student exhibit
-        </Typography>
-        <StudentExhibit reviewLists={paddedReview} newConceptList={newConceptList} />
-      </Paper>
+      <ExhibitPage pageNumber={2} label="Review concepts">
+        <WordListExhibit lists={paddedReview} columns={REVIEW_COLUMNS} />
+      </ExhibitPage>
+
+      <ExhibitPage pageNumber={3} label="New concept">
+        <WordListExhibit lists={[newConceptList]} columns={[NEW_CONCEPT_COLUMN]} />
+      </ExhibitPage>
     </Box>
   )
 })
