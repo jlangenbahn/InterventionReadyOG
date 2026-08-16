@@ -16,6 +16,7 @@ import PrintIcon from '@mui/icons-material/Print'
 import AddIcon from '@mui/icons-material/Add'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import GradingIcon from '@mui/icons-material/Grading'
+import EditIcon from '@mui/icons-material/Edit'
 import ShareIcon from '@mui/icons-material/Share'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
@@ -492,12 +493,26 @@ export default function LessonPlanPanel({
     () => ({
       field: 'actions',
       headerName: '',
-      width: 96,
+      width: 132,
       sortable: false,
       filterable: false,
       disableColumnMenu: true,
       renderCell: (params) => (
         <Stack direction="row" spacing={0}>
+          <IconButton
+            size="small"
+            aria-label={`Edit ${params.row.name || 'lesson'}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              const lesson = savedLessons.find((item) => item.id === params.id)
+              if (lesson) {
+                applyLesson(lesson)
+                setLessonMode(LESSON_MODE_CREATE)
+              }
+            }}
+          >
+            <EditIcon fontSize="small" />
+          </IconButton>
           <IconButton
             size="small"
             aria-label={`Share ${params.row.name || 'lesson'}`}
@@ -895,9 +910,9 @@ export default function LessonPlanPanel({
             variant="fullWidth"
             sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
           >
-            <Tab icon={<ViewListIcon />} iconPosition="start" label="View lesson plans" />
-            <Tab icon={<GradingIcon />} iconPosition="start" label="Grade Lesson Plans" />
-            <Tab icon={<AddIcon />} iconPosition="start" label="Create lesson" />
+            <Tab icon={<ViewListIcon />} iconPosition="start" label="View" />
+            <Tab icon={<GradingIcon />} iconPosition="start" label="Grade" />
+            <Tab icon={<AddIcon />} iconPosition="start" label="Create" />
           </Tabs>
 
           {lessonMode === LESSON_MODE_CREATE ? (
@@ -945,7 +960,7 @@ export default function LessonPlanPanel({
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 {lessonMode === LESSON_MODE_GRADE
                   ? 'Select a saved plan to score lists, sentences, and passages on the right. Lesson scores stay at the bottom of that panel.'
-                  : 'Select a saved plan to preview it on the right. Share copies a plan onto other students. Delete removes it from this student.'}
+                  : 'Select a saved plan to preview it on the right. Edit opens it so you can change materials. Share copies a plan onto other students. Delete removes it from this student.'}
               </Typography>
               <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
                 <DataGridPro
@@ -979,8 +994,8 @@ export default function LessonPlanPanel({
                   localeText={{
                     noRowsLabel:
                       lessonMode === LESSON_MODE_GRADE
-                        ? 'No saved lesson plans yet. Switch to Create lesson to make one, then grade it here.'
-                        : 'No saved lesson plans yet. Switch to Create lesson to make one.',
+                        ? 'No saved lesson plans yet. Switch to Create to make one, then grade it here.'
+                        : 'No saved lesson plans yet. Switch to Create to make one.',
                   }}
                 />
               </Box>
@@ -1028,6 +1043,15 @@ export default function LessonPlanPanel({
               justifyContent="flex-end"
               sx={{ mb: 1, '@media print': { display: 'none' } }}
             >
+              {loadedLesson && lessonMode === LESSON_MODE_VIEW ? (
+                <Button
+                  variant="outlined"
+                  startIcon={<EditIcon />}
+                  onClick={() => setLessonMode(LESSON_MODE_CREATE)}
+                >
+                  Edit
+                </Button>
+              ) : null}
               {loadedLesson ? (
                 <Button
                   color="error"
