@@ -80,3 +80,23 @@ export async function saveInstructorGroup({ id, name, studentIds = [] }) {
 
   return { ...group, studentIds: uniqueIds }
 }
+
+export async function deleteInstructorGroup(groupId) {
+  if (!groupId) throw new Error('Group is required')
+  if (!client.models.Group) {
+    throw new Error('Groups are still deploying. Wait for Amplify to finish, then try again.')
+  }
+
+  if (client.models.GroupStudent) {
+    const links = (await listAll(client.models.GroupStudent).catch(() => []))
+      .filter((link) => link?.groupId === groupId && link?.id)
+    const results = await Promise.all(
+      links.map((link) => client.models.GroupStudent.delete({ id: link.id })),
+    )
+    const errors = results.flatMap((result) => result.errors ?? [])
+    if (errors.length) throw new Error(errors.map((item) => item.message).join(', '))
+  }
+
+  const result = await client.models.Group.delete({ id: groupId })
+  if (result.errors?.length) throw new Error(result.errors.map((item) => item.message).join(', '))
+}

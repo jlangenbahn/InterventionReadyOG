@@ -52,7 +52,7 @@ import ConceptsCatalogPanel from './components/ConceptsCatalogPanel'
 import GroupPanel from './components/GroupPanel'
 import ConfirmDeleteDialog from './components/ConfirmDeleteDialog'
 import { fetchStudentLists } from './lib/fetchStudentLessonPlan'
-import { fetchInstructorGroups, saveInstructorGroup } from './lib/groups'
+import { deleteInstructorGroup, fetchInstructorGroups, saveInstructorGroup } from './lib/groups'
 import { deleteStudentCascade, updateStudent } from './lib/crudRecords'
 
 const client = generateClient()
@@ -711,6 +711,8 @@ function AppShell({ user, signOut }) {
   const [selectedGroupId, setSelectedGroupId] = useState(null)
   const [creatingGroup, setCreatingGroup] = useState(false)
   const [savingGroup, setSavingGroup] = useState(false)
+  const [groupToDelete, setGroupToDelete] = useState(null)
+  const [deletingGroup, setDeletingGroup] = useState(false)
   const [studentDialogOpen, setStudentDialogOpen] = useState(false)
   const [studentFormMode, setStudentFormMode] = useState('create')
   const [studentForm, setStudentForm] = useState({
@@ -952,6 +954,34 @@ function AppShell({ user, signOut }) {
     setStudentToDelete(student)
   }
 
+  function askDeleteGroup(group) {
+    if (!group?.id) return
+    setGroupToDelete(group)
+  }
+
+  async function handleConfirmDeleteGroup() {
+    const group = groupToDelete
+    if (!group?.id) return
+    setDeletingGroup(true)
+    try {
+      await deleteInstructorGroup(group.id)
+      const remaining = groups.filter((item) => item.id !== group.id)
+      setGroups(remaining)
+      if (selectedGroupId === group.id) {
+        const nextGroup = remaining[0] ?? null
+        setSelectedGroupId(nextGroup?.id ?? null)
+        setCreatingGroup(false)
+        if (!nextGroup) setSelectedStudentId(students[0]?.id ?? null)
+      }
+      setGroupToDelete(null)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete group')
+    } finally {
+      setDeletingGroup(false)
+    }
+  }
+
   async function handleSaveStudent(event) {
     event.preventDefault()
     if (!studentForm.firstName.trim() && !studentForm.lastName.trim()) return
@@ -1165,19 +1195,41 @@ function AppShell({ user, signOut }) {
           </Box>
         ) : (
           <List dense sx={{ overflow: 'auto', flex: '1 1 50%' }}>
-            {groups.map((group) => (
-              <ListItemButton
-                key={group.id}
-                selected={!creatingGroup && group.id === selectedGroupId}
-                onClick={() => handleSelectGroup(group.id)}
-              >
-                <GroupsIcon fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
-                <ListItemText
-                  primary={group.name || 'Untitled group'}
-                  secondary={`${(group.studentIds ?? []).length} students`}
-                />
-              </ListItemButton>
-            ))}
+            {groups.map((group) => {
+              const groupName = group.name || 'Untitled group'
+              return (
+                <ListItem
+                  key={group.id}
+                  disablePadding
+                  secondaryAction={
+                    <Tooltip title={`Delete ${groupName}`}>
+                      <IconButton
+                        edge="end"
+                        size="small"
+                        aria-label={`Delete ${groupName}`}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          askDeleteGroup(group)
+                        }}
+                      >
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  }
+                >
+                  <ListItemButton
+                    selected={!creatingGroup && group.id === selectedGroupId}
+                    onClick={() => handleSelectGroup(group.id)}
+                  >
+                    <GroupsIcon fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
+                    <ListItemText
+                      primary={groupName}
+                      secondary={`${(group.studentIds ?? []).length} students`}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              )
+            })}
           </List>
         )}
       </Drawer>
@@ -1208,6 +1260,19 @@ function AppShell({ user, signOut }) {
                   variant="outlined"
                   label={`${(selectedGroup?.studentIds ?? []).length} students`}
                 />
+              ) : null}
+              {!creatingGroup && selectedGroup ? (
+                <>
+                  <Box sx={{ flexGrow: 1 }} />
+                  <Button
+                    size="small"
+                    color="error"
+                    startIcon={<DeleteOutlineIcon />}
+                    onClick={() => askDeleteGroup(selectedGroup)}
+                  >
+                    Delete
+                  </Button>
+                </>
               ) : null}
             </Stack>
             <GroupPanel
@@ -1354,6 +1419,20 @@ function AppShell({ user, signOut }) {
         deleting={deletingStudent}
         onClose={() => !deletingStudent && setStudentToDelete(null)}
         onConfirm={() => void handleConfirmDeleteStudent()}
+      />
+
+      <ConfirmDeleteDialog
+        open={Boolean(groupToDelete)}
+        title="Delete this group?"
+        description={
+          groupToDelete
+            ? `Delete “${groupToDelete.name || 'Untitled group'}”? Students and their lesson plans stay. Only this group is removed.`
+            : ''
+        }
+        confirmLabel="Delete group"
+        deleting={deletingGroup}
+        onClose={() => !deletingGroup && setGroupToDelete(null)}
+        onConfirm={() => void handleConfirmDeleteGroup()}
       />
 
       <Dialog open={Boolean(navBlock)} onClose={() => setNavBlock(null)}>
