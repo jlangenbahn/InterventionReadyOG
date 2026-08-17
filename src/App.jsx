@@ -1119,17 +1119,9 @@ function AppShell({ user, signOut }) {
           </Box>
         ) : students.length === 0 ? (
           <Box sx={{ p: 2 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              No students yet. Start fresh by adding your first student.
+            <Typography variant="body2" color="text.secondary">
+              No students yet. Click + to add your first student.
             </Typography>
-            <Button
-              fullWidth
-              variant="outlined"
-              startIcon={<AddIcon />}
-              onClick={openCreateStudent}
-            >
-              Add student
-            </Button>
           </Box>
         ) : (
           <List dense sx={{ overflow: 'auto', flex: '1 1 50%' }}>
