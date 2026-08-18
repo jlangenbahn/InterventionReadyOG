@@ -10,7 +10,49 @@ const REVIEW_COLUMNS = [
   { key: 'review3', fallback: 'Review concept #3' },
 ]
 
-const NEW_CONCEPT_COLUMN = { key: 'newConcept', fallback: 'The new concept list' }
+const READER_FONT_FAMILY = '"Century Gothic", "Comic Sans MS", Andika, sans-serif'
+
+const readerPaperSx = {
+  bgcolor: '#ffffff',
+  width: '100%',
+  maxWidth: '800px',
+  mx: 'auto',
+  p: '20px',
+  borderRadius: '4px',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+  color: '#333333',
+  fontFamily: READER_FONT_FAMILY,
+  fontSize: '24px',
+  fontWeight: 400,
+  fontStyle: 'normal',
+  lineHeight: 1.6,
+  letterSpacing: '0.04em',
+  textAlign: 'left',
+  textTransform: 'none',
+  textDecoration: 'none',
+  '@media print': {
+    boxShadow: 'none',
+    p: 0,
+    maxWidth: '100%',
+    borderRadius: 0,
+    bgcolor: '#ffffff',
+    color: '#333333',
+  },
+}
+
+const readerBodySx = {
+  maxWidth: '60ch',
+  fontFamily: 'inherit',
+  fontSize: '24px',
+  fontWeight: 400,
+  fontStyle: 'normal',
+  lineHeight: 1.6,
+  letterSpacing: '0.04em',
+  textAlign: 'left',
+  textTransform: 'none',
+  textDecoration: 'none',
+  color: '#333333',
+}
 
 const paperSx = {
   bgcolor: '#ffffff',
@@ -153,6 +195,55 @@ function passageText(passage) {
   return `${title}${passage.text || ''}`.trim()
 }
 
+function passageBody(passage) {
+  if (!passage) return ''
+  if (typeof passage === 'string') return passage.trim()
+  return String(passage.text || '').trim()
+}
+
+function ReaderWordList({ list }) {
+  const words = listWordLabels(list)
+  return (
+    <Box sx={readerBodySx}>
+      {words.length
+        ? words.map((word, index) => (
+            <Box key={index} component="div">
+              {word}
+            </Box>
+          ))
+        : '\u00a0'}
+    </Box>
+  )
+}
+
+function ReaderPassages({ passages = [] }) {
+  const texts = (passages ?? []).map(passageBody).filter(Boolean)
+  return (
+    <Box sx={readerBodySx}>
+      {texts.length
+        ? texts.map((text, index) => (
+            <Box
+              key={index}
+              component="p"
+              sx={{
+                m: 0,
+                mb: index < texts.length - 1 ? '1.6em' : 0,
+                fontFamily: 'inherit',
+                fontWeight: 400,
+                fontStyle: 'normal',
+                textAlign: 'left',
+                textTransform: 'none',
+                textDecoration: 'none',
+              }}
+            >
+              {text}
+            </Box>
+          ))
+        : '\u00a0'}
+    </Box>
+  )
+}
+
 function WordListExhibit({ lists, columns, showHeaders = true }) {
   const wordColumns = lists.map((list) => listWordLabels(list))
   const rowCount = Math.max(1, ...wordColumns.map((words) => words.length))
@@ -188,16 +279,17 @@ function WordListExhibit({ lists, columns, showHeaders = true }) {
   )
 }
 
-function ExhibitPage({ pageNumber, label, children }) {
+function ExhibitPage({ pageNumber, label, reader = false, children }) {
+  const pageSx = reader ? readerPaperSx : paperSx
   return (
     <Paper
       elevation={0}
-      className={`lesson-plan-page lesson-plan-page-${pageNumber}`}
+      className={`lesson-plan-page lesson-plan-page-${pageNumber}${reader ? ' lesson-plan-reader-page' : ''}`}
       sx={{
-        ...paperSx,
+        ...pageSx,
         mb: 2,
         '@media print': {
-          ...paperSx['@media print'],
+          ...pageSx['@media print'],
           mb: 0,
           breakBefore: 'page',
           pageBreakBefore: 'always',
@@ -207,15 +299,30 @@ function ExhibitPage({ pageNumber, label, children }) {
       <Typography
         className="lesson-plan-screen-only"
         component="div"
-        sx={{
-          fontSize: '10px',
-          fontWeight: 700,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          color: 'rgba(0,0,0,0.54)',
-          mb: '10px',
-          '@media print': { display: 'none' },
-        }}
+        sx={
+          reader
+            ? {
+                fontFamily: READER_FONT_FAMILY,
+                fontSize: '14px',
+                fontWeight: 400,
+                fontStyle: 'normal',
+                letterSpacing: '0.02em',
+                textTransform: 'none',
+                textDecoration: 'none',
+                color: '#333333',
+                mb: '16px',
+                '@media print': { display: 'none' },
+              }
+            : {
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                color: 'rgba(0,0,0,0.54)',
+                mb: '10px',
+                '@media print': { display: 'none' },
+              }
+        }
       >
         Page {pageNumber} · {label}
       </Typography>
@@ -226,7 +333,7 @@ function ExhibitPage({ pageNumber, label, children }) {
 
 /**
  * Printable lesson-plan layout: cover sheet (page 1), three review lists (page 2),
- * and the new concept list (page 3).
+ * the new concept list for the child (page 3), and the passage for the child (page 4).
  */
 const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
   {
@@ -406,8 +513,12 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
         <WordListExhibit lists={paddedReview} columns={REVIEW_COLUMNS} showHeaders={false} />
       </ExhibitPage>
 
-      <ExhibitPage pageNumber={3} label="New concept">
-        <WordListExhibit lists={[newConceptList]} columns={[NEW_CONCEPT_COLUMN]} showHeaders={false} />
+      <ExhibitPage pageNumber={3} label="New concept" reader>
+        <ReaderWordList list={newConceptList} />
+      </ExhibitPage>
+
+      <ExhibitPage pageNumber={4} label="Passage" reader>
+        <ReaderPassages passages={filledPassages} />
       </ExhibitPage>
     </Box>
   )

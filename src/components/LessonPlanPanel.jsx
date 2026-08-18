@@ -68,9 +68,23 @@ const PRINT_PAGE_STYLE = `
     border-radius: 0 !important;
   }
   .lesson-plan-page-2,
-  .lesson-plan-page-3 {
+  .lesson-plan-page-3,
+  .lesson-plan-page-4 {
     break-before: page;
     page-break-before: always;
+  }
+  .lesson-plan-reader-page {
+    background: #ffffff !important;
+    color: #333333 !important;
+    font-family: "Century Gothic", "Comic Sans MS", Andika, sans-serif !important;
+    font-size: 24px !important;
+    font-weight: 400 !important;
+    font-style: normal !important;
+    line-height: 1.6 !important;
+    letter-spacing: 0.04em !important;
+    text-align: left !important;
+    text-transform: none !important;
+    text-decoration: none !important;
   }
   .lesson-plan-screen-only {
     display: none !important;
