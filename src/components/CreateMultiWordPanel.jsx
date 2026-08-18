@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  Alert,
   Autocomplete,
   Box,
   Button,
@@ -91,6 +92,7 @@ export default function CreateMultiWordPanel({
   const [title, setTitle] = useState(editItem?.title || '')
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState('')
   const [notice, setNotice] = useState('')
   const [selectedListId, setSelectedListId] = useState(null)
   const [focusConceptId, setFocusConceptId] = useState(
@@ -115,6 +117,7 @@ export default function CreateMultiWordPanel({
     setFocusConceptId(editItem.focusConceptId || null)
     setFocusTouched(Boolean(editItem.focusConceptId))
     setNotice('')
+    setGenerateError('')
     setSelectedListId(null)
   }, [
     editItem?.id,
@@ -212,10 +215,11 @@ export default function CreateMultiWordPanel({
 
   async function handleGenerate() {
     if (!selectedSourceList?.words?.length) {
-      setError('Select a word list to generate from.')
+      setGenerateError('Select a word list to generate from.')
       return
     }
     setGenerating(true)
+    setGenerateError('')
     try {
       const draft = await generateLessonText({
         kind,
@@ -226,7 +230,9 @@ export default function CreateMultiWordPanel({
       setNotice(`AI ${kind} added. Edit it below before saving if you want.`)
       setError('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate text')
+      const message = err instanceof Error ? err.message : 'Failed to generate text'
+      setGenerateError(message)
+      setError(message)
     } finally {
       setGenerating(false)
     }
@@ -476,6 +482,11 @@ export default function CreateMultiWordPanel({
                   </Button>
                 </span>
               </Tooltip>
+              {generateError ? (
+                <Alert severity="error" onClose={() => setGenerateError('')}>
+                  {generateError}
+                </Alert>
+              ) : null}
             </Stack>
           </Paper>
           {kind === 'passage' ? (

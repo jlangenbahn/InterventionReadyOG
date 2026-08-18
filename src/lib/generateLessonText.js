@@ -23,6 +23,23 @@ function unwrapGeneratedText(data) {
   return ''
 }
 
+function messageFromErrors(errors) {
+  return (errors ?? [])
+    .map((item) => item?.message || item?.errorType || '')
+    .filter(Boolean)
+    .join(', ')
+}
+
+function messageFromUnknown(err) {
+  if (!err) return ''
+  if (typeof err === 'string') return err
+  const nested = messageFromErrors(err.errors)
+  if (nested) return nested
+  if (err instanceof Error && err.message) return err.message
+  if (typeof err.message === 'string' && err.message) return err.message
+  return ''
+}
+
 /**
  * Ask Bedrock (via the Amplify generation route) for a simple sentence or passage
  * built from a concept word list.
@@ -31,7 +48,7 @@ export async function generateLessonText({ kind, conceptName, words }) {
   const generate = client.generations?.generateLessonText
   if (typeof generate !== 'function') {
     throw new Error(
-      'AI generation is not available yet. After this update deploys, refresh the app. Also confirm Claude 3.5 Haiku access is enabled in Amazon Bedrock.',
+      'AI generation is not available in this app session. Refresh the page after the latest deploy finishes.',
     )
   }
 
@@ -41,16 +58,31 @@ export async function generateLessonText({ kind, conceptName, words }) {
   }
 
   const kindLabel = kind === 'passage' ? 'passage' : 'sentence'
-  const { data, errors } = await generate({
-    kind: kindLabel,
-    conceptName: String(conceptName || 'this concept').trim() || 'this concept',
-    words:
-      kindLabel === 'passage'
-        ? `Write a short simple passage of 4 to 7 short sentences for the concept ${String(conceptName || 'this concept')}. Use at least 80 percent of these target words, and use 2 or 3 of them in the same sentence when it still sounds natural. Error on the side of being too simple. Target words: ${unique.join(', ')}`
-        : `Write one short simple sentence for the concept ${String(conceptName || 'this concept')}. Use 2 or 3 of these target words in that sentence when possible. Target words: ${unique.join(', ')}`,
-  })
-  if (errors?.length) {
-    throw new Error(errors.map((item) => item.message).join(', '))
+  let data
+  let errors
+  try {
+    const result = await generate({
+      kind: kindLabel,
+      conceptName: String(conceptName || 'this concept').trim() || 'this concept',
+      words:
+        kindLabel === 'passage'
+          ? `Write a short simple passage of 4 to 7 short sentences for the concept ${String(conceptName || 'this concept')}. Use at least 80 percent of these target words, and use 2 or 3 of them in the same sentence when it still sounds natural. Error on the side of being too simple. Target words: ${unique.join(', ')}`
+          : `Write one short simple sentence for the concept ${String(conceptName || 'this concept')}. Use 2 or 3 of these target words in that sentence when possible. Target words: ${unique.join(', ')}`,
+    })
+    data = result?.data
+    errors = result?.errors
+  } catch (err) {
+    console.error('AI generation failed', err)
+    throw new Error(
+      messageFromUnknown(err) ||
+        'Bedrock could not generate text. In the AWS Console, open Amazon Bedrock in Ohio (us-east-2) and enable Claude Haiku 4.5.',
+    )
+  }
+
+  const errorText = messageFromErrors(errors)
+  if (errorText) {
+    console.error('AI generation returned errors', errors)
+    throw new Error(errorText)
   }
 
   const text = unwrapGeneratedText(data)
