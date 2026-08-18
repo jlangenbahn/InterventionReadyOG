@@ -266,12 +266,14 @@ const schema = a.schema({
    * Single-turn Bedrock generation (Amplify AI Kit) for lesson sentences and passages.
    * Authenticated tutors send a concept word list; the model returns simple 4th-grade text.
    * Keep this systemPrompt free of double quotes — Amplify embeds it in GraphQL SDL.
-   * Claude 3.5 Haiku is not hosted in us-east-2 and is often hidden as a legacy catalog
-   * entry, so this route uses Claude Haiku 4.5 (global/US inference profile).
+   * Claude 3.5 Haiku is not hosted in us-east-2. Claude Haiku 4.5 is invoked through
+   * the US inference profile; backend.ts adds the matching Bedrock IAM.
    */
   generateLessonText: a
     .generation({
-      aiModel: a.ai.model('Claude Haiku 4.5'),
+      aiModel: {
+        resourcePath: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+      },
       systemPrompt:
         'You write tutoring materials for middle-school students who read at about a 4th-grade level. Keep non-target words very simple. Write coherent, easy-to-follow text. Use the provided target words with their exact spelling, including nonsense or decodable practice words. Prefer putting 2 or 3 target words in the same sentence when it still sounds natural. Return only the requested sentence or passage, with no title, labels, quotes, bullet points, or commentary.',
       inferenceConfiguration: {
