@@ -1304,6 +1304,7 @@ export default function LessonPlanPanel({
           wordsByConceptId={wordsByConceptId}
           loadingCatalog={loadingCatalog}
           focusConcept={multiWordModal.concept}
+          lists={lists}
           setError={setError}
           onClose={() => setMultiWordModal(null)}
           onCreated={(payload) => void handleMultiWordCreated(payload)}

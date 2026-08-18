@@ -165,6 +165,7 @@ export default function MultiWordPanel({
   concepts = [],
   wordsByConceptId,
   loadingCatalog = false,
+  studentLists = [],
   setError,
 }) {
   const [mode, setMode] = useState(MODE_VIEW)
@@ -651,6 +652,7 @@ export default function MultiWordPanel({
                 onSaved={(payload) => void handleSaved(payload)}
                 embedded
                 editItem={editItem}
+                lists={studentLists}
               />
             </>
           )}

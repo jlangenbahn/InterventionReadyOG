@@ -37,6 +37,7 @@ export default function ContentPanel({
           concepts={concepts}
           wordsByConceptId={wordsByConceptId}
           loadingCatalog={loadingCatalog}
+          studentLists={studentLists}
           setError={setError}
         />
       ) : (

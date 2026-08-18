@@ -5,13 +5,18 @@ import {
   Button,
   Chip,
   CircularProgress,
+  List,
+  ListItemButton,
+  ListItemText,
   Paper,
   Stack,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import SaveIcon from '@mui/icons-material/Save'
 import { generateClient } from 'aws-amplify/data'
 import {
@@ -20,8 +25,46 @@ import {
   tagMultiWordText,
 } from '../lib/tagMultiWordText'
 import { updatePassage, updateSentence } from '../lib/crudRecords'
+import { resolveListWords } from '../lib/fetchStudentLessonPlan'
+import { generateLessonText } from '../lib/generateLessonText'
 
 const client = generateClient()
+
+function buildWordLookup(wordsByConceptId) {
+  const lookup = new Map()
+  if (!wordsByConceptId) return lookup
+  for (const rows of wordsByConceptId.values()) {
+    for (const row of rows ?? []) {
+      const word = typeof row?.word === 'string' ? row.word : ''
+      if (!word) continue
+      if (row.wordId) lookup.set(row.wordId, word)
+      if (row.id) lookup.set(row.id, word)
+    }
+  }
+  return lookup
+}
+
+function uniqueWords(words) {
+  const seen = new Set()
+  const result = []
+  for (const raw of words ?? []) {
+    const word = String(raw ?? '').trim()
+    if (!word) continue
+    const key = word.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(word)
+  }
+  return result
+}
+
+function listSourceWords(list, wordLookup) {
+  const nested = Array.isArray(list?.words) ? list.words : []
+  if (nested.length && nested.every((item) => typeof item === 'string')) {
+    return uniqueWords(nested)
+  }
+  return uniqueWords(resolveListWords(list, wordLookup))
+}
 
 export default function CreateMultiWordPanel({
   student,
@@ -37,6 +80,7 @@ export default function CreateMultiWordPanel({
   editItem = null,
   lockKind = false,
   preferredFocusConcept = null,
+  lists = [],
 }) {
   const [kindState, setKindState] = useState(editItem?.kind || 'sentence')
   const kind = kindProp ?? kindState
@@ -46,7 +90,9 @@ export default function CreateMultiWordPanel({
   const [text, setText] = useState(editItem?.text || '')
   const [title, setTitle] = useState(editItem?.title || '')
   const [saving, setSaving] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [notice, setNotice] = useState('')
+  const [selectedListId, setSelectedListId] = useState(null)
   const [focusConceptId, setFocusConceptId] = useState(
     editItem?.focusConceptId ?? preferredFocusId ?? null,
   )
@@ -69,6 +115,7 @@ export default function CreateMultiWordPanel({
     setFocusConceptId(editItem.focusConceptId || null)
     setFocusTouched(Boolean(editItem.focusConceptId))
     setNotice('')
+    setSelectedListId(null)
   }, [
     editItem?.id,
     editItem?.kind,
@@ -83,6 +130,32 @@ export default function CreateMultiWordPanel({
     () => buildWordCatalogIndex(concepts, wordsByConceptId),
     [concepts, wordsByConceptId],
   )
+  const wordLookup = useMemo(() => buildWordLookup(wordsByConceptId), [wordsByConceptId])
+  const sourceListConceptId = preferredFocusId || focusConceptId
+  const sourceLists = useMemo(
+    () =>
+      (lists ?? [])
+        .filter((list) => list?.id)
+        .filter((list) => !sourceListConceptId || list.conceptID === sourceListConceptId)
+        .map((list) => ({
+          id: list.id,
+          name: list.name || 'Untitled list',
+          conceptID: list.conceptID || null,
+          words: listSourceWords(list, wordLookup),
+        }))
+        .filter((list) => list.words.length > 0),
+    [lists, wordLookup, sourceListConceptId],
+  )
+  const selectedSourceList = sourceLists.find((list) => list.id === selectedListId) ?? null
+
+  useEffect(() => {
+    if (!sourceLists.length) {
+      if (selectedListId) setSelectedListId(null)
+      return
+    }
+    if (selectedListId && sourceLists.some((list) => list.id === selectedListId)) return
+    setSelectedListId(sourceLists[0].id)
+  }, [sourceLists, selectedListId])
 
   const tagged = useMemo(() => tagMultiWordText(text, catalogIndex), [text, catalogIndex])
 
@@ -126,6 +199,37 @@ export default function CreateMultiWordPanel({
     if (!value) return
     if (onKindChange) onKindChange(value)
     else setKindState(value)
+  }
+
+  function handleSelectList(list) {
+    if (!list?.id) return
+    setSelectedListId(list.id)
+    if (!preferredFocusId && list.conceptID) {
+      setFocusTouched(true)
+      setFocusConceptId(list.conceptID)
+    }
+  }
+
+  async function handleGenerate() {
+    if (!selectedSourceList?.words?.length) {
+      setError('Select a word list to generate from.')
+      return
+    }
+    setGenerating(true)
+    try {
+      const draft = await generateLessonText({
+        kind,
+        conceptName: preferredFocusName || focusValue?.name || 'this concept',
+        words: selectedSourceList.words,
+      })
+      setText(draft)
+      setNotice(`AI ${kind} added. Edit it below before saving if you want.`)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate text')
+    } finally {
+      setGenerating(false)
+    }
   }
 
   async function handleSave() {
@@ -246,12 +350,12 @@ export default function CreateMultiWordPanel({
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
           <Typography variant="h6">Create Multi Word</Typography>
           {notice ? <Chip size="small" color="success" label={notice} /> : null}
-          {loadingCatalog || saving ? <CircularProgress size={16} /> : null}
+          {loadingCatalog || saving || generating ? <CircularProgress size={16} /> : null}
         </Stack>
       ) : (
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
           {notice ? <Chip size="small" color="success" label={notice} /> : null}
-          {saving ? <CircularProgress size={16} /> : null}
+          {saving || generating ? <CircularProgress size={16} /> : null}
         </Stack>
       )}
 
@@ -277,6 +381,103 @@ export default function CreateMultiWordPanel({
               <ToggleButton value="passage">Passage</ToggleButton>
             </ToggleButtonGroup>
           )}
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 1.5,
+              bgcolor: 'rgba(15, 76, 92, 0.04)',
+              borderColor: 'rgba(15, 76, 92, 0.18)',
+            }}
+          >
+            <Stack spacing={1}>
+              <Stack direction="row" spacing={1} alignItems="flex-start">
+                <AutoAwesomeIcon color="secondary" sx={{ mt: 0.25 }} />
+                <Box>
+                  <Typography variant="subtitle2">Generate using AI</Typography>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Pick a word list for this concept, then generate a simple{' '}
+                    {kind === 'passage' ? 'passage' : 'sentence'} into the editor. You can edit it
+                    before saving.
+                  </Typography>
+                </Box>
+              </Stack>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                {sourceListConceptId
+                  ? 'Word lists for this concept'
+                  : 'Word lists — select one to use as the AI source'}
+              </Typography>
+              {sourceLists.length ? (
+                <List
+                  dense
+                  disablePadding
+                  sx={{
+                    maxHeight: 168,
+                    overflow: 'auto',
+                    bgcolor: 'background.paper',
+                    border: 1,
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                  }}
+                >
+                  {sourceLists.map((list) => (
+                    <ListItemButton
+                      key={list.id}
+                      selected={list.id === selectedListId}
+                      onClick={() => handleSelectList(list)}
+                    >
+                      <ListItemText
+                        primary={list.name}
+                        secondary={`${list.words.length} word${list.words.length === 1 ? '' : 's'}`}
+                        primaryTypographyProps={{ variant: 'body2', noWrap: true }}
+                        secondaryTypographyProps={{ variant: 'caption' }}
+                      />
+                    </ListItemButton>
+                  ))}
+                </List>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  {sourceListConceptId
+                    ? 'No word lists for this concept yet. Create a list first, then come back to generate.'
+                    : 'No word lists yet. Create a list first, then come back to generate.'}
+                </Typography>
+              )}
+              {selectedSourceList ? (
+                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                  {selectedSourceList.words.slice(0, 12).map((word) => (
+                    <Chip key={word} size="small" label={word} variant="outlined" />
+                  ))}
+                  {selectedSourceList.words.length > 12 ? (
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={`+${selectedSourceList.words.length - 12} more`}
+                    />
+                  ) : null}
+                </Stack>
+              ) : null}
+              <Tooltip
+                title={
+                  selectedSourceList
+                    ? `Generate a ${kind} from “${selectedSourceList.name}”`
+                    : 'Select a word list first'
+                }
+              >
+                <span>
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    startIcon={
+                      generating ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />
+                    }
+                    onClick={() => void handleGenerate()}
+                    disabled={generating || saving || !selectedSourceList}
+                  >
+                    Generate using AI
+                  </Button>
+                </span>
+              </Tooltip>
+            </Stack>
+          </Paper>
           {kind === 'passage' ? (
             <TextField
               label="Passage title"
@@ -330,7 +531,7 @@ export default function CreateMultiWordPanel({
               variant="contained"
               startIcon={<SaveIcon />}
               onClick={() => void handleSave()}
-              disabled={saving || loadingCatalog || !text.trim() || !focusConceptId}
+              disabled={saving || generating || loadingCatalog || !text.trim() || !focusConceptId}
             >
               {kind === 'passage'
                 ? editing

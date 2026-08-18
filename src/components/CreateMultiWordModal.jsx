@@ -18,6 +18,7 @@ export default function CreateMultiWordModal({
   wordsByConceptId,
   loadingCatalog = false,
   focusConcept = null,
+  lists = [],
   setError,
   onClose,
   onCreated,
@@ -53,6 +54,7 @@ export default function CreateMultiWordModal({
             kind={kind}
             lockKind
             preferredFocusConcept={focusConcept}
+            lists={lists}
             onPreviewChange={setPreview}
             onSaved={(payload) => {
               onCreated?.(payload)

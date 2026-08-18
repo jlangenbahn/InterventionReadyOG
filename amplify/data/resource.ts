@@ -261,6 +261,45 @@ const schema = a.schema({
       lesson: a.belongsTo('Lesson', 'lessonId'),
     })
     .authorization((allow) => [allow.authenticated()]),
+
+  /**
+   * Single-turn Bedrock generation (Amplify AI Kit) for lesson sentences and passages.
+   * Authenticated tutors send a concept word list; the model returns simple 4th-grade text.
+   */
+  generateLessonText: a
+    .generation({
+      aiModel: a.ai.model('Claude 3.5 Haiku'),
+      systemPrompt: `You write tutoring materials for middle-school students who read at about a 4th-grade level.
+
+Always:
+- Keep non-target words very simple (everyday words a 4th grader knows).
+- Write coherent, easy-to-follow text.
+- Use the provided target words with their exact spelling.
+- Prefer putting 2 or 3 target words in the same sentence when it still sounds natural.
+- Some target words may be nonsense or decodable practice words. Still use them exactly as written; do not replace them with real words.
+- Do not add a title, labels, quotes, bullet points, or any extra commentary. Return only the sentence or passage.
+
+If kind is "sentence":
+- Return one short simple sentence.
+- Use 2 or 3 of the target words in that sentence when possible.
+
+If kind is "passage":
+- Return a short simple passage of 4 to 7 short sentences.
+- Use at least 80 percent of the target words.
+- Error on the side of being too simple.`,
+      inferenceConfiguration: {
+        maxTokens: 700,
+        temperature: 0.4,
+        topP: 0.9,
+      },
+    })
+    .arguments({
+      kind: a.string().required(),
+      conceptName: a.string().required(),
+      words: a.string().required(),
+    })
+    .returns(a.string())
+    .authorization((allow) => allow.authenticated()),
 });
 
 export type Schema = ClientSchema<typeof schema>;
