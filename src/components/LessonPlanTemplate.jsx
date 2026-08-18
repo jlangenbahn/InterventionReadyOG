@@ -248,6 +248,8 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
   const studentName = [student?.firstName, student?.lastName].filter(Boolean).join(' ')
   const paddedReview = [0, 1, 2].map((index) => reviewLists[index] ?? null)
   const paddedPassages = [0, 1].map((index) => passages[index] ?? (index === 0 ? passage : null) ?? null)
+  const filledSentences = (sentences ?? []).filter((item) => Boolean(sentenceText(item)))
+  const filledPassages = paddedPassages.filter((item) => Boolean(passageText(item)))
 
   return (
     <Box ref={ref} className="lesson-plan-print-root">
@@ -364,13 +366,9 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
           <Box sx={rowSx}>
             <Box sx={labelSx}>Dictation</Box>
             <Box sx={contentSx}>
-              {[0, 1, 2, 3, 4, 5].map((index) => (
+              {filledSentences.map((sentence, index) => (
                 <Box key={index}>
-                  {index + 1}.{' '}
-                  <Placeholder
-                    tag={`Sentence #${index + 1}`}
-                    value={sentenceText(sentences[index])}
-                  />
+                  {index + 1}. {sentenceText(sentence)}
                 </Box>
               ))}
             </Box>
@@ -384,13 +382,9 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
           <Box sx={rowSx}>
             <Box sx={labelSx}>Passage</Box>
             <Box sx={contentSx}>
-              {[0, 1].map((index) => (
+              {filledPassages.map((item, index) => (
                 <Box key={index}>
-                  {index + 1}.{' '}
-                  <Placeholder
-                    tag={`Passage #${index + 1}`}
-                    value={passageText(paddedPassages[index])}
-                  />
+                  {index + 1}. {passageText(item)}
                 </Box>
               ))}
             </Box>

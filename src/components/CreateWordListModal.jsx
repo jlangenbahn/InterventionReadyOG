@@ -13,9 +13,12 @@ import {
   Typography,
 } from '@mui/material'
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd'
+import CasinoIcon from '@mui/icons-material/Casino'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import { createWordList } from '../lib/crudRecords'
 import { studentDisplayName } from '../lib/fetchStudentLessonPlan'
+
+const RANDOM_WORD_COUNT = 10
 
 const WORD_COLUMNS = [
   { field: 'word', headerName: 'Word', flex: 1, minWidth: 120 },
@@ -33,6 +36,19 @@ function emptyWordSelection() {
 
 function wordRowId(row) {
   return row?.conceptWordId || row?.id
+}
+
+function randomWordSelection(words, count = RANDOM_WORD_COUNT) {
+  const ids = words.map(wordRowId).filter(Boolean)
+  const pool = [...ids]
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  return {
+    type: 'include',
+    ids: new Set(pool.slice(0, Math.min(count, pool.length))),
+  }
 }
 
 export default function CreateWordListModal({
@@ -104,6 +120,15 @@ export default function CreateWordListModal({
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
           <Chip size="small" color="primary" variant="outlined" label={`${words.length} words`} />
           <Chip size="small" variant="outlined" label={`${selectedWordRows.length} selected`} />
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<CasinoIcon />}
+            disabled={creating || words.length === 0}
+            onClick={() => setWordSelection(randomWordSelection(words))}
+          >
+            Random {Math.min(RANDOM_WORD_COUNT, words.length) || RANDOM_WORD_COUNT}
+          </Button>
           {creating ? <CircularProgress size={16} /> : null}
         </Stack>
         <Box sx={{ height: 360, width: '100%' }}>

@@ -15,6 +15,7 @@ import {
   Typography,
 } from '@mui/material'
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd'
+import CasinoIcon from '@mui/icons-material/Casino'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
 import { DataGridPro, GridActionsCellItem, GridToolbar } from '@mui/x-data-grid-pro'
@@ -24,6 +25,8 @@ import { deleteWordList, updateWordList } from '../lib/crudRecords'
 import ConfirmDeleteDialog from './ConfirmDeleteDialog'
 
 const client = generateClient()
+
+const RANDOM_WORD_COUNT = 10
 
 const WORD_COLUMNS = [
   { field: 'word', headerName: 'Word', flex: 1, minWidth: 120 },
@@ -76,6 +79,19 @@ function listWordCount(list) {
 
 function wordRowId(row) {
   return row?.conceptWordId || row?.id
+}
+
+function randomWordSelection(words, count = RANDOM_WORD_COUNT) {
+  const ids = words.map(wordRowId).filter(Boolean)
+  const pool = [...ids]
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  return {
+    type: 'include',
+    ids: new Set(pool.slice(0, Math.min(count, pool.length))),
+  }
 }
 
 export default function WordListsPanel({
@@ -371,6 +387,15 @@ export default function WordListsPanel({
                     variant="outlined"
                     label={`${selectedWordRows.length} selected`}
                   />
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<CasinoIcon />}
+                    disabled={selectedWords.length === 0 || creatingList}
+                    onClick={() => setWordSelection(randomWordSelection(selectedWords))}
+                  >
+                    Random {Math.min(RANDOM_WORD_COUNT, selectedWords.length) || RANDOM_WORD_COUNT}
+                  </Button>
                   <Button
                     size="small"
                     variant="contained"
