@@ -35,10 +35,11 @@ import {
   Typography,
   createTheme,
 } from '@mui/material'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGridPro, GridToolbar, useGridApiRef } from '@mui/x-data-grid-pro'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
+import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import LockIcon from '@mui/icons-material/Lock'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
@@ -54,6 +55,7 @@ import ConfirmDeleteDialog from './components/ConfirmDeleteDialog'
 import { fetchStudentLists } from './lib/fetchStudentLessonPlan'
 import { deleteInstructorGroup, fetchInstructorGroups, saveInstructorGroup } from './lib/groups'
 import { deleteStudentCascade, updateStudent } from './lib/crudRecords'
+import { downloadCsvTable, downloadXlsxTable, sanitizeFileStem } from './lib/exportTable'
 
 const client = generateClient()
 const DRAWER_WIDTH = 300
@@ -111,6 +113,7 @@ const scopeColumnDefs = (locked) => [
     filterable: true,
     editable: false,
     disableColumnMenu: true,
+    valueFormatter: (value) => (value === true ? 'Yes' : 'No'),
     // Display only — toggle is handled by DataGrid onCellClick (one click).
     renderCell: (params) => (
       <Checkbox
@@ -181,6 +184,25 @@ function inventoryToRows(concepts, inventory) {
       sequence: entry?.sequence ?? null,
     }
   })
+}
+
+function formatScopeExportValue(field, value) {
+  if (field === 'inScope') return value === true ? 'Yes' : 'No'
+  if (field === 'sequence' || field === 'level') {
+    if (value === '' || value == null) return ''
+    const n = Number(value)
+    return Number.isFinite(n) ? n : String(value)
+  }
+  if (value == null) return ''
+  return String(value)
+}
+
+function buildScopeExportTable(rowModels) {
+  const columns = scopeColumnDefs(true)
+  return {
+    headers: columns.map((col) => col.headerName),
+    rows: rowModels.map((row) => columns.map((col) => formatScopeExportValue(col.field, row[col.field]))),
+  }
 }
 
 async function listAll(model, options = {}) {
@@ -303,6 +325,7 @@ function ScopeAndSequencePanel({
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
   // Local draft while editing — nothing hits the DB until Save.
   const [draftInventory, setDraftInventory] = useState(null)
+  const gridApiRef = useGridApiRef()
 
   const persistedInventory = useMemo(() => {
     if (!student || !concepts.length) return []
@@ -422,6 +445,28 @@ function ScopeAndSequencePanel({
   )
 
   const columns = useMemo(() => scopeColumnDefs(locked), [locked])
+
+  const collectExportRows = useCallback(() => {
+    const sorted = gridApiRef.current?.getSortedRows?.()
+    return Array.isArray(sorted) && sorted.length ? sorted : rows
+  }, [gridApiRef, rows])
+
+  const exportFileStem = useMemo(
+    () => sanitizeFileStem(`Scope and Sequence - ${studentDisplayName(student)}`),
+    [student],
+  )
+
+  const exportScopeTable = useCallback(
+    (format) => {
+      const table = buildScopeExportTable(collectExportRows())
+      if (format === 'xlsx') {
+        downloadXlsxTable(`${exportFileStem}.xlsx`, table.headers, table.rows, 'Scope and Sequence')
+        return
+      }
+      downloadCsvTable(`${exportFileStem}.csv`, table.headers, table.rows)
+    },
+    [collectExportRows, exportFileStem],
+  )
 
   // Backfill only missing concept IDs. Never run while editing (would clobber draft/saves).
   useEffect(() => {
@@ -584,6 +629,13 @@ function ScopeAndSequencePanel({
           useFlexGap
           sx={{ ml: { xs: 0, md: 'auto' }, flexShrink: 0 }}
         >
+          <FormLabel sx={{ fontWeight: 600, m: 0 }}>Download</FormLabel>
+          <ButtonGroup variant="outlined" color="inherit" disabled={!rows.length}>
+            <Button startIcon={<FileDownloadIcon />} onClick={() => exportScopeTable('csv')}>
+              CSV
+            </Button>
+            <Button onClick={() => exportScopeTable('xlsx')}>XLSX</Button>
+          </ButtonGroup>
           <FormLabel sx={{ fontWeight: 600, m: 0 }}>Scope Presets</FormLabel>
           <ButtonGroup variant="outlined" color="inherit" disabled={locked || saving}>
             <Button onClick={() => applyLevelPreset(1)}>Level 1</Button>
@@ -611,6 +663,7 @@ function ScopeAndSequencePanel({
       <Box sx={{ flex: 1, width: '100%' }}>
         <DataGridPro
           key={student.id}
+          apiRef={gridApiRef}
           rows={rows}
           columns={columns}
           getRowId={(row) => row.conceptId}
@@ -658,6 +711,12 @@ function ScopeAndSequencePanel({
             toolbar: {
               showQuickFilter: true,
               quickFilterProps: { debounceMs: 300 },
+              csvOptions: {
+                fileName: exportFileStem,
+                utf8WithBom: true,
+                includeHeaders: true,
+                allColumns: true,
+              },
             },
           }}
           density="compact"
