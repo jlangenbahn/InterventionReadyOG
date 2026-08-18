@@ -12,6 +12,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import AddIcon from '@mui/icons-material/Add'
 import SaveIcon from '@mui/icons-material/Save'
 import StepperSelectionGrid from './StepperSelectionGrid'
 
@@ -117,6 +118,42 @@ function MasteryChip({ status, label, sx, ...chipProps }) {
         ...sx,
       }}
     />
+  )
+}
+
+function CreateConceptActions({
+  concepts = [],
+  kind = 'list',
+  onCreate,
+  disabled = false,
+  emptyLabel,
+}) {
+  if (!concepts.length) {
+    return emptyLabel ? (
+      <Typography variant="body2" color="text.secondary">
+        {emptyLabel}
+      </Typography>
+    ) : null
+  }
+
+  return (
+    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+      {concepts.map((concept) => {
+        const name = concept?.concept || 'concept'
+        return (
+          <Button
+            key={concept.id}
+            size="small"
+            variant="outlined"
+            startIcon={<AddIcon />}
+            disabled={disabled || !concept?.id}
+            onClick={() => onCreate?.(concept)}
+          >
+            {`Create ${name} ${kind}`}
+          </Button>
+        )
+      })}
+    </Stack>
   )
 }
 
@@ -254,6 +291,9 @@ export default function CreateLessonStepper({
   creating = false,
   createLabel = 'Create lesson plan',
   canCreate = false,
+  onCreateList,
+  onCreateSentence,
+  onCreatePassage,
 }) {
   const newConceptListId = newConceptIds[0] ?? null
   const newConceptValue = conceptOptions.find((item) => item.id === selectedNewConceptId) ?? null
@@ -263,6 +303,7 @@ export default function CreateLessonStepper({
   const conceptsReady =
     Boolean(lessonDate) && Boolean(selectedNewConceptId) && selectedReviewConceptIds.length > 0
   const canContinueFromNewList = conceptsReady && Boolean(newConceptListId)
+  const sentenceConcepts = [newConceptValue, ...reviewConceptValues].filter(Boolean)
 
   return (
     <Box>
@@ -355,10 +396,18 @@ export default function CreateLessonStepper({
               loading={loading || loadingLists}
               noRowsLabel={
                 selectedNewConceptId
-                  ? 'No lists for this concept yet. Create one on the Content tab.'
+                  ? 'No lists for this concept yet. Create one above.'
                   : 'Select a new concept above to filter lists.'
               }
               getItemLabel={(list) => list.name || 'Untitled list'}
+              header={
+                <CreateConceptActions
+                  concepts={newConceptValue ? [newConceptValue] : []}
+                  kind="list"
+                  onCreate={onCreateList}
+                  emptyLabel="Select a new concept above to create a matching list."
+                />
+              }
             />
             <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
               <Button
@@ -396,10 +445,18 @@ export default function CreateLessonStepper({
               loading={loading || loadingLists}
               noRowsLabel={
                 selectedReviewConceptIds.length
-                  ? 'No other lists available for the selected review concepts.'
+                  ? 'No other lists available for the selected review concepts. Create one above.'
                   : 'Select review concepts above to filter lists.'
               }
               getItemLabel={(list) => list.name || 'Untitled list'}
+              header={
+                <CreateConceptActions
+                  concepts={reviewConceptValues}
+                  kind="list"
+                  onCreate={onCreateList}
+                  emptyLabel="Select review concepts above to create a matching list."
+                />
+              }
             />
             <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
               <Button onClick={() => onStepChange(0)}>Back</Button>
@@ -431,10 +488,18 @@ export default function CreateLessonStepper({
               loading={loading}
               noRowsLabel={
                 selectedNewConceptId
-                  ? 'No sentences with those focus concepts. Tag sentences on the Content tab.'
+                  ? 'No sentences with those focus concepts. Create one above.'
                   : 'Select new and review concepts above to filter sentences by focus concept.'
               }
               getItemLabel={(sentence) => truncate(sentence.text, 60) || 'Untitled sentence'}
+              header={
+                <CreateConceptActions
+                  concepts={sentenceConcepts}
+                  kind="sentence"
+                  onCreate={onCreateSentence}
+                  emptyLabel="Select new and review concepts above to create a matching sentence."
+                />
+              }
             />
             <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
               <Button onClick={() => onStepChange(1)}>Back</Button>
@@ -466,10 +531,18 @@ export default function CreateLessonStepper({
               loading={loading}
               noRowsLabel={
                 selectedNewConceptId
-                  ? 'No passages with those focus concepts. Tag passages on the Content tab.'
+                  ? 'No passages with those focus concepts. Create one above.'
                   : 'Select new and review concepts above to filter passages by focus concept.'
               }
               getItemLabel={(passage) => passage.title || truncate(passage.text, 60) || 'Untitled passage'}
+              header={
+                <CreateConceptActions
+                  concepts={sentenceConcepts}
+                  kind="passage"
+                  onCreate={onCreatePassage}
+                  emptyLabel="Select new and review concepts above to create a matching passage."
+                />
+              }
             />
             {!canCreate ? (
               <Alert severity="info" sx={{ mt: 1.5 }}>

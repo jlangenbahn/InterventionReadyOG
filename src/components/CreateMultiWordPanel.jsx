@@ -35,23 +35,32 @@ export default function CreateMultiWordPanel({
   onSaved,
   embedded = false,
   editItem = null,
+  lockKind = false,
+  preferredFocusConcept = null,
 }) {
   const [kindState, setKindState] = useState(editItem?.kind || 'sentence')
   const kind = kindProp ?? kindState
+  const preferredFocusId = preferredFocusConcept?.id ?? null
+  const preferredFocusName =
+    preferredFocusConcept?.name || preferredFocusConcept?.concept || ''
   const [text, setText] = useState(editItem?.text || '')
   const [title, setTitle] = useState(editItem?.title || '')
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
-  const [focusConceptId, setFocusConceptId] = useState(editItem?.focusConceptId ?? null)
-  const [focusTouched, setFocusTouched] = useState(Boolean(editItem?.id))
+  const [focusConceptId, setFocusConceptId] = useState(
+    editItem?.focusConceptId ?? preferredFocusId ?? null,
+  )
+  const [focusTouched, setFocusTouched] = useState(
+    Boolean(editItem?.id || preferredFocusId),
+  )
   const editing = Boolean(editItem?.id)
 
   useEffect(() => {
     if (!editItem?.id) {
       setText('')
-      setTitle('')
-      setFocusConceptId(null)
-      setFocusTouched(false)
+      setTitle(preferredFocusName)
+      setFocusConceptId(preferredFocusId)
+      setFocusTouched(Boolean(preferredFocusId))
       setNotice('')
       return
     }
@@ -60,7 +69,15 @@ export default function CreateMultiWordPanel({
     setFocusConceptId(editItem.focusConceptId || null)
     setFocusTouched(Boolean(editItem.focusConceptId))
     setNotice('')
-  }, [editItem?.id, editItem?.kind, editItem?.text, editItem?.title, editItem?.focusConceptId])
+  }, [
+    editItem?.id,
+    editItem?.kind,
+    editItem?.text,
+    editItem?.title,
+    editItem?.focusConceptId,
+    preferredFocusId,
+    preferredFocusName,
+  ])
 
   const catalogIndex = useMemo(
     () => buildWordCatalogIndex(concepts, wordsByConceptId),
@@ -69,20 +86,30 @@ export default function CreateMultiWordPanel({
 
   const tagged = useMemo(() => tagMultiWordText(text, catalogIndex), [text, catalogIndex])
 
-  const focusOptions = tagged.conceptRows ?? []
+  const focusOptions = useMemo(() => {
+    const rows = [...(tagged.conceptRows ?? [])]
+    if (preferredFocusId && !rows.some((row) => row.id === preferredFocusId)) {
+      rows.unshift({
+        id: preferredFocusId,
+        name: preferredFocusName || 'Selected concept',
+      })
+    }
+    return rows
+  }, [tagged.conceptRows, preferredFocusId, preferredFocusName])
   const focusValue = focusOptions.find((row) => row.id === focusConceptId) ?? null
 
   useEffect(() => {
     const topId = tagged.topConcept?.id ?? null
     if (!focusTouched) {
-      setFocusConceptId(topId)
+      setFocusConceptId(preferredFocusId || topId)
       return
     }
     if (focusConceptId && !tagged.conceptIds.includes(focusConceptId)) {
-      setFocusConceptId(topId)
-      setFocusTouched(false)
+      if (focusConceptId === preferredFocusId) return
+      setFocusConceptId(preferredFocusId || topId)
+      setFocusTouched(Boolean(preferredFocusId))
     }
-  }, [tagged.topConcept?.id, tagged.conceptIds, focusTouched, focusConceptId])
+  }, [tagged.topConcept?.id, tagged.conceptIds, focusTouched, focusConceptId, preferredFocusId])
 
   useEffect(() => {
     onPreviewChange?.({
@@ -230,16 +257,26 @@ export default function CreateMultiWordPanel({
 
       <Paper variant={embedded ? 'outlined' : 'elevation'} sx={{ p: 2 }}>
         <Stack spacing={1.5}>
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            value={kind}
-            disabled={editing}
-            onChange={(_event, value) => setKindValue(value)}
-          >
-            <ToggleButton value="sentence">Sentence</ToggleButton>
-            <ToggleButton value="passage">Passage</ToggleButton>
-          </ToggleButtonGroup>
+          {lockKind ? (
+            <Chip
+              size="small"
+              color="primary"
+              variant="outlined"
+              label={kind === 'passage' ? 'Passage' : 'Sentence'}
+              sx={{ alignSelf: 'flex-start' }}
+            />
+          ) : (
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={kind}
+              disabled={editing}
+              onChange={(_event, value) => setKindValue(value)}
+            >
+              <ToggleButton value="sentence">Sentence</ToggleButton>
+              <ToggleButton value="passage">Passage</ToggleButton>
+            </ToggleButtonGroup>
+          )}
           {kind === 'passage' ? (
             <TextField
               label="Passage title"

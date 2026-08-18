@@ -12,6 +12,7 @@ export default function StepperSelectionGrid({
   noRowsLabel,
   excludeIds = [],
   getItemLabel,
+  header = null,
 }) {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const excluded = useMemo(() => new Set(excludeIds), [excludeIds])
@@ -58,6 +59,7 @@ export default function StepperSelectionGrid({
 
   return (
     <Box>
+      {header ? <Box sx={{ mb: 1 }}>{header}</Box> : null}
       <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mb: 1, minHeight: 32 }}>
         {selectedIds.length ? (
           selectedIds.map((id) => {

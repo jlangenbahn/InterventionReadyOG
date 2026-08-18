@@ -92,6 +92,35 @@ export async function updateWordList({ id, name }) {
   return data
 }
 
+export async function createWordList({ studentId, conceptId, name, selectedWordRows = [] }) {
+  const trimmed = String(name ?? '').trim()
+  if (!studentId) throw new Error('Student is required')
+  if (!conceptId) throw new Error('Concept is required')
+  if (!trimmed) throw new Error('Give the list a name.')
+  if (!selectedWordRows.length) throw new Error('Select at least one word.')
+
+  const conceptWordIds = selectedWordRows.map((row) => row.conceptWordId).filter(Boolean)
+  const wordIds = selectedWordRows.map((row) => row.wordId || row.id).filter(Boolean)
+  const { data, errors } = await client.models.List.create({
+    name: trimmed,
+    conceptID: conceptId,
+    studentID: studentId,
+    listData: JSON.stringify({
+      conceptId,
+      conceptWordIds,
+      wordIds,
+    }),
+  })
+  if (errors?.length) throw new Error(errors.map((item) => item.message).join(', '))
+  if (!data?.id) throw new Error('Failed to create list')
+
+  const linkResults = await Promise.all(
+    wordIds.map((wordId) => client.models.WordList.create({ wordId, listId: data.id })),
+  )
+  throwIfErrors(linkResults)
+  return data
+}
+
 export async function deleteSentence(sentenceId) {
   if (!sentenceId) return
   await Promise.all([

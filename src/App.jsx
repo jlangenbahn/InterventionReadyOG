@@ -1315,6 +1315,8 @@ function AppShell({ user, signOut }) {
                 studentLists={studentLists}
                 loadingLists={loadingLists}
                 wordsByConceptId={wordsByConceptId}
+                loadingCatalog={loadingCatalog}
+                onReloadLists={loadStudentLists}
                 instructor={user?.signInDetails?.loginId ?? user?.username ?? ''}
                 setError={setError}
                 students={students}

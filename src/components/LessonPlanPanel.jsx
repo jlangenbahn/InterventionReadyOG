@@ -22,6 +22,8 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import LessonPlanTemplate from './LessonPlanTemplate'
 import CreateLessonStepper from './CreateLessonStepper'
+import CreateWordListModal from './CreateWordListModal'
+import CreateMultiWordModal from './CreateMultiWordModal'
 import DataEntryPanel from './DataEntryPanel'
 import ShareLessonDialog from './ShareLessonDialog'
 import ConfirmDeleteDialog from './ConfirmDeleteDialog'
@@ -237,6 +239,8 @@ export default function LessonPlanPanel({
   studentLists = [],
   loadingLists = false,
   wordsByConceptId,
+  loadingCatalog = false,
+  onReloadLists,
   instructor,
   setError,
   students = [],
@@ -265,6 +269,8 @@ export default function LessonPlanPanel({
   const [sharing, setSharing] = useState(false)
   const [lessonToDelete, setLessonToDelete] = useState(null)
   const [deletingLesson, setDeletingLesson] = useState(false)
+  const [listModalConcept, setListModalConcept] = useState(null)
+  const [multiWordModal, setMultiWordModal] = useState(null)
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -331,6 +337,8 @@ export default function LessonPlanPanel({
     setLessonName('')
     setShareLesson(null)
     setLessonToDelete(null)
+    setListModalConcept(null)
+    setMultiWordModal(null)
   }, [student?.id])
 
   const wordLookup = useMemo(() => buildWordLookup(wordsByConceptId), [wordsByConceptId])
@@ -689,6 +697,44 @@ export default function LessonPlanPanel({
     setPassageSlots(slotsFromIds(PASSAGE_SLOT_KEYS, ids))
   }
 
+  async function handleListCreated(created) {
+    const createdId = created?.id
+    const conceptId = created?.conceptID
+    if (createdId) {
+      if (conceptId && conceptId === selectedNewConceptId) {
+        handleNewConceptChange([createdId])
+      } else {
+        setListSlots((prev) => {
+          const current = idsFromSlots(prev, REVIEW_SLOT_KEYS)
+          if (current.includes(createdId) || current.length >= 3) return prev
+          return { ...prev, ...slotsFromIds(REVIEW_SLOT_KEYS, [...current, createdId]) }
+        })
+      }
+    }
+    setNotice('List created. It is now available in this step.')
+    if (onReloadLists) await onReloadLists()
+  }
+
+  async function handleMultiWordCreated({ kind, id } = {}) {
+    if (id) {
+      if (kind === 'passage') {
+        setPassageSlots((prev) => {
+          const current = idsFromSlots(prev, PASSAGE_SLOT_KEYS)
+          if (current.includes(id) || current.length >= 2) return prev
+          return slotsFromIds(PASSAGE_SLOT_KEYS, [...current, id])
+        })
+      } else {
+        setSentenceSlots((prev) => {
+          const current = idsFromSlots(prev, SENTENCE_SLOT_KEYS)
+          if (current.includes(id) || current.length >= 6) return prev
+          return slotsFromIds(SENTENCE_SLOT_KEYS, [...current, id])
+        })
+      }
+    }
+    setNotice(kind === 'passage' ? 'Passage created. It is now available in this step.' : 'Sentence created. It is now available in this step.')
+    await load()
+  }
+
   function startNewLesson() {
     setListSlots({ ...EMPTY_LIST_SLOTS })
     setSentenceSlots({ ...EMPTY_SENTENCE_SLOTS })
@@ -953,6 +999,9 @@ export default function LessonPlanPanel({
                 creating={saving}
                 createLabel={loadedLesson ? 'Update lesson plan' : 'Create lesson plan'}
                 canCreate={canCreate}
+                onCreateList={(concept) => setListModalConcept(concept)}
+                onCreateSentence={(concept) => setMultiWordModal({ kind: 'sentence', concept })}
+                onCreatePassage={(concept) => setMultiWordModal({ kind: 'passage', concept })}
               />
             </>
           ) : (
@@ -1104,6 +1153,31 @@ export default function LessonPlanPanel({
         onClose={() => setShareLesson(null)}
         onShare={(ids) => void handleShare(ids)}
       />
+      {listModalConcept ? (
+        <CreateWordListModal
+          open
+          student={student}
+          concept={listModalConcept}
+          words={wordsByConceptId?.get(listModalConcept.id) ?? []}
+          setError={setError}
+          onClose={() => setListModalConcept(null)}
+          onCreated={(created) => void handleListCreated(created)}
+        />
+      ) : null}
+      {multiWordModal ? (
+        <CreateMultiWordModal
+          open
+          kind={multiWordModal.kind}
+          student={student}
+          concepts={concepts}
+          wordsByConceptId={wordsByConceptId}
+          loadingCatalog={loadingCatalog}
+          focusConcept={multiWordModal.concept}
+          setError={setError}
+          onClose={() => setMultiWordModal(null)}
+          onCreated={(payload) => void handleMultiWordCreated(payload)}
+        />
+      ) : null}
       <ConfirmDeleteDialog
         open={Boolean(lessonToDelete)}
         title="Are you sure?"
