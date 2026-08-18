@@ -12,6 +12,9 @@ export default function StepperSelectionGrid({
   noRowsLabel,
   excludeIds = [],
   getItemLabel,
+  getItemClassName,
+  getChipSx,
+  gridSx,
   header = null,
 }) {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
@@ -71,6 +74,7 @@ export default function StepperSelectionGrid({
                 size="small"
                 label={label}
                 onDelete={() => removeId(id)}
+                sx={item && getChipSx ? getChipSx(item) : undefined}
               />
             )
           })
@@ -88,7 +92,16 @@ export default function StepperSelectionGrid({
           columns={columns}
           getRowId={(row) => row.id}
           onRowClick={handleRowClick}
-          getRowClassName={(params) => (selectedSet.has(params.id) ? 'Mui-selected stepper-selected-row' : '')}
+          getRowClassName={(params) => {
+            const item = itemsById.get(params.id)
+            const slotClass = item && getItemClassName ? getItemClassName(item) : ''
+            return [
+              selectedSet.has(params.id) ? 'Mui-selected stepper-selected-row' : '',
+              slotClass,
+            ]
+              .filter(Boolean)
+              .join(' ')
+          }}
           loading={loading}
           pagination
           pageSizeOptions={[10, 25, 50]}
@@ -107,6 +120,7 @@ export default function StepperSelectionGrid({
             '& .stepper-selected-row': {
               bgcolor: 'action.selected',
             },
+            ...gridSx,
           }}
         />
       </Box>

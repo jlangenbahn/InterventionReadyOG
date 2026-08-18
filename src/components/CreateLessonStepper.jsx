@@ -70,6 +70,74 @@ function masteryColors(status) {
   return MASTERY_ROW_COLORS[status] ?? MASTERY_ROW_COLORS.unknown
 }
 
+/** Distinct colors for review concept 1–3; gray means that concept has no list selected yet. */
+const REVIEW_SLOT_COLORS = [
+  {
+    slotClass: 'review-slot-0',
+    bg: '#f6d27a',
+    hover: '#f0c14a',
+    color: '#4a3200',
+    border: '#d4a017',
+    rowBg: '#fdf6e3',
+    rowHover: '#f8e6b0',
+    rowSelected: '#f6d27a',
+  },
+  {
+    slotClass: 'review-slot-1',
+    bg: '#7eb8d8',
+    hover: '#5ba3cc',
+    color: '#083044',
+    border: '#2e7a9e',
+    rowBg: '#e7f4fb',
+    rowHover: '#c0e3f1',
+    rowSelected: '#7eb8d8',
+  },
+  {
+    slotClass: 'review-slot-2',
+    bg: '#c48bc8',
+    hover: '#b36fb8',
+    color: '#3a1840',
+    border: '#8e4a94',
+    rowBg: '#f6eaf7',
+    rowHover: '#e8cdec',
+    rowSelected: '#c48bc8',
+  },
+]
+
+const UNREPRESENTED_COLORS = {
+  bg: '#eeeeee',
+  hover: '#e0e0e0',
+  color: '#616161',
+  border: '#bdbdbd',
+}
+
+function reviewSlotColors(index) {
+  if (!Number.isInteger(index) || index < 0) return null
+  return REVIEW_SLOT_COLORS[index] ?? null
+}
+
+function slotChipSx(colors) {
+  if (!colors) return undefined
+  return {
+    bgcolor: colors.bg,
+    color: colors.color,
+    fontWeight: 600,
+    border: `1px solid ${colors.border}`,
+    '& .MuiChip-deleteIcon': { color: colors.color },
+  }
+}
+
+const REVIEW_SLOT_GRID_SX = Object.fromEntries(
+  REVIEW_SLOT_COLORS.flatMap((tone) => [
+    [`& .${tone.slotClass}`, { bgcolor: `${tone.rowBg} !important` }],
+    [`& .${tone.slotClass}:hover`, { bgcolor: `${tone.rowHover} !important` }],
+    [
+      `& .${tone.slotClass}.Mui-selected, & .${tone.slotClass}.stepper-selected-row`,
+      { bgcolor: `${tone.rowSelected} !important` },
+    ],
+  ]),
+)
+
 function truncate(value, max = 80) {
   const text = String(value ?? '').trim()
   if (!text) return ''
@@ -127,6 +195,8 @@ function CreateConceptActions({
   onCreate,
   disabled = false,
   emptyLabel,
+  representedIds,
+  slotColorsById,
 }) {
   if (!concepts.length) {
     return emptyLabel ? (
@@ -136,23 +206,53 @@ function CreateConceptActions({
     ) : null
   }
 
+  const represented = representedIds instanceof Set ? representedIds : new Set(representedIds ?? [])
+  const colorByCoverage = representedIds != null
+
   return (
-    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-      {concepts.map((concept) => {
-        const name = concept?.concept || 'concept'
-        return (
-          <Button
-            key={concept.id}
-            size="small"
-            variant="outlined"
-            startIcon={<AddIcon />}
-            disabled={disabled || !concept?.id}
-            onClick={() => onCreate?.(concept)}
-          >
-            {`Create ${name} ${kind}`}
-          </Button>
-        )
-      })}
+    <Stack spacing={0.75}>
+      <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+        {concepts.map((concept) => {
+          const name = concept?.concept || 'concept'
+          const isRepresented = represented.has(concept.id)
+          const slotColors = slotColorsById?.get(concept.id)
+          const colors = colorByCoverage && !isRepresented ? UNREPRESENTED_COLORS : slotColors
+          return (
+            <Button
+              key={concept.id}
+              size="small"
+              variant={colorByCoverage && isRepresented ? 'contained' : 'outlined'}
+              startIcon={<AddIcon />}
+              disabled={disabled || !concept?.id}
+              onClick={() => onCreate?.(concept)}
+              sx={
+                colors
+                  ? {
+                      bgcolor: colors.bg,
+                      color: colors.color,
+                      borderColor: colors.border,
+                      fontWeight: 700,
+                      boxShadow: 'none',
+                      '&:hover': {
+                        bgcolor: colors.hover,
+                        borderColor: colors.border,
+                        boxShadow: 'none',
+                      },
+                    }
+                  : undefined
+              }
+            >
+              {`Create ${name} ${kind}`}
+            </Button>
+          )
+        })}
+      </Stack>
+      {colorByCoverage ? (
+        <Typography variant="caption" color="text.secondary">
+          Gray means that review concept has no list selected yet. Each color matches one of the
+          review concepts you chose.
+        </Typography>
+      ) : null}
     </Stack>
   )
 }
@@ -175,6 +275,7 @@ function ConceptAutocomplete({
   disabledIds = [],
   required = false,
   loading = false,
+  tagPalette = 'mastery',
 }) {
   const disabled = new Set(disabledIds)
   const selectedIds = new Set(
@@ -250,6 +351,17 @@ function ConceptAutocomplete({
       renderTags={(selected, getTagProps) =>
         selected.map((option, index) => {
           const { key, ...tagProps } = getTagProps({ index })
+          if (tagPalette === 'reviewSlots') {
+            return (
+              <Chip
+                key={key}
+                {...tagProps}
+                size="small"
+                label={option.concept}
+                sx={slotChipSx(reviewSlotColors(index))}
+              />
+            )
+          }
           return (
             <MasteryChip
               key={key}
@@ -354,6 +466,19 @@ export default function CreateLessonStepper({
     Boolean(lessonDate) && Boolean(selectedNewConceptId) && selectedReviewConceptIds.length > 0
   const canContinueFromNewList = conceptsReady && Boolean(newConceptListId)
   const sentenceConcepts = [newConceptValue, ...reviewConceptValues].filter(Boolean)
+  const reviewSlotColorsById = new Map(
+    selectedReviewConceptIds.map((id, index) => [id, reviewSlotColors(index)]),
+  )
+  const representedReviewConceptIds = new Set(
+    reviewIds
+      .map((id) => reviewConceptLists.find((list) => list.id === id)?.conceptID)
+      .filter(Boolean),
+  )
+
+  function reviewListTone(list) {
+    const index = selectedReviewConceptIds.indexOf(list?.conceptID)
+    return reviewSlotColors(index)
+  }
 
   return (
     <Box>
@@ -410,6 +535,7 @@ export default function CreateLessonStepper({
                 loading={loadingCatalog}
                 disabledIds={selectedNewConceptId ? [selectedNewConceptId] : []}
                 onChange={(next) => onSelectedReviewConceptsChange((next ?? []).map((item) => item.id))}
+                tagPalette="reviewSlots"
               />
               <TextField
                 label="Lesson notes"
@@ -519,12 +645,17 @@ export default function CreateLessonStepper({
                   : 'Select review concepts in Lesson setup to filter lists.'
               }
               getItemLabel={(list) => list.name || 'Untitled list'}
+              getItemClassName={(list) => reviewListTone(list)?.slotClass}
+              getChipSx={(list) => slotChipSx(reviewListTone(list))}
+              gridSx={REVIEW_SLOT_GRID_SX}
               header={
                 <CreateConceptActions
                   concepts={reviewConceptValues}
                   kind="list"
                   onCreate={onCreateList}
                   emptyLabel="Select review concepts in Lesson setup to create a matching list."
+                  representedIds={representedReviewConceptIds}
+                  slotColorsById={reviewSlotColorsById}
                 />
               }
             />
