@@ -4,12 +4,6 @@ import { Box, Paper, Typography } from '@mui/material'
 const WHAT_SPELLS = ['/a/ cat', '/e/ pet', '/i/ itch', '/o/ octopus', '/u/ up', '/ck/ luck', '/sk/ mask', '/ft/ gift']
 const SIMULTANEOUS_ORAL = ['task', 'shaft', 'pluck']
 
-const REVIEW_COLUMNS = [
-  { key: 'review1', fallback: 'Review concept #1' },
-  { key: 'review2', fallback: 'Review concept #2' },
-  { key: 'review3', fallback: 'Review concept #3' },
-]
-
 const READER_FONT_FAMILY = '"Century Gothic", "Comic Sans MS", Andika, sans-serif'
 
 const readerPaperSx = {
@@ -40,8 +34,7 @@ const readerPaperSx = {
   },
 }
 
-const readerBodySx = {
-  maxWidth: '60ch',
+const readerTypeSx = {
   fontFamily: 'inherit',
   fontSize: '24px',
   fontWeight: 400,
@@ -52,6 +45,11 @@ const readerBodySx = {
   textTransform: 'none',
   textDecoration: 'none',
   color: '#333333',
+}
+
+const readerBodySx = {
+  ...readerTypeSx,
+  maxWidth: '60ch',
 }
 
 const paperSx = {
@@ -119,29 +117,6 @@ const chipSx = {
   },
 }
 
-const exhibitTableSx = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  tableLayout: 'fixed',
-}
-
-const exhibitHeaderSx = {
-  verticalAlign: 'bottom',
-  pr: '10px',
-  pb: '6px',
-  fontWeight: 700,
-  fontSize: '11px',
-  borderBottom: '1px solid #e0e0e0',
-}
-
-const exhibitCellSx = {
-  verticalAlign: 'top',
-  pr: '10px',
-  py: 0,
-  lineHeight: 2,
-  fontSize: '14px',
-}
-
 function Placeholder({ tag, value }) {
   if (value) {
     return (
@@ -177,11 +152,6 @@ function listWordLabels(list) {
   return labels
 }
 
-function listDisplayName(list, fallback) {
-  if (list?.name) return list.name
-  return fallback
-}
-
 function sentenceText(sentence) {
   if (!sentence) return ''
   if (typeof sentence === 'string') return sentence
@@ -204,7 +174,7 @@ function passageBody(passage) {
 function ReaderWordList({ list }) {
   const words = listWordLabels(list)
   return (
-    <Box sx={readerBodySx}>
+    <Box sx={readerTypeSx}>
       {words.length
         ? words.map((word, index) => (
             <Box key={index} component="div">
@@ -212,6 +182,23 @@ function ReaderWordList({ list }) {
             </Box>
           ))
         : '\u00a0'}
+    </Box>
+  )
+}
+
+function ReaderWordColumns({ lists = [] }) {
+  return (
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${Math.max(lists.length, 1)}, minmax(0, 1fr))`,
+        columnGap: '32px',
+        alignItems: 'start',
+      }}
+    >
+      {lists.map((list, index) => (
+        <ReaderWordList key={index} list={list} />
+      ))}
     </Box>
   )
 }
@@ -240,41 +227,6 @@ function ReaderPassages({ passages = [] }) {
             </Box>
           ))
         : '\u00a0'}
-    </Box>
-  )
-}
-
-function WordListExhibit({ lists, columns, showHeaders = true }) {
-  const wordColumns = lists.map((list) => listWordLabels(list))
-  const rowCount = Math.max(1, ...wordColumns.map((words) => words.length))
-  const columnWidth = `${100 / Math.max(columns.length, 1)}%`
-  const headerSx = { ...exhibitHeaderSx, width: columnWidth }
-  const cellSx = { ...exhibitCellSx, width: columnWidth }
-
-  return (
-    <Box component="table" sx={exhibitTableSx}>
-      {showHeaders ? (
-        <Box component="thead">
-          <Box component="tr">
-            {columns.map((column, index) => (
-              <Box component="th" key={column.key} sx={headerSx}>
-                {listDisplayName(lists[index], column.fallback)}
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      ) : null}
-      <Box component="tbody">
-        {Array.from({ length: rowCount }, (_, row) => (
-          <Box component="tr" key={row}>
-            {wordColumns.map((words, col) => (
-              <Box component="td" key={col} sx={cellSx}>
-                {words[row] || '\u00a0'}
-              </Box>
-            ))}
-          </Box>
-        ))}
-      </Box>
     </Box>
   )
 }
@@ -332,8 +284,8 @@ function ExhibitPage({ pageNumber, label, reader = false, children }) {
 }
 
 /**
- * Printable lesson-plan layout: cover sheet (page 1), three review lists (page 2),
- * the new concept list for the child (page 3), and the passage for the child (page 4).
+ * Printable lesson-plan layout: cover sheet (page 1) plus child-facing pages
+ * for review lists (page 2), the new concept list (page 3), and the passage (page 4).
  */
 const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
   {
@@ -509,8 +461,8 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
         </Box>
       </Paper>
 
-      <ExhibitPage pageNumber={2} label="Review concepts">
-        <WordListExhibit lists={paddedReview} columns={REVIEW_COLUMNS} showHeaders={false} />
+      <ExhibitPage pageNumber={2} label="Review concepts" reader>
+        <ReaderWordColumns lists={paddedReview} />
       </ExhibitPage>
 
       <ExhibitPage pageNumber={3} label="New concept" reader>
