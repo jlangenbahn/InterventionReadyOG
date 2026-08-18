@@ -49,7 +49,6 @@ export const handler = async (event: GenerateEvent): Promise<string> => {
         inferenceConfig: {
           maxTokens: kind === 'passage' ? 700 : 200,
           temperature: 0.4,
-          topP: 0.9,
         },
       }),
     );
