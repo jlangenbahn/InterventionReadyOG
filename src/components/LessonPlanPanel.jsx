@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import {
   Box,
@@ -195,6 +195,32 @@ function formatLessonDate(value) {
   }).format(new Date(year, month - 1, day))
 }
 
+function recordWordCount(record) {
+  if (!record) return 0
+  return Array.isArray(record.words) ? record.words.filter(Boolean).length : 0
+}
+
+function preferFilledRecord(live, snap, score) {
+  const liveScore = live ? score(live) : 0
+  const snapScore = snap ? score(snap) : 0
+  if (live && liveScore > 0) return live
+  if (snap && snapScore > 0) return snap
+  return live || snap || null
+}
+
+function snapshotHasContent(snaps) {
+  if (!snaps) return false
+  const lists = Object.values(snaps.lists ?? {})
+  if (lists.some((list) => recordWordCount(list) > 0)) return true
+  if (Array.isArray(snaps.sentences) && snaps.sentences.some((item) => item?.text)) return true
+  const passages = Array.isArray(snaps.passages)
+    ? snaps.passages
+    : snaps.passage
+      ? [snaps.passage]
+      : []
+  return passages.some((item) => item?.text)
+}
+
 function snapshotList(list) {
   if (!list) return null
   return {
@@ -292,6 +318,7 @@ export default function LessonPlanPanel({
   const [deletingLesson, setDeletingLesson] = useState(false)
   const [listModalConcept, setListModalConcept] = useState(null)
   const [multiWordModal, setMultiWordModal] = useState(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -361,6 +388,7 @@ export default function LessonPlanPanel({
     setLessonToDelete(null)
     setListModalConcept(null)
     setMultiWordModal(null)
+    setPreviewLoading(false)
   }, [student?.id])
 
   const wordLookup = useMemo(() => buildWordLookup(wordsByConceptId), [wordsByConceptId])
@@ -596,36 +624,33 @@ export default function LessonPlanPanel({
     const id = listSlots[key]
     if (!id) return null
     const live = listsById.get(id)
-    if (live) return live
     const snap = snapshots?.lists?.[key]
-    return snap?.id === id ? snap : null
+    const snapMatch = snap?.id === id ? snap : null
+    return preferFilledRecord(live, snapMatch, recordWordCount)
   }
 
   function sentenceForSlot(key) {
     const id = sentenceSlots[key]
     if (!id) return null
     const live = sentencesById.get(id)
-    if (live) return live
     const snaps = snapshots?.sentences
     const snap = Array.isArray(snaps)
       ? snaps.find((item) => item?.id === id)
       : snaps?.[key]
-    return snap?.id === id ? snap : null
+    const snapMatch = snap?.id === id ? snap : null
+    return preferFilledRecord(live, snapMatch, (item) => (item?.text ? 1 : 0))
   }
 
   function passageForSlot(key) {
     const id = passageSlots[key]
     if (!id) return null
     const live = passagesById.get(id)
-    if (live) return live
     const snap = snapshots?.passage
-    if (snap?.id === id) return snap
     const snaps = snapshots?.passages
-    if (Array.isArray(snaps)) {
-      const fromArray = snaps.find((item) => item?.id === id)
-      return fromArray?.id === id ? fromArray : null
-    }
-    return null
+    const fromArray = Array.isArray(snaps) ? snaps.find((item) => item?.id === id) : null
+    const snapMatch =
+      snap?.id === id ? snap : fromArray?.id === id ? fromArray : null
+    return preferFilledRecord(live, snapMatch, (item) => (item?.text ? 1 : 0))
   }
 
   const reviewLists = REVIEW_SLOT_KEYS.map((key) => listForSlot(key))
@@ -666,6 +691,19 @@ export default function LessonPlanPanel({
       return current
     })
   }, [generatedLessonName])
+
+  useLayoutEffect(() => {
+    if (!loadedLesson) {
+      setPreviewLoading(false)
+      return
+    }
+    if (snapshotHasContent(snapshots)) {
+      setPreviewLoading(false)
+      return
+    }
+    if (loading || loadingLists || loadingCatalog) return
+    setPreviewLoading(false)
+  }, [loadedLesson, snapshots, loading, loadingLists, loadingCatalog])
 
   function handleSelectedNewConceptChange(conceptId) {
     setSelectedNewConceptId(conceptId)
@@ -799,9 +837,11 @@ export default function LessonPlanPanel({
     setLessonNotes('')
     setLessonName('')
     lastGeneratedNameRef.current = ''
+    setPreviewLoading(false)
   }
 
   function applyLesson(lesson) {
+    setPreviewLoading(true)
     const data = parseLessonData(lesson?.lessonData)
     const nextListSlots = {
       ...EMPTY_LIST_SLOTS,
@@ -1192,25 +1232,45 @@ export default function LessonPlanPanel({
                 variant="contained"
                 startIcon={<PrintIcon />}
                 onClick={handlePrint}
-                disabled={loading}
+                disabled={loading || previewLoading}
               >
                 Print Lesson Plan
               </Button>
             </Stack>
-            <LessonPlanTemplate
-              ref={printRef}
-              student={payload?.student ?? student}
-              reviewLists={reviewLists}
-              newConceptList={newConceptList}
-              sentences={selectedSentences}
-              passages={selectedPassages}
-              passage={selectedPassage}
-              date={dateLabel}
-              lessonNumber={lessonNumber}
-              lessonName={lessonDisplayName}
-              instructor={instructor}
-              soapNotes={lessonNotes}
-            />
+            <Box sx={{ position: 'relative', minHeight: previewLoading ? 360 : 0 }}>
+              {previewLoading ? (
+                <Stack
+                  spacing={1.5}
+                  alignItems="center"
+                  justifyContent="center"
+                  sx={{
+                    minHeight: 360,
+                    py: 6,
+                    '@media print': { display: 'none' },
+                  }}
+                >
+                  <CircularProgress />
+                  <Typography variant="body2" color="text.secondary">
+                    Loading lesson plan…
+                  </Typography>
+                </Stack>
+              ) : (
+                <LessonPlanTemplate
+                  ref={printRef}
+                  student={payload?.student ?? student}
+                  reviewLists={reviewLists}
+                  newConceptList={newConceptList}
+                  sentences={selectedSentences}
+                  passages={selectedPassages}
+                  passage={selectedPassage}
+                  date={dateLabel}
+                  lessonNumber={lessonNumber}
+                  lessonName={lessonDisplayName}
+                  instructor={instructor}
+                  soapNotes={lessonNotes}
+                />
+              )}
+            </Box>
           </>
         )}
       </Box>
