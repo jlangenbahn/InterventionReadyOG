@@ -361,15 +361,20 @@ export function parseListData(value) {
   return current && typeof current === 'object' && !Array.isArray(current) ? current : {}
 }
 
+export function defaultLessonPlanName(lessonNumber, conceptName) {
+  const number = Number(lessonNumber)
+  const hasNumber = String(lessonNumber ?? '').trim() !== '' && Number.isFinite(number)
+  const concept = String(conceptName ?? '').trim()
+  if (hasNumber && concept) return `Lesson Plan #${number} – ${concept}`
+  if (hasNumber) return `Lesson Plan #${number}`
+  if (concept) return `Lesson Plan – ${concept}`
+  return ''
+}
+
 export function formatLessonDisplayName(customName, conceptName, lessonNumber) {
   const name = String(customName ?? '').trim()
-  const concept = String(conceptName ?? '').trim()
-  if (name && concept) return `${name} — ${concept}`
   if (name) return name
-  if (concept && lessonNumber) return `Lesson ${lessonNumber} — ${concept}`
-  if (concept) return concept
-  if (lessonNumber) return `Lesson ${lessonNumber}`
-  return ''
+  return defaultLessonPlanName(lessonNumber, conceptName)
 }
 
 export function resolveSentenceFocusId(sentence) {

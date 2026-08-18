@@ -34,6 +34,7 @@ import {
   parseLessonData,
   parseScopeAndSequence,
   formatLessonDisplayName,
+  defaultLessonPlanName,
   resolveSentenceFocusId,
   resolvePassageFocusId,
   resolveListWords,
@@ -137,6 +138,11 @@ function toPlainListRow(list, wordLookup, conceptById) {
     wordCount: words.length,
     words,
   }
+}
+
+function conceptLabel(concept) {
+  const raw = concept?.concept ?? concept?.name ?? ''
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : 'Untitled concept'
 }
 
 function todayIso() {
@@ -247,6 +253,7 @@ export default function LessonPlanPanel({
   groups = [],
 }) {
   const printRef = useRef(null)
+  const lastGeneratedNameRef = useRef('')
   const [loading, setLoading] = useState(false)
   const [payload, setPayload] = useState(null)
   const [listSlots, setListSlots] = useState(EMPTY_LIST_SLOTS)
@@ -335,6 +342,7 @@ export default function LessonPlanPanel({
     setSelectedReviewConceptIds([])
     setLessonNotes('')
     setLessonName('')
+    lastGeneratedNameRef.current = ''
     setShareLesson(null)
     setLessonToDelete(null)
     setListModalConcept(null)
@@ -362,7 +370,11 @@ export default function LessonPlanPanel({
           : 'unknown'
         return {
           id: concept.id,
-          concept: concept.concept || 'Untitled concept',
+          concept: conceptLabel(concept),
+          label: conceptLabel(concept),
+          category: concept.category || '',
+          subcategory: concept.subcategory || '',
+          level: concept.level || '',
           masteryStatus,
           inScope: entry?.inScope === true,
           sequence: Number.isFinite(Number(entry?.sequence)) ? Number(entry.sequence) : null,
@@ -607,6 +619,10 @@ export default function LessonPlanPanel({
 
   const lessonNumber = loadedLesson?.lessonNumber ?? nextLessonNumber(savedLessons)
   const dateLabel = formatLessonDate(lessonDate)
+  const generatedLessonName = defaultLessonPlanName(
+    lessonNumber,
+    conceptById.get(selectedNewConceptId)?.concept || newConceptList?.concept || '',
+  )
   const lessonDisplayName = formatLessonDisplayName(
     lessonName,
     conceptById.get(selectedNewConceptId)?.concept || newConceptList?.concept || '',
@@ -617,6 +633,17 @@ export default function LessonPlanPanel({
     && Boolean(selectedNewConceptId)
     && selectedReviewConceptIds.length > 0
     && Boolean(newConceptList)
+
+  useEffect(() => {
+    setLessonName((current) => {
+      const trimmed = String(current ?? '').trim()
+      if (!trimmed || trimmed === lastGeneratedNameRef.current) {
+        lastGeneratedNameRef.current = generatedLessonName
+        return generatedLessonName
+      }
+      return current
+    })
+  }, [generatedLessonName])
 
   function handleSelectedNewConceptChange(conceptId) {
     setSelectedNewConceptId(conceptId)
@@ -749,6 +776,7 @@ export default function LessonPlanPanel({
     setSelectedReviewConceptIds([])
     setLessonNotes('')
     setLessonName('')
+    lastGeneratedNameRef.current = ''
   }
 
   function applyLesson(lesson) {
@@ -821,7 +849,14 @@ export default function LessonPlanPanel({
     setSelectedNewConceptId(inferredNewConceptId)
     setSelectedReviewConceptIds(uniqueReviewIds)
     setLessonNotes(data.notes ?? lesson?.comments ?? '')
-    setLessonName(data.name || lesson?.name || '')
+    const loadedName = data.name || lesson?.name || ''
+    const loadedConcept =
+      data?.snapshots?.lists?.newConcept?.concept
+      || data?.snapshots?.lists?.newConcept?.name
+      || conceptById.get(inferredNewConceptId)?.concept
+      || ''
+    lastGeneratedNameRef.current = defaultLessonPlanName(lesson?.lessonNumber, loadedConcept)
+    setLessonName(loadedName)
   }
 
   async function handleSave() {
@@ -840,6 +875,8 @@ export default function LessonPlanPanel({
       return
     }
 
+    const resolvedName = lessonName.trim() || generatedLessonName || null
+
     const lessonData = {
       slots: { listSlots, sentenceSlots, passageSlots },
       conceptSlots: {
@@ -847,7 +884,7 @@ export default function LessonPlanPanel({
         reviewConceptIds: selectedReviewConceptIds,
       },
       notes: lessonNotes,
-      name: lessonName.trim(),
+      name: resolvedName,
       snapshots: {
         lists: {
           newConcept: snapshotList(newConceptList),
@@ -872,7 +909,7 @@ export default function LessonPlanPanel({
         conceptId,
         lessonData,
         comments: lessonNotes.trim() || null,
-        name: lessonName.trim() || null,
+        name: resolvedName,
       })
       const lessons = await loadSavedLessons()
       const refreshed = (lessons ?? []).find((item) => item.id === saved.id)
@@ -981,6 +1018,8 @@ export default function LessonPlanPanel({
                 onLessonNotesChange={setLessonNotes}
                 lessonName={lessonName}
                 onLessonNameChange={setLessonName}
+                lessonNumber={lessonNumber}
+                loadingCatalog={loadingCatalog}
                 newConceptLists={newConceptLists}
                 reviewConceptLists={reviewConceptLists}
                 sentences={lessonSentences}

@@ -157,6 +157,14 @@ function CreateConceptActions({
   )
 }
 
+function conceptSearchText(option) {
+  return [option?.concept, option?.category, option?.subcategory, option?.level]
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+}
+
 function ConceptAutocomplete({
   label,
   options,
@@ -166,6 +174,7 @@ function ConceptAutocomplete({
   maxCount = 1,
   disabledIds = [],
   required = false,
+  loading = false,
 }) {
   const disabled = new Set(disabledIds)
   const selectedIds = new Set(
@@ -180,8 +189,11 @@ function ConceptAutocomplete({
     <Autocomplete
       multiple={multiple}
       fullWidth
-      options={options}
-      value={value}
+      autoHighlight
+      openOnFocus
+      options={options ?? []}
+      loading={loading}
+      value={multiple ? (value ?? []) : (value ?? null)}
       onChange={(_event, next) => {
         if (!multiple) {
           onChange(next)
@@ -191,8 +203,14 @@ function ConceptAutocomplete({
         onChange(limited)
       }}
       groupBy={(option) => (option.inScope ? 'In scope' : 'Not in scope')}
-      getOptionLabel={(option) => option?.concept || ''}
-      isOptionEqualToValue={(option, selected) => option.id === selected.id}
+      getOptionKey={(option) => option?.id}
+      getOptionLabel={(option) => option?.concept || option?.label || ''}
+      isOptionEqualToValue={(option, selected) => option?.id === selected?.id}
+      filterOptions={(items, state) => {
+        const query = String(state.inputValue ?? '').trim().toLowerCase()
+        if (!query) return items
+        return items.filter((option) => conceptSearchText(option).includes(query))
+      }}
       getOptionDisabled={(option) => {
         if (disabled.has(option.id)) return true
         if (!multiple) return false
@@ -201,6 +219,34 @@ function ConceptAutocomplete({
       }}
       filterSelectedOptions={multiple}
       disableCloseOnSelect={multiple}
+      noOptionsText={loading ? 'Loading concepts…' : 'No concepts in the catalog yet.'}
+      slotProps={{
+        popper: { sx: { zIndex: 1400 } },
+        listbox: { sx: { maxHeight: 320 } },
+      }}
+      renderGroup={(params) => (
+        <li key={params.key}>
+          <Box
+            component="div"
+            sx={{
+              px: 2,
+              py: 0.75,
+              typography: 'caption',
+              color: 'text.secondary',
+              fontWeight: 700,
+              bgcolor: 'background.paper',
+              position: 'sticky',
+              top: 0,
+              zIndex: 1,
+            }}
+          >
+            {params.group}
+          </Box>
+          <Box component="ul" sx={{ p: 0, m: 0 }}>
+            {params.children}
+          </Box>
+        </li>
+      )}
       renderTags={(selected, getTagProps) =>
         selected.map((option, index) => {
           const { key, ...tagProps } = getTagProps({ index })
@@ -218,23 +264,22 @@ function ConceptAutocomplete({
         const { key, ...optionProps } = props
         const colors = masteryColors(option.masteryStatus)
         return (
-          <Box
-            component="li"
+          <li
             key={key}
             {...optionProps}
-            sx={{
-              bgcolor: `${colors.bg} !important`,
+            style={{
+              ...optionProps.style,
+              backgroundColor: colors.bg,
               color: colors.color,
-              '&:hover': { bgcolor: `${colors.hover} !important` },
             }}
           >
             <Stack direction="row" spacing={1} alignItems="center" sx={{ width: '100%', py: 0.25 }}>
               <Typography variant="body2" sx={{ flex: 1, color: 'inherit' }}>
-                {option.concept}
+                {option.concept || 'Untitled concept'}
               </Typography>
               <Chip
                 size="small"
-                label={option.masteryStatus}
+                label={option.masteryStatus || 'unknown'}
                 sx={{
                   bgcolor: 'transparent',
                   color: 'inherit',
@@ -244,7 +289,7 @@ function ConceptAutocomplete({
                 }}
               />
             </Stack>
-          </Box>
+          </li>
         )
       }}
       renderInput={(params) => (
@@ -273,6 +318,8 @@ export default function CreateLessonStepper({
   onLessonNotesChange,
   lessonName = '',
   onLessonNameChange,
+  lessonNumber = null,
+  loadingCatalog = false,
   newConceptLists = [],
   reviewConceptLists = [],
   sentences = [],
@@ -300,6 +347,9 @@ export default function CreateLessonStepper({
   const reviewConceptValues = selectedReviewConceptIds
     .map((id) => conceptOptions.find((item) => item.id === id))
     .filter(Boolean)
+  const defaultNamePreview = newConceptValue?.concept
+    ? `Lesson Plan #${lessonNumber || 1} – ${newConceptValue.concept}`
+    : `Lesson Plan #${lessonNumber || 1}`
   const conceptsReady =
     Boolean(lessonDate) && Boolean(selectedNewConceptId) && selectedReviewConceptIds.length > 0
   const canContinueFromNewList = conceptsReady && Boolean(newConceptListId)
@@ -316,13 +366,9 @@ export default function CreateLessonStepper({
             size="small"
             value={lessonName}
             onChange={(event) => onLessonNameChange(event.target.value)}
-            placeholder="e.g. Week 3 dictation"
+            placeholder={defaultNamePreview}
             sx={{ flex: 1, minWidth: 0 }}
-            helperText={
-              newConceptValue?.concept
-                ? `Saved as “${lessonName.trim() ? `${lessonName.trim()} — ${newConceptValue.concept}` : `Lesson — ${newConceptValue.concept}`}”`
-                : 'The new concept name is appended after you pick it.'
-            }
+            helperText={`Default name is “${defaultNamePreview}”. Edit it if you want a custom title.`}
           />
           <TextField
             label="Lesson date"
@@ -341,6 +387,7 @@ export default function CreateLessonStepper({
             required
             options={conceptOptions}
             value={newConceptValue}
+            loading={loadingCatalog}
             onChange={(next) => onSelectedNewConceptChange(next?.id ?? null)}
           />
         </Box>
@@ -351,6 +398,7 @@ export default function CreateLessonStepper({
           maxCount={3}
           options={conceptOptions}
           value={reviewConceptValues}
+          loading={loadingCatalog}
           disabledIds={selectedNewConceptId ? [selectedNewConceptId] : []}
           onChange={(next) => onSelectedReviewConceptsChange((next ?? []).map((item) => item.id))}
         />
@@ -364,6 +412,12 @@ export default function CreateLessonStepper({
           fullWidth
           size="small"
         />
+        {!loadingCatalog && conceptOptions.length === 0 ? (
+          <Alert severity="warning">
+            No concepts are available yet. Open the Concepts tab to confirm the catalog loaded, then
+            return here to choose a new concept and review concepts.
+          </Alert>
+        ) : null}
         {!conceptsReady ? (
           <Alert severity="info">
             Choose a lesson date, one new concept, and at least one review concept (up to three)
