@@ -267,7 +267,7 @@ const schema = a.schema({
    * Lambda-backed Bedrock Converse call. Amplify a.generation() mapping templates
    * still use foundation-model ARNs, which Bedrock rejects for Haiku 4.5 inference profiles.
    */
-  generateLessonText: a
+  generateLessonDraft: a
     .query()
     .arguments({
       kind: a.string().required(),

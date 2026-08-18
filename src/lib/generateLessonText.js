@@ -45,7 +45,7 @@ function messageFromUnknown(err) {
  * built from a concept word list.
  */
 export async function generateLessonText({ kind, conceptName, words }) {
-  const generate = client.queries?.generateLessonText
+  const generate = client.queries?.generateLessonDraft
   if (typeof generate !== 'function') {
     throw new Error(
       'AI generation is not available in this app session. Refresh the page after the latest deploy finishes.',
