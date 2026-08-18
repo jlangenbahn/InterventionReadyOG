@@ -40,10 +40,14 @@ export async function generateLessonText({ kind, conceptName, words }) {
     throw new Error('Select a word list with at least one word.')
   }
 
+  const kindLabel = kind === 'passage' ? 'passage' : 'sentence'
   const { data, errors } = await generate({
-    kind: kind === 'passage' ? 'passage' : 'sentence',
+    kind: kindLabel,
     conceptName: String(conceptName || 'this concept').trim() || 'this concept',
-    words: unique.join(', '),
+    words:
+      kindLabel === 'passage'
+        ? `Write a short simple passage of 4 to 7 short sentences for the concept ${String(conceptName || 'this concept')}. Use at least 80 percent of these target words, and use 2 or 3 of them in the same sentence when it still sounds natural. Error on the side of being too simple. Target words: ${unique.join(', ')}`
+        : `Write one short simple sentence for the concept ${String(conceptName || 'this concept')}. Use 2 or 3 of these target words in that sentence when possible. Target words: ${unique.join(', ')}`,
   })
   if (errors?.length) {
     throw new Error(errors.map((item) => item.message).join(', '))
