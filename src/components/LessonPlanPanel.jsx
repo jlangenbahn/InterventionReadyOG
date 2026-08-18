@@ -509,6 +509,14 @@ export default function LessonPlanPanel({
     [savedLessons],
   )
 
+  const lessonSelectionModel = useMemo(
+    () => ({
+      type: 'include',
+      ids: new Set(loadedLesson?.id ? [loadedLesson.id] : []),
+    }),
+    [loadedLesson?.id],
+  )
+
   const lessonActionColumn = useMemo(
     () => ({
       field: 'actions',
@@ -899,6 +907,7 @@ export default function LessonPlanPanel({
       instructor,
     }
 
+    const wasUpdate = Boolean(loadedLesson?.id)
     setSaving(true)
     try {
       const saved = await saveStudentLesson({
@@ -913,10 +922,18 @@ export default function LessonPlanPanel({
       })
       const lessons = await loadSavedLessons()
       const refreshed = (lessons ?? []).find((item) => item.id === saved.id)
-      setLoadedLesson(refreshed ?? { ...saved, createdAt: saved.createdAt ?? loadedLesson?.createdAt })
-      setSnapshots(lessonData.snapshots)
-      setNotice(loadedLesson?.id ? 'Lesson plan updated.' : 'Lesson plan saved.')
+      const nextLesson = refreshed ?? { ...saved, createdAt: saved.createdAt ?? loadedLesson?.createdAt }
+      if (refreshed) {
+        applyLesson(refreshed)
+      } else {
+        setLoadedLesson(nextLesson)
+        setSnapshots(lessonData.snapshots)
+      }
+      setNotice(wasUpdate ? 'Lesson plan updated.' : 'Lesson plan saved.')
       setError('')
+      if (!wasUpdate) {
+        setLessonMode(LESSON_MODE_VIEW)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save lesson plan')
     } finally {
@@ -1063,6 +1080,7 @@ export default function LessonPlanPanel({
                     const lesson = savedLessons.find((item) => item.id === params.id)
                     if (lesson) applyLesson(lesson)
                   }}
+                  rowSelectionModel={lessonSelectionModel}
                   getRowClassName={(params) => (params.id === loadedLesson?.id ? 'Mui-selected' : '')}
                   loading={loadingLessons}
                   pagination

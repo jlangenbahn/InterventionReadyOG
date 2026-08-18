@@ -357,80 +357,95 @@ export default function CreateLessonStepper({
 
   return (
     <Box>
-      <Stack spacing={1.5} sx={{ mb: 2 }}>
-        <Typography variant="subtitle2">Lesson setup</Typography>
-        <MasteryLegend />
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="stretch">
-          <TextField
-            label="Lesson name"
-            size="small"
-            value={lessonName}
-            onChange={(event) => onLessonNameChange(event.target.value)}
-            placeholder={defaultNamePreview}
-            sx={{ flex: 1, minWidth: 0 }}
-            helperText={`Default name is “${defaultNamePreview}”. Edit it if you want a custom title.`}
-          />
-          <TextField
-            label="Lesson date"
-            type="date"
-            size="small"
-            required
-            value={lessonDate}
-            onChange={(event) => onLessonDateChange(event.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={{ width: { xs: '100%', sm: 190 }, flexShrink: 0 }}
-          />
-        </Stack>
-        <Box sx={{ minWidth: 0 }}>
-          <ConceptAutocomplete
-            label="New concept"
-            required
-            options={conceptOptions}
-            value={newConceptValue}
-            loading={loadingCatalog}
-            onChange={(next) => onSelectedNewConceptChange(next?.id ?? null)}
-          />
-        </Box>
-        <ConceptAutocomplete
-          label="Review concepts"
-          required
-          multiple
-          maxCount={3}
-          options={conceptOptions}
-          value={reviewConceptValues}
-          loading={loadingCatalog}
-          disabledIds={selectedNewConceptId ? [selectedNewConceptId] : []}
-          onChange={(next) => onSelectedReviewConceptsChange((next ?? []).map((item) => item.id))}
-        />
-        <TextField
-          label="Lesson notes"
-          placeholder="Add notes for this specific lesson…"
-          value={lessonNotes}
-          onChange={(event) => onLessonNotesChange(event.target.value)}
-          multiline
-          minRows={3}
-          fullWidth
-          size="small"
-        />
-        {!loadingCatalog && conceptOptions.length === 0 ? (
-          <Alert severity="warning">
-            No concepts are available yet. Open the Concepts tab to confirm the catalog loaded, then
-            return here to choose a new concept and review concepts.
-          </Alert>
-        ) : null}
-        {!conceptsReady ? (
-          <Alert severity="info">
-            Choose a lesson date, one new concept, and at least one review concept (up to three)
-            before selecting lists.
-          </Alert>
-        ) : null}
-      </Stack>
-
       <Stepper activeStep={activeStep} orientation="vertical" nonLinear>
-        <Step completed={Boolean(newConceptListId)}>
+        <Step completed={conceptsReady}>
           <StepLabel
             optional={<Typography variant="caption">Required</Typography>}
             onClick={() => onStepChange(0)}
+            sx={{ cursor: 'pointer' }}
+          >
+            Lesson setup
+          </StepLabel>
+          <StepContent>
+            <Stack spacing={1.5}>
+              <MasteryLegend />
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="stretch">
+                <TextField
+                  label="Lesson name"
+                  size="small"
+                  value={lessonName}
+                  onChange={(event) => onLessonNameChange(event.target.value)}
+                  placeholder={defaultNamePreview}
+                  sx={{ flex: 1, minWidth: 0 }}
+                  helperText={`Default name is “${defaultNamePreview}”. Edit it if you want a custom title.`}
+                />
+                <TextField
+                  label="Lesson date"
+                  type="date"
+                  size="small"
+                  required
+                  value={lessonDate}
+                  onChange={(event) => onLessonDateChange(event.target.value)}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                  sx={{ width: { xs: '100%', sm: 190 }, flexShrink: 0 }}
+                />
+              </Stack>
+              <Box sx={{ minWidth: 0 }}>
+                <ConceptAutocomplete
+                  label="New concept"
+                  required
+                  options={conceptOptions}
+                  value={newConceptValue}
+                  loading={loadingCatalog}
+                  onChange={(next) => onSelectedNewConceptChange(next?.id ?? null)}
+                />
+              </Box>
+              <ConceptAutocomplete
+                label="Review concepts"
+                required
+                multiple
+                maxCount={3}
+                options={conceptOptions}
+                value={reviewConceptValues}
+                loading={loadingCatalog}
+                disabledIds={selectedNewConceptId ? [selectedNewConceptId] : []}
+                onChange={(next) => onSelectedReviewConceptsChange((next ?? []).map((item) => item.id))}
+              />
+              <TextField
+                label="Lesson notes"
+                placeholder="Add notes for this specific lesson…"
+                value={lessonNotes}
+                onChange={(event) => onLessonNotesChange(event.target.value)}
+                multiline
+                minRows={3}
+                fullWidth
+                size="small"
+              />
+              {!loadingCatalog && conceptOptions.length === 0 ? (
+                <Alert severity="warning">
+                  No concepts are available yet. Open the Concepts tab to confirm the catalog loaded, then
+                  return here to choose a new concept and review concepts.
+                </Alert>
+              ) : null}
+              {!conceptsReady ? (
+                <Alert severity="info">
+                  Choose a lesson date, one new concept, and at least one review concept (up to three)
+                  before selecting lists.
+                </Alert>
+              ) : null}
+            </Stack>
+            <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+              <Button variant="contained" onClick={() => onStepChange(1)} disabled={!conceptsReady}>
+                Continue
+              </Button>
+            </Stack>
+          </StepContent>
+        </Step>
+
+        <Step completed={Boolean(newConceptListId)}>
+          <StepLabel
+            optional={<Typography variant="caption">Required</Typography>}
+            onClick={() => onStepChange(1)}
             sx={{ cursor: 'pointer' }}
           >
             New concept list
@@ -439,7 +454,7 @@ export default function CreateLessonStepper({
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
               {selectedNewConceptId
                 ? 'Only lists tagged with the selected new concept are shown.'
-                : 'Select a new concept above to see matching lists.'}
+                : 'Select a new concept in Lesson setup to see matching lists.'}
             </Typography>
             <StepperSelectionGrid
               items={newConceptLists}
@@ -451,7 +466,7 @@ export default function CreateLessonStepper({
               noRowsLabel={
                 selectedNewConceptId
                   ? 'No lists for this concept yet. Create one above.'
-                  : 'Select a new concept above to filter lists.'
+                  : 'Select a new concept in Lesson setup to filter lists.'
               }
               getItemLabel={(list) => list.name || 'Untitled list'}
               header={
@@ -459,14 +474,15 @@ export default function CreateLessonStepper({
                   concepts={newConceptValue ? [newConceptValue] : []}
                   kind="list"
                   onCreate={onCreateList}
-                  emptyLabel="Select a new concept above to create a matching list."
+                  emptyLabel="Select a new concept in Lesson setup to create a matching list."
                 />
               }
             />
             <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+              <Button onClick={() => onStepChange(0)}>Back</Button>
               <Button
                 variant="contained"
-                onClick={() => onStepChange(1)}
+                onClick={() => onStepChange(2)}
                 disabled={!canContinueFromNewList}
               >
                 Continue
@@ -478,7 +494,7 @@ export default function CreateLessonStepper({
         <Step completed={reviewIds.length > 0}>
           <StepLabel
             optional={<Typography variant="caption">Up to 3</Typography>}
-            onClick={() => onStepChange(1)}
+            onClick={() => onStepChange(2)}
             sx={{ cursor: 'pointer' }}
           >
             Review concept lists
@@ -487,7 +503,7 @@ export default function CreateLessonStepper({
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
               {selectedReviewConceptIds.length
                 ? 'Only lists tagged with the selected review concepts are shown. The new concept list is hidden so it is not chosen twice.'
-                : 'Select review concepts above to see matching lists.'}
+                : 'Select review concepts in Lesson setup to see matching lists.'}
             </Typography>
             <StepperSelectionGrid
               items={reviewConceptLists}
@@ -500,7 +516,7 @@ export default function CreateLessonStepper({
               noRowsLabel={
                 selectedReviewConceptIds.length
                   ? 'No other lists available for the selected review concepts. Create one above.'
-                  : 'Select review concepts above to filter lists.'
+                  : 'Select review concepts in Lesson setup to filter lists.'
               }
               getItemLabel={(list) => list.name || 'Untitled list'}
               header={
@@ -508,13 +524,13 @@ export default function CreateLessonStepper({
                   concepts={reviewConceptValues}
                   kind="list"
                   onCreate={onCreateList}
-                  emptyLabel="Select review concepts above to create a matching list."
+                  emptyLabel="Select review concepts in Lesson setup to create a matching list."
                 />
               }
             />
             <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-              <Button onClick={() => onStepChange(0)}>Back</Button>
-              <Button variant="contained" onClick={() => onStepChange(2)} disabled={!conceptsReady}>
+              <Button onClick={() => onStepChange(1)}>Back</Button>
+              <Button variant="contained" onClick={() => onStepChange(3)} disabled={!conceptsReady}>
                 Continue
               </Button>
             </Stack>
@@ -524,14 +540,14 @@ export default function CreateLessonStepper({
         <Step completed={sentenceIds.length > 0}>
           <StepLabel
             optional={<Typography variant="caption">Up to 6</Typography>}
-            onClick={() => onStepChange(2)}
+            onClick={() => onStepChange(3)}
             sx={{ cursor: 'pointer' }}
           >
             Sentences
           </StepLabel>
           <StepContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Only sentences whose focus concept matches the new or review concepts above are shown.
+              Only sentences whose focus concept matches the new or review concepts from Lesson setup are shown.
             </Typography>
             <StepperSelectionGrid
               items={sentences}
@@ -543,7 +559,7 @@ export default function CreateLessonStepper({
               noRowsLabel={
                 selectedNewConceptId
                   ? 'No sentences with those focus concepts. Create one above.'
-                  : 'Select new and review concepts above to filter sentences by focus concept.'
+                  : 'Select new and review concepts in Lesson setup to filter sentences by focus concept.'
               }
               getItemLabel={(sentence) => truncate(sentence.text, 60) || 'Untitled sentence'}
               header={
@@ -551,13 +567,13 @@ export default function CreateLessonStepper({
                   concepts={sentenceConcepts}
                   kind="sentence"
                   onCreate={onCreateSentence}
-                  emptyLabel="Select new and review concepts above to create a matching sentence."
+                  emptyLabel="Select new and review concepts in Lesson setup to create a matching sentence."
                 />
               }
             />
             <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-              <Button onClick={() => onStepChange(1)}>Back</Button>
-              <Button variant="contained" onClick={() => onStepChange(3)}>
+              <Button onClick={() => onStepChange(2)}>Back</Button>
+              <Button variant="contained" onClick={() => onStepChange(4)}>
                 Continue
               </Button>
             </Stack>
@@ -567,14 +583,14 @@ export default function CreateLessonStepper({
         <Step completed={passageIds.length > 0}>
           <StepLabel
             optional={<Typography variant="caption">Up to 2</Typography>}
-            onClick={() => onStepChange(3)}
+            onClick={() => onStepChange(4)}
             sx={{ cursor: 'pointer' }}
           >
             Passages
           </StepLabel>
           <StepContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Only passages whose focus concept matches the new or review concepts above are shown.
+              Only passages whose focus concept matches the new or review concepts from Lesson setup are shown.
             </Typography>
             <StepperSelectionGrid
               items={passages}
@@ -586,7 +602,7 @@ export default function CreateLessonStepper({
               noRowsLabel={
                 selectedNewConceptId
                   ? 'No passages with those focus concepts. Create one above.'
-                  : 'Select new and review concepts above to filter passages by focus concept.'
+                  : 'Select new and review concepts in Lesson setup to filter passages by focus concept.'
               }
               getItemLabel={(passage) => passage.title || truncate(passage.text, 60) || 'Untitled passage'}
               header={
@@ -594,7 +610,7 @@ export default function CreateLessonStepper({
                   concepts={sentenceConcepts}
                   kind="passage"
                   onCreate={onCreatePassage}
-                  emptyLabel="Select new and review concepts above to create a matching passage."
+                  emptyLabel="Select new and review concepts in Lesson setup to create a matching passage."
                 />
               }
             />
@@ -605,7 +621,7 @@ export default function CreateLessonStepper({
               </Alert>
             ) : null}
             <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-              <Button onClick={() => onStepChange(2)}>Back</Button>
+              <Button onClick={() => onStepChange(3)}>Back</Button>
               <Button
                 variant="contained"
                 color="secondary"

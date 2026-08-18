@@ -407,7 +407,7 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
       </ExhibitPage>
 
       <ExhibitPage pageNumber={3} label="New concept">
-        <WordListExhibit lists={[newConceptList]} columns={[NEW_CONCEPT_COLUMN]} />
+        <WordListExhibit lists={[newConceptList]} columns={[NEW_CONCEPT_COLUMN]} showHeaders={false} />
       </ExhibitPage>
     </Box>
   )
