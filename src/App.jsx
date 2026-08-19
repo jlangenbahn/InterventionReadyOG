@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Authenticator } from '@aws-amplify/ui-react'
+import { Authenticator, ThemeProvider as AmplifyThemeProvider } from '@aws-amplify/ui-react'
 import { generateClient } from 'aws-amplify/data'
 import {
   Alert,
@@ -32,7 +32,6 @@ import {
   Toolbar,
   Tooltip,
   Typography,
-  createTheme,
 } from '@mui/material'
 import { DataGridPro, GridToolbar, useGridApiRef } from '@mui/x-data-grid-pro'
 import AddIcon from '@mui/icons-material/Add'
@@ -55,6 +54,7 @@ import { fetchStudentLists } from './lib/fetchStudentLessonPlan'
 import { deleteInstructorGroup, fetchInstructorGroups, saveInstructorGroup } from './lib/groups'
 import { deleteStudentCascade, updateStudent } from './lib/crudRecords'
 import { downloadCsvTable, downloadXlsxTable, sanitizeFileStem } from './lib/exportTable'
+import { amplifyTheme, masteryRowSx, theme } from './theme'
 
 const client = generateClient()
 const DRAWER_WIDTH = 300
@@ -65,43 +65,6 @@ const TAB_CONTENT = 3
 const TAB_DATA = 4
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
-/** Sequential teal: unknown (lightest) → mastered (darkest). */
-const MASTERY_ROW_COLORS = {
-  unknown: { bg: '#eef6f8', hover: '#e2f0f3', color: '#1a2a2e' },
-  new: { bg: '#c5dce1', hover: '#b4d2d8', color: '#1a2a2e' },
-  review: { bg: '#7aadb8', hover: '#689faa', color: '#102428' },
-  mastered: { bg: '#0f4c5c', hover: '#0c3e4b', color: '#ffffff' },
-}
-
-const masteryRowSx = Object.fromEntries(
-  Object.entries(MASTERY_ROW_COLORS).flatMap(([status, { bg, hover, color }]) => [
-    [
-      `& .mastery-row-${status}`,
-      {
-        bgcolor: bg,
-        color,
-        '& .MuiCheckbox-root': { color },
-        '& .MuiDataGrid-cell': { color },
-      },
-    ],
-    [`& .mastery-row-${status}:hover`, { bgcolor: hover }],
-  ]),
-)
-
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: { main: '#0f4c5c' },
-    secondary: { main: '#e36414' },
-    background: { default: '#f4f6f8', paper: '#ffffff' },
-  },
-  typography: {
-    fontFamily: '"IBM Plex Sans", "Segoe UI", sans-serif',
-    h5: { fontWeight: 700 },
-    h6: { fontWeight: 650 },
-  },
-  shape: { borderRadius: 10 },
-})
 
 const scopeColumnDefs = (locked) => [
   {
@@ -1207,26 +1170,25 @@ function AppShell({ user, signOut }) {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <CssBaseline />
       <AppBar
         position="fixed"
         elevation={0}
         sx={{
           zIndex: (t) => t.zIndex.drawer + 1,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
-          color: 'text.primary',
+          borderBottom: '3px solid',
+          borderColor: 'secondary.main',
+          bgcolor: 'primary.main',
+          color: 'primary.contrastText',
         }}
       >
         <Toolbar sx={{ gap: 2 }}>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
             InterventionReadyOG
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ display: { xs: 'none', md: 'block' } }}>
+          <Typography variant="body2" sx={{ display: { xs: 'none', md: 'block' }, color: 'secondary.main' }}>
             {catalogStatus}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: 'secondary.main' }}>
             {user?.signInDetails?.loginId ?? user?.username}
           </Typography>
           <Button startIcon={<LogoutIcon />} onClick={signOut} color="inherit">
@@ -1379,7 +1341,7 @@ function AppShell({ user, signOut }) {
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
         {error ? (
-          <Paper sx={{ p: 2, mb: 2, bgcolor: '#fff4f0' }}>
+          <Paper sx={{ p: 2, mb: 2, bgcolor: 'secondary.light' }}>
             <Typography color="error">{error}</Typography>
           </Paper>
         ) : null}
@@ -1610,9 +1572,12 @@ function AppShell({ user, signOut }) {
 export default function App() {
   return (
     <ThemeProvider theme={theme}>
-      <Authenticator loginMechanisms={['email']}>
-        {({ signOut, user }) => <AppShell user={user} signOut={signOut} />}
-      </Authenticator>
+      <CssBaseline />
+      <AmplifyThemeProvider theme={amplifyTheme}>
+        <Authenticator loginMechanisms={['email']}>
+          {({ signOut, user }) => <AppShell user={user} signOut={signOut} />}
+        </Authenticator>
+      </AmplifyThemeProvider>
     </ThemeProvider>
   )
 }

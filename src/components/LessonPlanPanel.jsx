@@ -94,6 +94,13 @@ const PRINT_PAGE_STYLE = `
     text-transform: none !important;
     text-decoration: none !important;
   }
+  .lesson-plan-page:not(.lesson-plan-reader-page) {
+    font-family: "Century Gothic", "Comic Sans MS", Andika, sans-serif !important;
+    font-size: 11px !important;
+    letter-spacing: -0.02em !important;
+    line-height: 1.25 !important;
+    color: #1a2332 !important;
+  }
   .lesson-plan-screen-only {
     display: none !important;
   }
@@ -1232,7 +1239,7 @@ export default function LessonPlanPanel({
           top: { md: 88 },
           maxHeight: { md: 'calc(100vh - 104px)' },
           overflow: { md: 'auto' },
-          bgcolor: lessonMode === LESSON_MODE_GRADE ? 'transparent' : '#f5f5f6',
+          bgcolor: lessonMode === LESSON_MODE_GRADE ? 'transparent' : 'background.default',
           py: lessonMode === LESSON_MODE_GRADE ? 0 : 1.5,
           px: lessonMode === LESSON_MODE_GRADE ? 0 : { xs: 1, sm: 1.5 },
           borderRadius: 1,

@@ -31,16 +31,11 @@ import {
 } from '../lib/fetchStudentLessonPlan'
 import { deletePassage, deleteSentence } from '../lib/crudRecords'
 import { buildWordCatalogIndex, tagMultiWordText } from '../lib/tagMultiWordText'
+import { MASTERY_ROW_COLORS } from '../theme'
 
 const MODE_VIEW = 0
 const MODE_CREATE = 1
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
-const MASTERY_ROW_COLORS = {
-  unknown: { bg: '#eef6f8', hover: '#e2f0f3', color: '#1a2a2e' },
-  new: { bg: '#c5dce1', hover: '#b4d2d8', color: '#1a2a2e' },
-  review: { bg: '#7aadb8', hover: '#689faa', color: '#102428' },
-  mastered: { bg: '#0f4c5c', hover: '#0c3e4b', color: '#ffffff' },
-}
 
 function masteryColors(status) {
   return MASTERY_ROW_COLORS[status] ?? MASTERY_ROW_COLORS.unknown

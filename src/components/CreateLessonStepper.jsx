@@ -15,6 +15,7 @@ import {
 import AddIcon from '@mui/icons-material/Add'
 import SaveIcon from '@mui/icons-material/Save'
 import StepperSelectionGrid from './StepperSelectionGrid'
+import { MASTERY_ROW_COLORS, REVIEW_SLOT_COLORS, UNREPRESENTED_COLORS } from '../theme'
 
 const LIST_COLUMNS = [
   { field: 'name', headerName: 'List', flex: 1.2, minWidth: 90 },
@@ -58,57 +59,8 @@ const PASSAGE_COLUMNS = [
 
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
-/** Same sequential teal as Scope & Sequence: unknown (lightest) → mastered (darkest). */
-const MASTERY_ROW_COLORS = {
-  unknown: { bg: '#eef6f8', hover: '#e2f0f3', color: '#1a2a2e' },
-  new: { bg: '#c5dce1', hover: '#b4d2d8', color: '#1a2a2e' },
-  review: { bg: '#7aadb8', hover: '#689faa', color: '#102428' },
-  mastered: { bg: '#0f4c5c', hover: '#0c3e4b', color: '#ffffff' },
-}
-
 function masteryColors(status) {
   return MASTERY_ROW_COLORS[status] ?? MASTERY_ROW_COLORS.unknown
-}
-
-/** Distinct colors for review concept 1–3; gray means that concept has no list selected yet. */
-const REVIEW_SLOT_COLORS = [
-  {
-    slotClass: 'review-slot-0',
-    bg: '#f6d27a',
-    hover: '#f0c14a',
-    color: '#4a3200',
-    border: '#d4a017',
-    rowBg: '#fdf6e3',
-    rowHover: '#f8e6b0',
-    rowSelected: '#f6d27a',
-  },
-  {
-    slotClass: 'review-slot-1',
-    bg: '#7eb8d8',
-    hover: '#5ba3cc',
-    color: '#083044',
-    border: '#2e7a9e',
-    rowBg: '#e7f4fb',
-    rowHover: '#c0e3f1',
-    rowSelected: '#7eb8d8',
-  },
-  {
-    slotClass: 'review-slot-2',
-    bg: '#c48bc8',
-    hover: '#b36fb8',
-    color: '#3a1840',
-    border: '#8e4a94',
-    rowBg: '#f6eaf7',
-    rowHover: '#e8cdec',
-    rowSelected: '#c48bc8',
-  },
-]
-
-const UNREPRESENTED_COLORS = {
-  bg: '#eeeeee',
-  hover: '#e0e0e0',
-  color: '#616161',
-  border: '#bdbdbd',
 }
 
 function reviewSlotColors(index) {

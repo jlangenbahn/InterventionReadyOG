@@ -16,14 +16,9 @@ import {
   parseScopeAndSequence,
 } from '../lib/fetchStudentLessonPlan'
 import { normalizeLookupWord, buildWordCatalogIndex } from '../lib/tagMultiWordText'
+import { MASTERY_ROW_COLORS } from '../theme'
 
 const MASTERY_STATUSES = ['new', 'review', 'mastered']
-const MASTERY_ROW_COLORS = {
-  unknown: { bg: '#eef6f8', color: '#1a2a2e' },
-  new: { bg: '#c5dce1', color: '#1a2a2e' },
-  review: { bg: '#7aadb8', color: '#102428' },
-  mastered: { bg: '#0f4c5c', color: '#ffffff' },
-}
 
 const WORD_COLUMNS = [
   { field: 'word', headerName: 'Word', flex: 1, minWidth: 120 },

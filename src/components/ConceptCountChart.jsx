@@ -1,6 +1,5 @@
 import { Box, Chip, Paper, Stack, Typography } from '@mui/material'
-
-const BAR_COLORS = ['#0f4c5c', '#1b6b7a', '#3d8b99', '#e36414', '#7aadb8', '#c45c26']
+import { BAR_COLORS } from '../theme'
 
 function formatPercent(value) {
   if (!Number.isFinite(value)) return '0%'

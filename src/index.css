@@ -7,4 +7,8 @@ body,
 
 body {
   min-width: 320px;
+  font-family: "Century Gothic", "Comic Sans MS", Andika, sans-serif;
+  letter-spacing: -0.02em;
+  background-color: #e8eaed;
+  color: #1a2332;
 }

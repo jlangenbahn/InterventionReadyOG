@@ -1,11 +1,10 @@
 import { forwardRef } from 'react'
 import { Box, Paper, Typography } from '@mui/material'
 import { sanitizeLessonBody } from '../lib/sanitizeLessonText'
+import { BRAND, FONT_FAMILY, studentTypeSx } from '../theme'
 
 const WHAT_SPELLS = ['/a/ cat', '/e/ pet', '/i/ itch', '/o/ octopus', '/u/ up', '/ck/ luck', '/sk/ mask', '/ft/ gift']
 const SIMULTANEOUS_ORAL = ['task', 'shaft', 'pluck']
-
-const READER_FONT_FAMILY = '"Century Gothic", "Comic Sans MS", Andika, sans-serif'
 
 const readerPaperSx = {
   bgcolor: '#ffffff',
@@ -15,37 +14,20 @@ const readerPaperSx = {
   p: '20px',
   borderRadius: '4px',
   boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
-  color: '#333333',
-  fontFamily: READER_FONT_FAMILY,
-  fontSize: '24px',
-  fontWeight: 400,
-  fontStyle: 'normal',
-  lineHeight: 1.6,
-  letterSpacing: '0.04em',
-  textAlign: 'left',
-  textTransform: 'none',
-  textDecoration: 'none',
+  ...studentTypeSx,
   '@media print': {
     boxShadow: 'none',
     p: 0,
     maxWidth: '100%',
     borderRadius: 0,
     bgcolor: '#ffffff',
-    color: '#333333',
+    color: BRAND.readerInk,
   },
 }
 
 const readerTypeSx = {
+  ...studentTypeSx,
   fontFamily: 'inherit',
-  fontSize: '24px',
-  fontWeight: 400,
-  fontStyle: 'normal',
-  lineHeight: 1.6,
-  letterSpacing: '0.04em',
-  textAlign: 'left',
-  textTransform: 'none',
-  textDecoration: 'none',
-  color: '#333333',
 }
 
 const readerBodySx = {
@@ -61,10 +43,12 @@ const paperSx = {
   p: '20px',
   borderRadius: '4px',
   boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
-  color: 'rgba(0,0,0,0.87)',
-  fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+  color: BRAND.ink,
+  fontFamily: FONT_FAMILY,
   fontSize: '11px',
-  lineHeight: 1.3,
+  fontWeight: 400,
+  lineHeight: 1.25,
+  letterSpacing: '-0.02em',
   '@media print': {
     boxShadow: 'none',
     p: 0,
@@ -77,11 +61,13 @@ const paperSx = {
 const sectionSx = { mb: '12px', '@media print': { breakInside: 'avoid' } }
 
 const sectionHeaderSx = {
-  color: 'primary.main',
+  color: BRAND.navy,
+  fontFamily: FONT_FAMILY,
   fontSize: '12px',
   fontWeight: 700,
+  letterSpacing: '-0.01em',
   textTransform: 'uppercase',
-  borderBottom: '1px solid #e0e0e0',
+  borderBottom: `1px solid ${BRAND.gray}`,
   pb: '2px',
   mb: '6px',
 }
@@ -94,26 +80,36 @@ const rowSx = {
 
 const labelSx = {
   fontWeight: 600,
-  color: 'rgba(0,0,0,0.7)',
+  color: BRAND.inkMuted,
   width: 110,
   flexShrink: 0,
   fontSize: '11px',
+  fontFamily: FONT_FAMILY,
+  letterSpacing: '-0.02em',
 }
 
-const contentSx = { flexGrow: 1, lineHeight: 1.3, fontSize: '11px' }
+const contentSx = {
+  flexGrow: 1,
+  lineHeight: 1.25,
+  fontSize: '11px',
+  fontFamily: FONT_FAMILY,
+  letterSpacing: '-0.02em',
+}
 
 const chipSx = {
   display: 'inline-block',
-  bgcolor: '#f0f0f0',
+  bgcolor: BRAND.grayBg,
   px: '6px',
   py: '2px',
   borderRadius: '4px',
   mr: '4px',
   mb: '4px',
   fontSize: '10px',
-  border: '1px solid #ccc',
+  fontFamily: FONT_FAMILY,
+  letterSpacing: '-0.02em',
+  border: `1px solid ${BRAND.gray}`,
   '@media print': {
-    border: '1px solid #e0e0e0',
+    border: `1px solid ${BRAND.gray}`,
     bgcolor: 'transparent',
   },
 }
@@ -260,23 +256,19 @@ function ExhibitPage({ pageNumber, label, reader = false, children }) {
         sx={
           reader
             ? {
-                fontFamily: READER_FONT_FAMILY,
+                ...studentTypeSx,
                 fontSize: '14px',
-                fontWeight: 400,
-                fontStyle: 'normal',
                 letterSpacing: '0.02em',
-                textTransform: 'none',
-                textDecoration: 'none',
-                color: '#333333',
                 mb: '16px',
                 '@media print': { display: 'none' },
               }
             : {
+                fontFamily: FONT_FAMILY,
                 fontSize: '10px',
                 fontWeight: 700,
-                letterSpacing: '0.06em',
+                letterSpacing: '-0.01em',
                 textTransform: 'uppercase',
-                color: 'rgba(0,0,0,0.54)',
+                color: BRAND.inkMuted,
                 mb: '10px',
                 '@media print': { display: 'none' },
               }
@@ -325,10 +317,12 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
             gridTemplateColumns: 'repeat(4, 1fr)',
             gap: '10px',
             pb: '8px',
-            borderBottom: '2px solid rgba(0,0,0,0.87)',
+            borderBottom: `2px solid ${BRAND.navy}`,
             mb: '12px',
             fontWeight: 700,
             fontSize: '11px',
+            fontFamily: FONT_FAMILY,
+            letterSpacing: '-0.02em',
           }}
         >
           <Box>
