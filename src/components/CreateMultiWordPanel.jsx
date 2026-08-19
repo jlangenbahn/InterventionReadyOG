@@ -236,7 +236,7 @@ export default function CreateMultiWordPanel({
       if (kind === 'passage' && !title.trim() && cleaned.extractedTitle) {
         setTitle(cleaned.extractedTitle)
       }
-      setNotice(`AI ${kind} added. Edit it below before saving if you want.`)
+      setNotice(`Andrea ${kind} added. Edit it below before saving if you want.`)
       setError('')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to generate text'
@@ -414,18 +414,18 @@ export default function CreateMultiWordPanel({
               <Stack direction="row" spacing={1} alignItems="flex-start">
                 <AutoAwesomeIcon color="secondary" sx={{ mt: 0.25 }} />
                 <Box>
-                  <Typography variant="subtitle2">Generate using AI</Typography>
+                  <Typography variant="subtitle2">Generate with Andrea</Typography>
                   <Typography variant="caption" color="text.secondary" display="block">
-                    Pick a word list for this concept, then generate a simple{' '}
-                    {kind === 'passage' ? 'passage' : 'sentence'} into the editor. You can edit it
-                    before saving.
+                    Andrea is the AI Agent for ReadyOG!. Pick a word list for this concept, then
+                    generate a simple {kind === 'passage' ? 'passage' : 'sentence'} into the editor.
+                    You can edit it before saving.
                   </Typography>
                 </Box>
               </Stack>
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
                 {sourceListConceptId
                   ? 'Word lists for this concept'
-                  : 'Word lists — select one to use as the AI source'}
+                  : "Word lists — select one to use as Andrea's source"}
               </Typography>
               {sourceLists.length ? (
                 <List
@@ -493,7 +493,7 @@ export default function CreateMultiWordPanel({
                     onClick={() => void handleGenerate()}
                     disabled={generating || saving || !selectedSourceList}
                   >
-                    Generate using AI
+                    Generate with Andrea
                   </Button>
                 </span>
               </Tooltip>

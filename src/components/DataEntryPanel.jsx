@@ -52,13 +52,9 @@ function toIsoDate(value) {
 function formatLessonDate(value) {
   if (!value) return ''
   const iso = toIsoDate(value)
-  const [year, month, day] = iso.split('-').map(Number)
+  const [year, month, day] = iso.split('-')
   if (!year || !month || !day) return ''
-  return new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(year, month - 1, day))
+  return `${month}/${day}/${year}`
 }
 
 function scoreButtonSx(state) {

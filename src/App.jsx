@@ -1183,7 +1183,7 @@ function AppShell({ user, signOut }) {
       >
         <Toolbar sx={{ gap: 2 }}>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            InterventionReadyOG
+            ReadyOG!
           </Typography>
           <Typography variant="body2" sx={{ display: { xs: 'none', md: 'block' }, color: 'secondary.main' }}>
             {catalogStatus}

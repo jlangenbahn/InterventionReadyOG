@@ -74,12 +74,9 @@ function formatLessonDate(value) {
   const raw = String(value)
   const iso = /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : ''
   if (!iso) return ''
-  const [year, month, day] = iso.split('-').map(Number)
-  return new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(year, month - 1, day))
+  const [year, month, day] = iso.split('-')
+  if (!year || !month || !day) return ''
+  return `${month}/${day}/${year}`
 }
 
 export default function ReportingPanel({ student, concepts = [], wordsByConceptId, setError }) {
