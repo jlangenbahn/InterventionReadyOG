@@ -16,6 +16,7 @@ import PrintIcon from '@mui/icons-material/Print'
 import AddIcon from '@mui/icons-material/Add'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import GradingIcon from '@mui/icons-material/Grading'
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'
 import EditIcon from '@mui/icons-material/Edit'
 import ShareIcon from '@mui/icons-material/Share'
 import PublicIcon from '@mui/icons-material/Public'
@@ -50,6 +51,7 @@ import {
 import { deleteLesson } from '../lib/crudRecords'
 import { publishLessonTemplate } from '../lib/lessonTemplates'
 import PublishLessonTemplateDialog from './PublishLessonTemplateDialog'
+import LessonTemplateGallery from './LessonTemplateGallery'
 
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
@@ -285,6 +287,7 @@ const GRADE_LESSON_COLUMNS = [
 const LESSON_MODE_VIEW = 0
 const LESSON_MODE_GRADE = 1
 const LESSON_MODE_CREATE = 2
+const LESSON_MODE_TEMPLATES = 3
 
 export default function LessonPlanPanel({
   student,
@@ -295,6 +298,7 @@ export default function LessonPlanPanel({
   loadingCatalog = false,
   onReloadLists,
   instructor,
+  username,
   setError,
   students = [],
   groups = [],
@@ -711,11 +715,7 @@ export default function LessonPlanPanel({
   }, [generatedLessonName])
 
   useLayoutEffect(() => {
-    if (!loadedLesson) {
-      setPreviewLoading(false)
-      return
-    }
-    if (snapshotHasContent(snapshots)) {
+    if (snapshotHasContent(snapshots) || !loadedLesson) {
       setPreviewLoading(false)
       return
     }
@@ -858,7 +858,7 @@ export default function LessonPlanPanel({
     setPreviewLoading(false)
   }
 
-  function applyLesson(lesson) {
+  function applyLesson(lesson, { previewOnly = false } = {}) {
     setPreviewLoading(true)
     const data = getLessonPlan(lesson)
     const nextListSlots = {
@@ -902,8 +902,8 @@ export default function LessonPlanPanel({
     setSentenceSlots(nextSentenceSlots)
     setPassageSlots(nextPassageSlots)
     setSnapshots(data.snapshots ?? null)
-    setLoadedLesson(lesson)
-    setLessonDate(toIsoDate(lesson?.date))
+    setLoadedLesson(previewOnly ? null : lesson)
+    setLessonDate(previewOnly ? todayIso() : toIsoDate(lesson?.date))
     setNotice('')
     setError('')
     setActiveStep(0)
@@ -1024,7 +1024,7 @@ export default function LessonPlanPanel({
         summary,
         concepts,
       })
-      setNotice('Published as a public template. Other users can browse it under Templates.')
+      setNotice('Published as a public template. Other users can browse it under Lesson Plan → Templates.')
       setPublishLesson(null)
       setError('')
     } catch (err) {
@@ -1032,6 +1032,14 @@ export default function LessonPlanPanel({
     } finally {
       setPublishing(false)
     }
+  }
+
+  async function handleTemplateApplied(saved) {
+    const lessons = await loadSavedLessons()
+    const refreshed = (lessons ?? []).find((item) => item.id === saved?.id) ?? saved
+    if (refreshed?.id) applyLesson(refreshed)
+    setLessonMode(LESSON_MODE_VIEW)
+    setNotice('Template applied as a new lesson plan.')
   }
 
   async function handleShare(targetStudentIds) {
@@ -1101,11 +1109,17 @@ export default function LessonPlanPanel({
               if (value === LESSON_MODE_CREATE) startNewLesson()
             }}
             variant="fullWidth"
-            sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+            sx={{
+              mb: 2,
+              borderBottom: 1,
+              borderColor: 'divider',
+              '& .MuiTab-root': { minHeight: 48, minWidth: 0, px: { xs: 0.5, sm: 1 } },
+            }}
           >
             <Tab icon={<ViewListIcon />} iconPosition="start" label="View" />
             <Tab icon={<GradingIcon />} iconPosition="start" label="Grade" />
             <Tab icon={<AddIcon />} iconPosition="start" label="Create" />
+            <Tab icon={<LibraryBooksIcon />} iconPosition="start" label="Templates" />
           </Tabs>
 
           {lessonMode === LESSON_MODE_CREATE ? (
@@ -1153,6 +1167,15 @@ export default function LessonPlanPanel({
                 onCreatePassage={(concept) => setMultiWordModal({ kind: 'passage', concept })}
               />
             </>
+          ) : lessonMode === LESSON_MODE_TEMPLATES ? (
+            <LessonTemplateGallery
+              student={student}
+              concepts={concepts}
+              username={username}
+              setError={setError}
+              onSelect={(template) => applyLesson(template, { previewOnly: true })}
+              onApplied={(saved) => void handleTemplateApplied(saved)}
+            />
           ) : (
             <>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
@@ -1251,7 +1274,7 @@ export default function LessonPlanPanel({
                   Edit
                 </Button>
               ) : null}
-              {loadedLesson ? (
+              {loadedLesson && lessonMode !== LESSON_MODE_TEMPLATES ? (
                 <Button
                   color="error"
                   variant="outlined"
@@ -1267,7 +1290,7 @@ export default function LessonPlanPanel({
                   Delete
                 </Button>
               ) : null}
-              {loadedLesson ? (
+              {loadedLesson && lessonMode !== LESSON_MODE_TEMPLATES ? (
                 <Button
                   variant="outlined"
                   startIcon={<PublicIcon />}
