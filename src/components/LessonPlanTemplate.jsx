@@ -1,5 +1,6 @@
 import { forwardRef } from 'react'
 import { Box, Paper, Typography } from '@mui/material'
+import { sanitizeLessonBody } from '../lib/sanitizeLessonText'
 
 const WHAT_SPELLS = ['/a/ cat', '/e/ pet', '/i/ itch', '/o/ octopus', '/u/ up', '/ck/ luck', '/sk/ mask', '/ft/ gift']
 const SIMULTANEOUS_ORAL = ['task', 'shaft', 'pluck']
@@ -158,17 +159,21 @@ function sentenceText(sentence) {
   return sentence.text || ''
 }
 
-function passageText(passage) {
-  if (!passage) return ''
-  if (typeof passage === 'string') return passage
-  const title = passage.title ? `${passage.title}: ` : ''
-  return `${title}${passage.text || ''}`.trim()
-}
-
 function passageBody(passage) {
   if (!passage) return ''
-  if (typeof passage === 'string') return passage.trim()
-  return String(passage.text || '').trim()
+  const raw = typeof passage === 'string' ? passage : String(passage.text || '')
+  const title = typeof passage === 'string' ? '' : passage.title || ''
+  const conceptName = typeof passage === 'string' ? '' : passage.concept || ''
+  return sanitizeLessonBody(raw, { title, conceptName })
+}
+
+function passageText(passage) {
+  if (!passage) return ''
+  if (typeof passage === 'string') return sanitizeLessonBody(passage)
+  const body = passageBody(passage)
+  const title = String(passage.title || '').trim()
+  if (title && body) return `${title}\n${body}`
+  return title || body
 }
 
 function ReaderWordList({ list }) {
@@ -221,6 +226,7 @@ function ReaderPassages({ passages = [] }) {
                 textAlign: 'left',
                 textTransform: 'none',
                 textDecoration: 'none',
+                whiteSpace: 'pre-wrap',
               }}
             >
               {text}
@@ -440,9 +446,9 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
           </Typography>
           <Box sx={rowSx}>
             <Box sx={labelSx}>Passage</Box>
-            <Box sx={contentSx}>
+            <Box sx={{ ...contentSx, whiteSpace: 'pre-wrap' }}>
               {filledPassages.map((item, index) => (
-                <Box key={index}>
+                <Box key={index} sx={{ mb: index < filledPassages.length - 1 ? '8px' : 0 }}>
                   {index + 1}. {passageText(item)}
                 </Box>
               ))}

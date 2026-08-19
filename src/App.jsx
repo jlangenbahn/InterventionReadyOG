@@ -311,6 +311,16 @@ function studentDisplayName(student) {
   )
 }
 
+function normalizeLastInitial(value) {
+  const raw = String(value ?? '')
+  const letter = raw.match(/[\p{L}]/u)?.[0] ?? raw.trim().slice(0, 1)
+  return letter ? letter.toUpperCase() : ''
+}
+
+function emptyScopeSelection() {
+  return { type: 'include', ids: new Set() }
+}
+
 function ScopeAndSequencePanel({
   student,
   concepts,
@@ -325,6 +335,7 @@ function ScopeAndSequencePanel({
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
   // Local draft while editing — nothing hits the DB until Save.
   const [draftInventory, setDraftInventory] = useState(null)
+  const [scopeSelection, setScopeSelection] = useState(emptyScopeSelection)
   const gridApiRef = useGridApiRef()
 
   const persistedInventory = useMemo(() => {
@@ -422,12 +433,14 @@ function ScopeAndSequencePanel({
     if (locked) {
       draftRef.current = null
       setDraftInventory(null)
+      setScopeSelection(emptyScopeSelection())
     }
   }, [locked])
 
   useEffect(() => {
     draftRef.current = null
     setDraftInventory(null)
+    setScopeSelection(emptyScopeSelection())
   }, [student?.id])
 
   const toggleInScopeForRow = useCallback(
@@ -442,6 +455,26 @@ function ScopeAndSequencePanel({
       )
     },
     [locked, setDraft],
+  )
+
+  const selectedScopeRows = useMemo(() => {
+    const ids = scopeSelection?.ids ?? new Set()
+    const type = scopeSelection?.type ?? 'include'
+    if (!ids.size) return []
+    if (type === 'exclude') return rows.filter((row) => !ids.has(row.conceptId))
+    return rows.filter((row) => ids.has(row.conceptId))
+  }, [rows, scopeSelection])
+
+  const applyInScopeToSelected = useCallback(
+    (inScope) => {
+      if (locked || !selectedScopeRows.length) return
+      const ids = new Set(selectedScopeRows.map((row) => row.conceptId).filter(Boolean))
+      if (!ids.size) return
+      setDraft((base) =>
+        base.map((entry) => (ids.has(entry.conceptId) ? { ...entry, inScope } : entry)),
+      )
+    },
+    [locked, selectedScopeRows, setDraft],
   )
 
   const columns = useMemo(() => scopeColumnDefs(locked), [locked])
@@ -636,6 +669,26 @@ function ScopeAndSequencePanel({
             </Button>
             <Button onClick={() => exportScopeTable('xlsx')}>XLSX</Button>
           </ButtonGroup>
+          <FormLabel sx={{ fontWeight: 600, m: 0 }}>In scope</FormLabel>
+          <ButtonGroup variant="outlined" color="inherit" disabled={locked || saving}>
+            <Button
+              onClick={() => applyInScopeToSelected(true)}
+              disabled={locked || saving || !selectedScopeRows.length}
+            >
+              Select in scope
+            </Button>
+            <Button
+              onClick={() => applyInScopeToSelected(false)}
+              disabled={locked || saving || !selectedScopeRows.length}
+            >
+              Unselect in scope
+            </Button>
+          </ButtonGroup>
+          <Chip
+            size="small"
+            variant="outlined"
+            label={`${selectedScopeRows.length} selected`}
+          />
           <FormLabel sx={{ fontWeight: 600, m: 0 }}>Scope Presets</FormLabel>
           <ButtonGroup variant="outlined" color="inherit" disabled={locked || saving}>
             <Button onClick={() => applyLevelPreset(1)}>Level 1</Button>
@@ -656,7 +709,8 @@ function ScopeAndSequencePanel({
       ) : (
         <Alert severity="info" icon={<SaveIcon />} sx={{ mb: 1.5 }}>
           Editing mode: changes stay on this page until you click Save. Click In scope once to
-          toggle. Save before leaving this tab or switching students.
+          toggle, or select rows and use Select in scope / Unselect in scope. Save before leaving
+          this tab or switching students.
         </Alert>
       )}
 
@@ -674,6 +728,12 @@ function ScopeAndSequencePanel({
             return `mastery-row-${status}`
           }}
           disableRowSelectionOnClick
+          checkboxSelection={!locked}
+          disableRowSelectionExcludeModel
+          hideFooterSelectedRowCount
+          isRowSelectable={() => !locked}
+          rowSelectionModel={scopeSelection}
+          onRowSelectionModelChange={(model) => setScopeSelection(model)}
           pagination
           sortingMode="client"
           filterMode="client"
@@ -1001,7 +1061,7 @@ function AppShell({ user, signOut }) {
     setStudentFormMode('edit')
     setStudentForm({
       firstName: selectedStudent.firstName || '',
-      lastName: selectedStudent.lastName || '',
+      lastName: normalizeLastInitial(selectedStudent.lastName),
       customID: selectedStudent.customID || '',
       comments: selectedStudent.comments || '',
     })
@@ -1043,13 +1103,17 @@ function AppShell({ user, signOut }) {
 
   async function handleSaveStudent(event) {
     event.preventDefault()
-    if (!studentForm.firstName.trim() && !studentForm.lastName.trim()) return
+    if (!studentForm.firstName.trim() && !normalizeLastInitial(studentForm.lastName)) return
     setSavingStudent(true)
     try {
+      const lastInitial = normalizeLastInitial(studentForm.lastName)
       if (studentFormMode === 'edit' && selectedStudent?.id) {
         const data = await updateStudent({
           id: selectedStudent.id,
-          ...studentForm,
+          firstName: studentForm.firstName,
+          lastName: lastInitial,
+          customID: studentForm.customID,
+          comments: studentForm.comments,
         })
         setStudents((prev) =>
           prev.map((student) =>
@@ -1060,7 +1124,7 @@ function AppShell({ user, signOut }) {
         const inventory = concepts.length ? buildScopeAndSequence(concepts, []) : []
         const { data, errors } = await client.models.Student.create({
           firstName: studentForm.firstName.trim() || null,
-          lastName: studentForm.lastName.trim() || null,
+          lastName: lastInitial || null,
           customID: studentForm.customID.trim() || null,
           comments: studentForm.comments.trim() || null,
           scopeAndSequence: inventory.length ? serializeScopeAndSequence(inventory) : null,
@@ -1434,9 +1498,13 @@ function AppShell({ user, signOut }) {
               autoFocus
             />
             <TextField
-              label="Last name"
+              label="Last initial"
               value={studentForm.lastName}
-              onChange={(e) => setStudentForm((s) => ({ ...s, lastName: e.target.value }))}
+              onChange={(e) =>
+                setStudentForm((s) => ({ ...s, lastName: normalizeLastInitial(e.target.value) }))
+              }
+              inputProps={{ maxLength: 1, autoComplete: 'off' }}
+              helperText="One letter only. Last names are not stored."
             />
             <TextField
               label="Custom ID"

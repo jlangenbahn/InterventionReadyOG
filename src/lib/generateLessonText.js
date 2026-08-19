@@ -1,4 +1,5 @@
 import { generateClient } from 'aws-amplify/data'
+import { sanitizeGeneratedLessonText } from './sanitizeLessonText'
 
 /** Module-scope Amplify Data client — never instantiate inside a component. */
 const client = generateClient({ authMode: 'userPool' })
@@ -64,10 +65,7 @@ export async function generateLessonText({ kind, conceptName, words }) {
     const result = await generate({
       kind: kindLabel,
       conceptName: String(conceptName || 'this concept').trim() || 'this concept',
-      words:
-        kindLabel === 'passage'
-          ? `Write a short simple passage of 4 to 7 short sentences for the concept ${String(conceptName || 'this concept')}. Use at least 80 percent of these target words, and use 2 or 3 of them in the same sentence when it still sounds natural. Error on the side of being too simple. Target words: ${unique.join(', ')}`
-          : `Write one short simple sentence for the concept ${String(conceptName || 'this concept')}. Use 2 or 3 of these target words in that sentence when possible. Target words: ${unique.join(', ')}`,
+      words: unique.join(', '),
     })
     data = result?.data
     errors = result?.errors
@@ -89,5 +87,5 @@ export async function generateLessonText({ kind, conceptName, words }) {
   if (!text) {
     throw new Error('The AI did not return any text. Try another list or try again.')
   }
-  return text
+  return sanitizeGeneratedLessonText(text, { conceptName }).text
 }

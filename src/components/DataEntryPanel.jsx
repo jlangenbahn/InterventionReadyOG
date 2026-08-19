@@ -86,7 +86,40 @@ function scoreButtonSx(state) {
   }
 }
 
-function ScoreWordButton({ word, state, onToggle, fullWidth = false }) {
+function ScoreWordButton({ word, state, onToggle, fullWidth = false, paragraph = false }) {
+  if (paragraph) {
+    return (
+      <Box
+        component="button"
+        type="button"
+        onClick={onToggle}
+        sx={{
+          display: 'inline',
+          appearance: 'none',
+          m: 0,
+          mr: '0.22em',
+          mb: '0.12em',
+          px: '0.22em',
+          py: 0,
+          border: '1px solid',
+          borderRadius: '3px',
+          font: 'inherit',
+          fontSize: '0.78rem',
+          fontWeight: 500,
+          lineHeight: 1.65,
+          letterSpacing: 'inherit',
+          textTransform: 'none',
+          verticalAlign: 'baseline',
+          cursor: 'pointer',
+          whiteSpace: 'normal',
+          wordBreak: 'break-word',
+          ...scoreButtonSx(state),
+        }}
+      >
+        {word}
+      </Box>
+    )
+  }
   return (
     <Button
       size="small"
@@ -499,16 +532,25 @@ export default function DataEntryPanel({
                     label={formatScoreTally(tallyScores(item.words.map((word) => word.key), scores))}
                   />
                 </Stack>
-                <Stack direction="row" flexWrap="wrap" useFlexGap spacing={0.75}>
+                <Box
+                  component="p"
+                  sx={{
+                    m: 0,
+                    fontSize: '0.78rem',
+                    lineHeight: 1.75,
+                    whiteSpace: 'normal',
+                  }}
+                >
                   {item.words.map((word) => (
                     <ScoreWordButton
                       key={word.key}
                       word={word.word}
                       state={scores[word.key] || SCORE_UNSCORED}
                       onToggle={() => toggleWord(word.key)}
+                      paragraph
                     />
                   ))}
-                </Stack>
+                </Box>
               </Paper>
             )
           })

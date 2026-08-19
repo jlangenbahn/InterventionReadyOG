@@ -28,6 +28,7 @@ import {
 import { updatePassage, updateSentence } from '../lib/crudRecords'
 import { resolveListWords } from '../lib/fetchStudentLessonPlan'
 import { generateLessonText } from '../lib/generateLessonText'
+import { sanitizeGeneratedLessonText } from '../lib/sanitizeLessonText'
 
 const client = generateClient()
 
@@ -221,12 +222,20 @@ export default function CreateMultiWordPanel({
     setGenerating(true)
     setGenerateError('')
     try {
+      const conceptName = preferredFocusName || focusValue?.name || 'this concept'
       const draft = await generateLessonText({
         kind,
-        conceptName: preferredFocusName || focusValue?.name || 'this concept',
+        conceptName,
         words: selectedSourceList.words,
       })
-      setText(draft)
+      const cleaned = sanitizeGeneratedLessonText(draft, {
+        conceptName,
+        title,
+      })
+      setText(cleaned.text)
+      if (kind === 'passage' && !title.trim() && cleaned.extractedTitle) {
+        setTitle(cleaned.extractedTitle)
+      }
       setNotice(`AI ${kind} added. Edit it below before saving if you want.`)
       setError('')
     } catch (err) {
@@ -243,7 +252,10 @@ export default function CreateMultiWordPanel({
       setError('Select a student before saving.')
       return
     }
-    const trimmed = text.trim()
+    const trimmed = sanitizeGeneratedLessonText(text, {
+      conceptName: focusValue?.name || tagged.topConcept?.name || '',
+      title,
+    }).text
     if (!trimmed) {
       setError('Enter some text to tag and save.')
       return
@@ -257,8 +269,10 @@ export default function CreateMultiWordPanel({
 
     setSaving(true)
     try {
-      const payload = serializeTagResult(tagged)
-      const focusName = focusValue?.name || tagged.topConcept?.name
+      const taggedForSave =
+        trimmed === String(text ?? '').trim() ? tagged : tagMultiWordText(trimmed, catalogIndex)
+      const payload = serializeTagResult(taggedForSave)
+      const focusName = focusValue?.name || taggedForSave.topConcept?.name
       let savedId = editItem?.id || null
       if (kind === 'passage') {
         if (editing) {
@@ -266,9 +280,9 @@ export default function CreateMultiWordPanel({
             id: editItem.id,
             title: title.trim() || focusName || 'Untitled passage',
             text: trimmed,
-            wordCount: tagged.tokenCount,
+            wordCount: taggedForSave.tokenCount,
             conceptID: focusConceptId,
-            tagged,
+            tagged: taggedForSave,
           })
           savedId = editItem.id
           setNotice('Passage updated.')
@@ -276,7 +290,7 @@ export default function CreateMultiWordPanel({
           const { data, errors } = await client.models.Passage.create({
             title: title.trim() || focusName || 'Untitled passage',
             text: trimmed,
-            wordCount: tagged.tokenCount,
+            wordCount: taggedForSave.tokenCount,
             studentID: student.id,
             conceptID: focusConceptId,
             passageData: JSON.stringify({
@@ -293,16 +307,16 @@ export default function CreateMultiWordPanel({
         await updateSentence({
           id: editItem.id,
           text: trimmed,
-          wordCount: tagged.tokenCount,
+          wordCount: taggedForSave.tokenCount,
           conceptID: focusConceptId,
-          tagged,
+          tagged: taggedForSave,
         })
         savedId = editItem.id
         setNotice('Sentence updated.')
       } else {
         const sentencePayload = {
           text: trimmed,
-          wordCount: tagged.tokenCount,
+          wordCount: taggedForSave.tokenCount,
           studentID: student.id,
           sentenceData: JSON.stringify({
             tags: payload,
@@ -321,8 +335,8 @@ export default function CreateMultiWordPanel({
         if (!data?.id) throw new Error('Failed to save sentence')
         savedId = data.id
 
-        const wordIds = tagged.wordIds.filter(Boolean)
-        const conceptIds = tagged.conceptIds.filter(Boolean)
+        const wordIds = taggedForSave.wordIds.filter(Boolean)
+        const conceptIds = taggedForSave.conceptIds.filter(Boolean)
         const linkResults = await Promise.all([
           ...wordIds.map((wordId) => client.models.SentenceWord.create({ sentenceId: data.id, wordId })),
           ...conceptIds.map((conceptId) =>
@@ -333,6 +347,7 @@ export default function CreateMultiWordPanel({
         if (linkErrors.length) throw new Error(linkErrors.map((item) => item.message).join(', '))
         setNotice('Sentence saved and tagged against the word-concept catalog.')
       }
+      if (trimmed !== text) setText(trimmed)
       setError('')
       onSaved?.({ kind, id: savedId })
     } catch (err) {
