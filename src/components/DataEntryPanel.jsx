@@ -19,8 +19,8 @@ import {
   buildLessonScoreMaterials,
   countConceptExposures,
   formatScoreTally,
+  getLessonPlan,
   nextScoreState,
-  parseLessonData,
   saveStudentLesson,
   tallyScores,
 } from '../lib/fetchStudentLessonPlan'
@@ -196,34 +196,23 @@ export default function DataEntryPanel({
 
   const persistScores = useCallback(async (currentLesson = lessonRef.current, nextScores = scoresRef.current) => {
     if (!currentLesson?.id || !student?.id) return null
-    const parsed = parseLessonData(currentLesson.lessonData)
-    const nextMaterials = buildLessonScoreMaterials({
-      ...currentLesson,
-      lessonData: JSON.stringify({ ...parsed, scores: nextScores }),
-    })
-    const summary = tallyScores(nextMaterials.allKeys, nextScores)
-    const lessonData = {
-      ...parsed,
-      scores: nextScores,
-      scoreSummary: summary,
-    }
+    const parsed = getLessonPlan(currentLesson)
     const conceptId =
       currentLesson.concepts
       || parsed.snapshots?.lists?.newConcept?.conceptID
-      || parsed.snapshots?.lists?.review1?.conceptID
-      || parsed.snapshots?.lists?.review2?.conceptID
-      || parsed.snapshots?.lists?.review3?.conceptID
+      || parsed.conceptSlots?.newConceptId
     const saved = await saveStudentLesson({
       id: currentLesson.id,
       studentID: student.id,
       date: toIsoDate(currentLesson.date),
       lessonNumber: currentLesson.lessonNumber,
       conceptId,
-      lessonData,
+      plan: parsed,
+      scores: nextScores,
     })
     const lessons = (await onLessonsChanged?.()) ?? savedLessons
     const refreshed = (lessons ?? []).find((item) => item.id === saved.id)
-    return refreshed ?? { ...currentLesson, ...saved, lessonData: JSON.stringify(lessonData) }
+    return refreshed ?? { ...currentLesson, ...saved, scores: nextScores }
   }, [student?.id, onLessonsChanged, savedLessons])
 
   const persistRef = useRef(persistScores)

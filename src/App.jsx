@@ -46,6 +46,7 @@ import GroupsIcon from '@mui/icons-material/Groups'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SaveIcon from '@mui/icons-material/Save'
 import LessonPlanPanel from './components/LessonPlanPanel'
+import LessonTemplateGallery from './components/LessonTemplateGallery'
 import DataPanel from './components/DataPanel'
 import ContentPanel from './components/ContentPanel'
 import ConceptsCatalogPanel from './components/ConceptsCatalogPanel'
@@ -59,10 +60,11 @@ import { downloadCsvTable, downloadXlsxTable, sanitizeFileStem } from './lib/exp
 const client = generateClient()
 const DRAWER_WIDTH = 300
 const TAB_LESSON_PLAN = 0
-const TAB_SCOPE = 1
-const TAB_CONCEPTS = 2
-const TAB_CONTENT = 3
-const TAB_DATA = 4
+const TAB_TEMPLATES = 1
+const TAB_SCOPE = 2
+const TAB_CONCEPTS = 3
+const TAB_CONTENT = 4
+const TAB_DATA = 5
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
 /** Sequential teal: unknown (lightest) → mastered (darkest). */
@@ -1452,6 +1454,7 @@ function AppShell({ user, signOut }) {
               sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
             >
               <Tab label="Lesson Plan" />
+              <Tab label="Templates" />
               <Tab label="Scope & Sequence" />
               <Tab label="Concepts" />
               <Tab label="Content" />
@@ -1471,6 +1474,18 @@ function AppShell({ user, signOut }) {
                 setError={setError}
                 students={students}
                 groups={groups}
+              />
+            ) : mainTab === TAB_TEMPLATES ? (
+              <LessonTemplateGallery
+                student={selectedStudent}
+                concepts={concepts}
+                username={[
+                  user?.username,
+                  user?.userId,
+                  user?.signInDetails?.loginId,
+                ].filter(Boolean)}
+                setError={setError}
+                onApplied={() => setMainTab(TAB_LESSON_PLAN)}
               />
             ) : mainTab === TAB_SCOPE ? (
               <ScopeAndSequencePanel

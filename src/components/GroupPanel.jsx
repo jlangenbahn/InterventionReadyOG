@@ -14,7 +14,7 @@ import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import {
   fetchLessonsForStudents,
   formatLessonDisplayName,
-  parseLessonData,
+  getLessonPlan,
   studentDisplayName,
 } from '../lib/fetchStudentLessonPlan'
 
@@ -165,7 +165,7 @@ export default function GroupPanel({
           return String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? ''))
         })
         .map((lesson) => {
-          const data = parseLessonData(lesson.lessonData)
+          const data = getLessonPlan(lesson)
           const newConcept =
             data?.snapshots?.lists?.newConcept?.concept
             || data?.snapshots?.lists?.newConcept?.name

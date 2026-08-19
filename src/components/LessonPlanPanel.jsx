@@ -18,6 +18,7 @@ import ViewListIcon from '@mui/icons-material/ViewList'
 import GradingIcon from '@mui/icons-material/Grading'
 import EditIcon from '@mui/icons-material/Edit'
 import ShareIcon from '@mui/icons-material/Share'
+import PublicIcon from '@mui/icons-material/Public'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import LessonPlanTemplate from './LessonPlanTemplate'
@@ -31,18 +32,24 @@ import {
   fetchStudentLessonPlan,
   fetchStudentLessons,
   nextLessonNumber,
-  parseLessonData,
   parseScopeAndSequence,
   formatLessonDisplayName,
   defaultLessonPlanName,
+  getLessonPlan,
+  getLessonScores,
   resolveSentenceFocusId,
   resolvePassageFocusId,
   resolveListWords,
   saveStudentLesson,
   copyLessonToStudents,
   studentDisplayName,
+  buildLessonScoreMaterials,
+  formatScoreTally,
+  tallyScores,
 } from '../lib/fetchStudentLessonPlan'
 import { deleteLesson } from '../lib/crudRecords'
+import { publishLessonTemplate } from '../lib/lessonTemplates'
+import PublishLessonTemplateDialog from './PublishLessonTemplateDialog'
 
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
@@ -314,6 +321,8 @@ export default function LessonPlanPanel({
   const [lessonName, setLessonName] = useState('')
   const [shareLesson, setShareLesson] = useState(null)
   const [sharing, setSharing] = useState(false)
+  const [publishLesson, setPublishLesson] = useState(null)
+  const [publishing, setPublishing] = useState(false)
   const [lessonToDelete, setLessonToDelete] = useState(null)
   const [deletingLesson, setDeletingLesson] = useState(false)
   const [listModalConcept, setListModalConcept] = useState(null)
@@ -527,16 +536,14 @@ export default function LessonPlanPanel({
           return String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? ''))
         })
         .map((lesson) => {
-          const data = parseLessonData(lesson.lessonData)
+          const data = getLessonPlan(lesson)
           const newConcept =
             data?.snapshots?.lists?.newConcept?.concept
             || data?.snapshots?.lists?.newConcept?.name
             || ''
           const customName = data?.name || lesson.name || ''
-          const summary = data?.scoreSummary
-          const scoreLabel = summary?.scored
-            ? `${summary.correct}/${summary.scored}${summary.accuracy != null ? ` (${Math.round(summary.accuracy * 100)}%)` : ''}`
-            : '—'
+          const materials = buildLessonScoreMaterials(lesson)
+          const scoreLabel = formatScoreTally(tallyScores(materials.allKeys, getLessonScores(lesson)))
           return {
             id: lesson.id,
             lessonNumber: lesson.lessonNumber ?? '',
@@ -563,7 +570,7 @@ export default function LessonPlanPanel({
     () => ({
       field: 'actions',
       headerName: '',
-      width: 132,
+      width: 168,
       sortable: false,
       filterable: false,
       disableColumnMenu: true,
@@ -585,7 +592,7 @@ export default function LessonPlanPanel({
           </IconButton>
           <IconButton
             size="small"
-            aria-label={`Share ${params.row.name || 'lesson'}`}
+            aria-label={`Share ${params.row.name || 'lesson'} with other students`}
             onClick={(event) => {
               event.stopPropagation()
               const lesson = savedLessons.find((item) => item.id === params.id)
@@ -593,6 +600,17 @@ export default function LessonPlanPanel({
             }}
           >
             <ShareIcon fontSize="small" />
+          </IconButton>
+          <IconButton
+            size="small"
+            aria-label={`Publish ${params.row.name || 'lesson'} as a public template`}
+            onClick={(event) => {
+              event.stopPropagation()
+              const lesson = savedLessons.find((item) => item.id === params.id)
+              if (lesson) setPublishLesson(lesson)
+            }}
+          >
+            <PublicIcon fontSize="small" />
           </IconButton>
           <IconButton
             size="small"
@@ -842,7 +860,7 @@ export default function LessonPlanPanel({
 
   function applyLesson(lesson) {
     setPreviewLoading(true)
-    const data = parseLessonData(lesson?.lessonData)
+    const data = getLessonPlan(lesson)
     const nextListSlots = {
       ...EMPTY_LIST_SLOTS,
       ...(data.slots?.listSlots ?? {}),
@@ -971,6 +989,7 @@ export default function LessonPlanPanel({
         lessonNumber,
         conceptId,
         lessonData,
+        scores: loadedLesson ? getLessonScores(loadedLesson) : {},
         comments: lessonNotes.trim() || null,
         name: resolvedName,
       })
@@ -992,6 +1011,26 @@ export default function LessonPlanPanel({
       setError(err instanceof Error ? err.message : 'Failed to save lesson plan')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handlePublish({ name, summary }) {
+    if (!publishLesson) return
+    setPublishing(true)
+    try {
+      await publishLessonTemplate({
+        lesson: publishLesson,
+        name,
+        summary,
+        concepts,
+      })
+      setNotice('Published as a public template. Other users can browse it under Templates.')
+      setPublishLesson(null)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to publish lesson template')
+    } finally {
+      setPublishing(false)
     }
   }
 
@@ -1119,7 +1158,7 @@ export default function LessonPlanPanel({
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 {lessonMode === LESSON_MODE_GRADE
                   ? 'Select a saved plan to score lists, sentences, and passages on the right. Lesson scores stay at the bottom of that panel.'
-                  : 'Select a saved plan to preview it on the right. Edit opens it so you can change materials. Share copies a plan onto other students. Delete removes it from this student.'}
+                  : 'Select a saved plan to preview it on the right. Edit opens it so you can change materials. Share copies a plan onto your other students. Publish posts a student-free template for every user. Delete removes it from this student.'}
               </Typography>
               <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
                 <DataGridPro
@@ -1228,6 +1267,15 @@ export default function LessonPlanPanel({
                   Delete
                 </Button>
               ) : null}
+              {loadedLesson ? (
+                <Button
+                  variant="outlined"
+                  startIcon={<PublicIcon />}
+                  onClick={() => setPublishLesson(loadedLesson)}
+                >
+                  Publish template
+                </Button>
+              ) : null}
               <Button
                 variant="contained"
                 startIcon={<PrintIcon />}
@@ -1283,6 +1331,13 @@ export default function LessonPlanPanel({
         sharing={sharing}
         onClose={() => setShareLesson(null)}
         onShare={(ids) => void handleShare(ids)}
+      />
+      <PublishLessonTemplateDialog
+        open={Boolean(publishLesson)}
+        lesson={publishLesson}
+        publishing={publishing}
+        onClose={() => !publishing && setPublishLesson(null)}
+        onPublish={(payload) => void handlePublish(payload)}
       />
       {listModalConcept ? (
         <CreateWordListModal

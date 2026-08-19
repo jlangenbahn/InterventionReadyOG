@@ -1,9 +1,17 @@
 import { generateClient } from 'aws-amplify/data'
+import {
+  canonicalToPlan,
+  getLessonPlan,
+  getLessonScores,
+  planFieldSelection,
+  serializeScores,
+} from './lessonPlanDocument'
 
 /** Module-scope Amplify Data client — never instantiate inside a component. */
 const client = generateClient()
 
 export { client }
+export { getLessonPlan, getLessonScores, parseLessonData } from './lessonPlanDocument'
 
 const STUDENT_CORE_SELECTION = [
   'id',
@@ -18,7 +26,7 @@ const STUDENT_CORE_SELECTION = [
 
 const LIST_SELECTION = ['id', 'name', 'conceptID', 'studentID', 'listData', 'createdAt']
 
-const LESSON_SELECTION = [
+const LESSON_SELECTION_CORE = [
   'id',
   'date',
   'createdAt',
@@ -27,6 +35,13 @@ const LESSON_SELECTION = [
   'studentID',
   'concepts',
   'comments',
+  'name',
+]
+
+const LESSON_SELECTION = [
+  ...LESSON_SELECTION_CORE,
+  'scores',
+  ...planFieldSelection('plan'),
 ]
 
 async function paginate(request) {
@@ -111,25 +126,7 @@ export async function fetchStudentLists(studentId) {
   return asListRecords(owned, studentId)
 }
 
-export function parseLessonData(value) {
-  let current = value
-  for (let i = 0; i < 3; i += 1) {
-    if (current && typeof current === 'object' && !Array.isArray(current)) return current
-    if (typeof current !== 'string') break
-    const trimmed = current.trim()
-    if (!trimmed) return {}
-    try {
-      current = JSON.parse(trimmed)
-    } catch {
-      return {}
-    }
-  }
-  return current && typeof current === 'object' && !Array.isArray(current) ? current : {}
-}
-
-export async function fetchStudentLessons(studentId) {
-  if (!studentId) return []
-
+async function listLessonsWithSelection(studentId, selectionSet) {
   const byIndex = client.models.Lesson.listLessonByStudentID
   if (typeof byIndex === 'function') {
     try {
@@ -137,10 +134,10 @@ export async function fetchStudentLessons(studentId) {
         byIndex.call(client.models.Lesson, { studentID: studentId }, {
           limit: 1000,
           nextToken,
-          selectionSet: LESSON_SELECTION,
+          selectionSet,
         }),
       )
-      return indexed.filter((item) => item?.id)
+      if (indexed.length) return indexed.filter((item) => item?.id)
     } catch {
       // Fall through to a filtered list.
     }
@@ -149,15 +146,24 @@ export async function fetchStudentLessons(studentId) {
   try {
     const filtered = await listAll(client.models.Lesson, {
       filter: { studentID: { eq: studentId } },
-      selectionSet: LESSON_SELECTION,
+      selectionSet,
     })
-    return filtered.filter((item) => item?.id)
+    if (filtered.length) return filtered.filter((item) => item?.id)
   } catch {
     // Fall through to an owner-scoped unfiltered list.
   }
 
-  const owned = await listAll(client.models.Lesson, { selectionSet: LESSON_SELECTION }).catch(() => [])
+  const owned = await listAll(client.models.Lesson, { selectionSet }).catch(() => [])
   return (owned ?? []).filter((item) => item?.id && item.studentID === studentId)
+}
+
+export async function fetchStudentLessons(studentId) {
+  if (!studentId) return []
+  try {
+    return await listLessonsWithSelection(studentId, LESSON_SELECTION)
+  } catch {
+    return listLessonsWithSelection(studentId, LESSON_SELECTION_CORE)
+  }
 }
 
 export async function fetchLessonsForStudents(studentIds = []) {
@@ -172,6 +178,17 @@ export async function fetchLessonsForStudents(studentIds = []) {
   )
 }
 
+function errorsMention(errors, fragment) {
+  const text = (errors ?? []).map((item) => String(item?.message ?? '')).join(' ').toLowerCase()
+  return text.includes(fragment)
+}
+
+async function saveLessonRecord(id, payload, selectionSet) {
+  return id
+    ? client.models.Lesson.update({ id, ...payload }, { selectionSet })
+    : client.models.Lesson.create(payload, { selectionSet })
+}
+
 export async function saveStudentLesson({
   id,
   studentID,
@@ -179,6 +196,8 @@ export async function saveStudentLesson({
   lessonNumber,
   conceptId,
   lessonData,
+  plan,
+  scores,
   comments,
   name,
 }) {
@@ -186,28 +205,56 @@ export async function saveStudentLesson({
   if (!date) throw new Error('Lesson date is required')
   if (!conceptId) throw new Error('Assign at least one list before saving so the lesson has a concept')
 
+  const canonical = plan && typeof plan === 'object'
+    ? plan
+    : getLessonPlan({ plan, lessonData })
+  const planDocument = canonicalToPlan(canonical)
+  const scoreMap = scores && typeof scores === 'object' && !Array.isArray(scores)
+    ? Object.fromEntries(Object.entries(scores).filter(([key]) => key !== 'summary'))
+    : getLessonScores({ scores, lessonData })
+
   const payload = {
     studentID,
     date,
     lessonNumber: Number.isFinite(Number(lessonNumber)) ? Number(lessonNumber) : 1,
     concepts: conceptId,
-    lessonData: JSON.stringify(lessonData ?? {}),
+    plan: planDocument,
+    scores: serializeScores(scoreMap),
   }
   if (comments !== undefined) payload.comments = comments
   if (name !== undefined) payload.name = name
 
-  const result = id
-    ? await client.models.Lesson.update({ id, ...payload }, { selectionSet: LESSON_SELECTION })
-    : await client.models.Lesson.create(payload, { selectionSet: LESSON_SELECTION })
+  let result = await saveLessonRecord(id, payload, LESSON_SELECTION)
 
   if (result.errors?.length && name !== undefined) {
     const { name: _unusedName, ...withoutName } = payload
-    const retry = id
-      ? await client.models.Lesson.update({ id, ...withoutName }, { selectionSet: LESSON_SELECTION })
-      : await client.models.Lesson.create(withoutName, { selectionSet: LESSON_SELECTION })
-    if (!retry.errors?.length && retry.data?.id) {
-      return retry.data
+    const retry = await saveLessonRecord(id, withoutName, LESSON_SELECTION)
+    if (!retry.errors?.length && retry.data?.id) return retry.data
+    result = retry
+  }
+
+  if (result.errors?.length && (errorsMention(result.errors, 'plan') || errorsMention(result.errors, 'scores'))) {
+    const { plan: _plan, scores: _scores, ...legacyPayload } = payload
+    const fallback = {
+      ...legacyPayload,
+      lessonData: JSON.stringify({
+        ...canonical,
+        scores: scoreMap,
+      }),
     }
+    const retry = await saveLessonRecord(id, fallback, [
+      'id',
+      'date',
+      'createdAt',
+      'lessonNumber',
+      'lessonData',
+      'studentID',
+      'concepts',
+      'comments',
+      'name',
+    ])
+    if (!retry.errors?.length && retry.data?.id) return retry.data
+    result = retry
   }
 
   if (result.errors?.length) {
@@ -223,16 +270,7 @@ export async function copyLessonToStudents(sourceLesson, targetStudentIds = []) 
     .filter((id) => id !== sourceLesson.studentID)
   if (!uniqueIds.length) throw new Error('Select at least one other student.')
 
-  const parsed = parseLessonData(sourceLesson.lessonData)
-  const copiedData = {
-    ...parsed,
-    scores: {},
-    scoreSummary: null,
-    sharedFrom: {
-      lessonId: sourceLesson.id,
-      studentID: sourceLesson.studentID,
-    },
-  }
+  const parsed = getLessonPlan(sourceLesson)
   const conceptId =
     sourceLesson.concepts
     || parsed.snapshots?.lists?.newConcept?.conceptID
@@ -248,7 +286,8 @@ export async function copyLessonToStudents(sourceLesson, targetStudentIds = []) 
       date: sourceLesson.date,
       lessonNumber: nextLessonNumber(existing),
       conceptId,
-      lessonData: copiedData,
+      plan: parsed,
+      scores: {},
       comments: sourceLesson.comments ?? parsed.notes ?? null,
       name: sourceLesson.name || parsed.name || null,
     })
@@ -500,7 +539,7 @@ function conceptIdentityKeys(conceptID, conceptName) {
 }
 
 export function lessonConceptKeys(lesson) {
-  const data = parseLessonData(lesson?.lessonData)
+  const data = getLessonPlan(lesson)
   const keys = new Set()
   const lists = data.snapshots?.lists ?? {}
   for (const list of Object.values(lists)) {
@@ -551,7 +590,7 @@ function wordItems(prefix, slotKey, words) {
 }
 
 export function buildLessonScoreMaterials(lesson) {
-  const data = parseLessonData(lesson?.lessonData)
+  const data = getLessonPlan(lesson)
   const snaps = data.snapshots ?? {}
   const lists = LIST_SCORE_SLOTS.map((slot) => {
     const list = snaps.lists?.[slot.key] ?? null
@@ -616,8 +655,8 @@ export function buildLessonScoreMaterials(lesson) {
       words: [],
     },
     allKeys,
-    scores: data.scores && typeof data.scores === 'object' ? data.scores : {},
-    scoreSummary: data.scoreSummary && typeof data.scoreSummary === 'object' ? data.scoreSummary : null,
+    scores: getLessonScores(lesson),
+    scoreSummary: null,
   }
 }
 

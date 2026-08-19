@@ -6,6 +6,59 @@ import { generateLessonTextFn } from '../functions/generate-lesson-text/resource
  * Gen1 @manyToMany relationships are explicit join models in Gen 2.
  */
 const schema = a.schema({
+  LessonListSnapshot: a.customType({
+    id: a.id(),
+    name: a.string(),
+    concept: a.string(),
+    conceptID: a.id(),
+    words: a.string().array(),
+  }),
+
+  LessonSentenceSnapshot: a.customType({
+    id: a.id(),
+    text: a.string(),
+    wordCount: a.integer(),
+    conceptID: a.id(),
+    focusConcept: a.string(),
+  }),
+
+  LessonPassageSnapshot: a.customType({
+    id: a.id(),
+    title: a.string(),
+    text: a.string(),
+    concept: a.string(),
+    conceptID: a.id(),
+    focusConcept: a.string(),
+    wordCount: a.integer(),
+  }),
+
+  LessonListSlots: a.customType({
+    newConcept: a.id(),
+    review1: a.id(),
+    review2: a.id(),
+    review3: a.id(),
+  }),
+
+  LessonSnapshots: a.customType({
+    newConceptList: a.ref('LessonListSnapshot'),
+    review1List: a.ref('LessonListSnapshot'),
+    review2List: a.ref('LessonListSnapshot'),
+    review3List: a.ref('LessonListSnapshot'),
+    sentences: a.ref('LessonSentenceSnapshot').array(),
+    passages: a.ref('LessonPassageSnapshot').array(),
+  }),
+
+  /** Publishable lesson materials. Scores never belong here. */
+  LessonPlanDocument: a.customType({
+    listSlots: a.ref('LessonListSlots'),
+    sentenceIds: a.id().array(),
+    passageIds: a.id().array(),
+    newConceptId: a.id(),
+    reviewConceptIds: a.id().array(),
+    snapshots: a.ref('LessonSnapshots'),
+    instructor: a.string(),
+  }),
+
   GenerateDocument: a
     .model({
       listObject: a.json(),
@@ -124,6 +177,11 @@ const schema = a.schema({
       lists: a.hasMany('ListLesson', 'lessonId'),
       lessonNumber: a.integer(),
       name: a.string(),
+      /** Typed materials (slots + frozen snapshots). */
+      plan: a.ref('LessonPlanDocument'),
+      /** Per-word score map. Private to this student lesson — not copied to templates. */
+      scores: a.json(),
+      /** Legacy AWSJSON blob. Kept so existing rows still read until rewritten. */
       lessonData: a.json(),
       comments: a.string(),
     })
@@ -179,6 +237,32 @@ const schema = a.schema({
       index('studentID'),
     ])
     .authorization((allow) => [allow.owner()]),
+
+  /**
+   * Public, searchable lesson-plan template. No student PII or scores.
+   * Apply by copying `plan` onto a new owner-scoped Lesson.
+   */
+  LessonTemplate: a
+    .model({
+      name: a.string().required(),
+      summary: a.string(),
+      searchName: a.string(),
+      focusConceptId: a.id().required(),
+      conceptName: a.string(),
+      category: a.string(),
+      level: a.string(),
+      reviewConceptIds: a.id().array(),
+      reviewConceptNames: a.string().array(),
+      plan: a.ref('LessonPlanDocument'),
+      sourceLessonId: a.id().authorization((allow) => [allow.owner()]),
+    })
+    .secondaryIndexes((index) => [
+      index('focusConceptId').queryField('listLessonTemplateByFocusConceptId'),
+    ])
+    .authorization((allow) => [
+      allow.authenticated().to(['read']),
+      allow.owner(),
+    ]),
 
   // --- Join models (Gen1 @manyToMany) ---
 
@@ -252,7 +336,7 @@ const schema = a.schema({
       word: a.belongsTo('Word', 'wordId'),
       list: a.belongsTo('List', 'listId'),
     })
-    .authorization((allow) => [allow.authenticated()]),
+    .authorization((allow) => [allow.owner()]),
 
   ListLesson: a
     .model({
