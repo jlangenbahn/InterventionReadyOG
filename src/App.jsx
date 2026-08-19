@@ -59,6 +59,7 @@ import readyOgLogo from './assets/readyog-logo.png'
 
 const client = generateClient()
 const DRAWER_WIDTH = 300
+const HEADER_BRAND_SIZE = 48
 const TAB_LESSON_PLAN = 0
 const TAB_SCOPE = 1
 const TAB_CONCEPTS = 2
@@ -1189,15 +1190,22 @@ function AppShell({ user, signOut }) {
               src={readyOgLogo}
               alt=""
               sx={{
-                height: 40,
-                width: 40,
+                height: HEADER_BRAND_SIZE,
+                width: HEADER_BRAND_SIZE,
                 flexShrink: 0,
                 borderRadius: 1,
-                bgcolor: '#ffffff',
                 objectFit: 'contain',
               }}
             />
-            <Typography variant="h6" noWrap>
+            <Typography
+              noWrap
+              sx={{
+                fontSize: HEADER_BRAND_SIZE,
+                lineHeight: 1,
+                fontWeight: 700,
+                letterSpacing: '-0.03em',
+              }}
+            >
               ReadyOG!
             </Typography>
           </Stack>
