@@ -18,7 +18,6 @@ import {
   DialogTitle,
   Divider,
   Drawer,
-  FormLabel,
   IconButton,
   List,
   ListItem,
@@ -321,6 +320,33 @@ function emptyScopeSelection() {
   return { type: 'include', ids: new Set() }
 }
 
+function ScopeToolbarGroup({ label, children }) {
+  return (
+    <Stack
+      direction="row"
+      spacing={1}
+      alignItems="center"
+      flexWrap="wrap"
+      useFlexGap
+      sx={{ minWidth: 0 }}
+    >
+      <Typography
+        variant="caption"
+        sx={{
+          fontWeight: 700,
+          color: 'text.secondary',
+          letterSpacing: 0.4,
+          textTransform: 'uppercase',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {label}
+      </Typography>
+      {children}
+    </Stack>
+  )
+}
+
 function ScopeAndSequencePanel({
   student,
   concepts,
@@ -614,18 +640,21 @@ function ScopeAndSequencePanel({
         bgcolor: locked ? 'background.paper' : 'rgba(15, 76, 92, 0.04)',
       }}
     >
-      <Stack
-        direction={{ xs: 'column', md: 'row' }}
-        spacing={1.5}
-        alignItems={{ xs: 'stretch', md: 'center' }}
-        justifyContent="space-between"
-        sx={{ mb: 1.5 }}
-      >
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="h6">Scope and Sequence</Typography>
-          <Chip size="small" label={studentDisplayName(student)} />
-          <Chip size="small" variant="outlined" label={`${rows.length} concepts`} />
-          {saving ? <Chip size="small" color="primary" label="Saving…" /> : null}
+      <Stack spacing={1.25} sx={{ mb: 1.5 }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          justifyContent="space-between"
+          flexWrap="wrap"
+          useFlexGap
+        >
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ minWidth: 0 }}>
+            <Typography variant="h6">Scope and Sequence</Typography>
+            <Chip size="small" label={studentDisplayName(student)} />
+            <Chip size="small" variant="outlined" label={`${rows.length} concepts`} />
+            {saving ? <Chip size="small" color="primary" label="Saving…" /> : null}
+          </Stack>
           {locked ? (
             <Tooltip title="Unlock to edit Scope and Sequence">
               <Button
@@ -656,48 +685,46 @@ function ScopeAndSequencePanel({
 
         <Stack
           direction="row"
-          spacing={1.25}
+          spacing={2.5}
           alignItems="center"
           flexWrap="wrap"
           useFlexGap
-          sx={{ ml: { xs: 0, md: 'auto' }, flexShrink: 0 }}
         >
-          <FormLabel sx={{ fontWeight: 600, m: 0 }}>Download</FormLabel>
-          <ButtonGroup variant="outlined" color="inherit" disabled={!rows.length}>
-            <Button startIcon={<FileDownloadIcon />} onClick={() => exportScopeTable('csv')}>
-              CSV
-            </Button>
-            <Button onClick={() => exportScopeTable('xlsx')}>XLSX</Button>
-          </ButtonGroup>
-          <FormLabel sx={{ fontWeight: 600, m: 0 }}>In scope</FormLabel>
-          <ButtonGroup variant="outlined" color="inherit" disabled={locked || saving}>
-            <Button
-              onClick={() => applyInScopeToSelected(true)}
-              disabled={locked || saving || !selectedScopeRows.length}
-            >
-              Select in scope
-            </Button>
-            <Button
-              onClick={() => applyInScopeToSelected(false)}
-              disabled={locked || saving || !selectedScopeRows.length}
-            >
-              Unselect in scope
-            </Button>
-          </ButtonGroup>
-          <Chip
-            size="small"
-            variant="outlined"
-            label={`${selectedScopeRows.length} selected`}
-          />
-          <FormLabel sx={{ fontWeight: 600, m: 0 }}>Scope Presets</FormLabel>
-          <ButtonGroup variant="outlined" color="inherit" disabled={locked || saving}>
-            <Button onClick={() => applyLevelPreset(1)}>Level 1</Button>
-            <Button onClick={() => applyLevelPreset(2)}>Level 2</Button>
-            <Button onClick={() => applyLevelPreset(3)}>Level 3</Button>
-            <Button startIcon={<RestartAltIcon />} onClick={() => setResetConfirmOpen(true)}>
-              Reset to unknown
-            </Button>
-          </ButtonGroup>
+          <ScopeToolbarGroup label="Download">
+            <ButtonGroup variant="outlined" color="inherit" disabled={!rows.length} size="small">
+              <Button startIcon={<FileDownloadIcon />} onClick={() => exportScopeTable('csv')}>
+                CSV
+              </Button>
+              <Button onClick={() => exportScopeTable('xlsx')}>XLSX</Button>
+            </ButtonGroup>
+          </ScopeToolbarGroup>
+          <ScopeToolbarGroup label="In scope">
+            <ButtonGroup variant="outlined" color="inherit" disabled={locked || saving} size="small">
+              <Button
+                onClick={() => applyInScopeToSelected(true)}
+                disabled={locked || saving || !selectedScopeRows.length}
+              >
+                Select in scope
+              </Button>
+              <Button
+                onClick={() => applyInScopeToSelected(false)}
+                disabled={locked || saving || !selectedScopeRows.length}
+              >
+                Unselect in scope
+              </Button>
+            </ButtonGroup>
+            <Chip size="small" variant="outlined" label={`${selectedScopeRows.length} selected`} />
+          </ScopeToolbarGroup>
+          <ScopeToolbarGroup label="Scope presets">
+            <ButtonGroup variant="outlined" color="inherit" disabled={locked || saving} size="small">
+              <Button onClick={() => applyLevelPreset(1)}>Level 1</Button>
+              <Button onClick={() => applyLevelPreset(2)}>Level 2</Button>
+              <Button onClick={() => applyLevelPreset(3)}>Level 3</Button>
+              <Button startIcon={<RestartAltIcon />} onClick={() => setResetConfirmOpen(true)}>
+                Reset to unknown
+              </Button>
+            </ButtonGroup>
+          </ScopeToolbarGroup>
         </Stack>
       </Stack>
 
