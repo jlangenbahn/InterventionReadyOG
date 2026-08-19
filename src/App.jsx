@@ -1200,6 +1200,9 @@ function AppShell({ user, signOut }) {
             <Typography
               noWrap
               sx={{
+                display: 'flex',
+                alignItems: 'center',
+                height: HEADER_BRAND_SIZE,
                 fontSize: HEADER_BRAND_SIZE * 0.5,
                 lineHeight: 1,
                 fontWeight: 700,
