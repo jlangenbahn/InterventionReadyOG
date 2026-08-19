@@ -16,7 +16,6 @@ import PrintIcon from '@mui/icons-material/Print'
 import AddIcon from '@mui/icons-material/Add'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import GradingIcon from '@mui/icons-material/Grading'
-import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'
 import EditIcon from '@mui/icons-material/Edit'
 import ShareIcon from '@mui/icons-material/Share'
 import PublicIcon from '@mui/icons-material/Public'
@@ -1024,7 +1023,7 @@ export default function LessonPlanPanel({
         summary,
         concepts,
       })
-      setNotice('Published as a public template. Other users can browse it under Lesson Plan → Templates.')
+      setNotice('Published as a public template. Other users can browse it under Lesson Plan → Global Template.')
       setPublishLesson(null)
       setError('')
     } catch (err) {
@@ -1119,7 +1118,7 @@ export default function LessonPlanPanel({
             <Tab icon={<ViewListIcon />} iconPosition="start" label="View" />
             <Tab icon={<GradingIcon />} iconPosition="start" label="Grade" />
             <Tab icon={<AddIcon />} iconPosition="start" label="Create" />
-            <Tab icon={<LibraryBooksIcon />} iconPosition="start" label="Templates" />
+            <Tab icon={<PublicIcon />} iconPosition="start" label="Global Template" />
           </Tabs>
 
           {lessonMode === LESSON_MODE_CREATE ? (
