@@ -272,18 +272,26 @@ const SAVED_LESSON_COLUMNS = [
     field: 'lessonNumber',
     headerName: '#',
     type: 'number',
-    width: 90,
+    width: 56,
+    minWidth: 56,
     align: 'left',
     headerAlign: 'left',
+    disableColumnMenu: true,
   },
-  { field: 'lessonDateLabel', headerName: 'Date', width: 110 },
-  { field: 'name', headerName: 'Lesson', flex: 1.2, minWidth: 180 },
-  { field: 'newConcept', headerName: 'New concept', flex: 1, minWidth: 140 },
+  {
+    field: 'lessonDateLabel',
+    headerName: 'Date',
+    width: 96,
+    minWidth: 96,
+    disableColumnMenu: true,
+  },
+  { field: 'name', headerName: 'Lesson', flex: 1.2, minWidth: 120 },
+  { field: 'newConcept', headerName: 'New concept', flex: 1, minWidth: 110 },
 ]
 
 const GRADE_LESSON_COLUMNS = [
   ...SAVED_LESSON_COLUMNS,
-  { field: 'scoreLabel', headerName: 'Score', width: 130 },
+  { field: 'scoreLabel', headerName: 'Score', width: 88, minWidth: 88 },
 ]
 
 const LESSON_MODE_VIEW = 0
@@ -576,10 +584,12 @@ export default function LessonPlanPanel({
     () => ({
       field: 'actions',
       headerName: '',
-      width: 168,
+      width: 148,
+      minWidth: 148,
       sortable: false,
       filterable: false,
       disableColumnMenu: true,
+      resizable: false,
       renderCell: (params) => (
         <Stack direction="row" spacing={0}>
           <IconButton
@@ -1206,6 +1216,7 @@ export default function LessonPlanPanel({
                   initialState={{
                     pagination: { paginationModel: { pageSize: 10 } },
                     sorting: { sortModel: [{ field: 'lessonDateLabel', sort: 'desc' }] },
+                    pinnedColumns: { right: ['actions'] },
                   }}
                   slots={{ toolbar: GridToolbar }}
                   slotProps={{
