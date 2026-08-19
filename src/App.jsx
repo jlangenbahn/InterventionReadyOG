@@ -55,6 +55,7 @@ import { deleteInstructorGroup, fetchInstructorGroups, saveInstructorGroup } fro
 import { deleteStudentCascade, updateStudent } from './lib/crudRecords'
 import { downloadCsvTable, downloadXlsxTable, sanitizeFileStem } from './lib/exportTable'
 import { amplifyTheme, masteryRowSx, theme } from './theme'
+import readyOgLogo from './assets/readyog-logo.png'
 
 const client = generateClient()
 const DRAWER_WIDTH = 300
@@ -1182,9 +1183,24 @@ function AppShell({ user, signOut }) {
         }}
       >
         <Toolbar sx={{ gap: 2 }}>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            ReadyOG!
-          </Typography>
+          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ flexGrow: 1, minWidth: 0 }}>
+            <Box
+              component="img"
+              src={readyOgLogo}
+              alt=""
+              sx={{
+                height: 40,
+                width: 40,
+                flexShrink: 0,
+                borderRadius: 1,
+                bgcolor: '#ffffff',
+                objectFit: 'contain',
+              }}
+            />
+            <Typography variant="h6" noWrap>
+              ReadyOG!
+            </Typography>
+          </Stack>
           <Typography variant="body2" sx={{ display: { xs: 'none', md: 'block' }, color: 'secondary.main' }}>
             {catalogStatus}
           </Typography>
