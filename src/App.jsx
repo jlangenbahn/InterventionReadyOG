@@ -275,6 +275,13 @@ function studentDisplayName(student) {
   )
 }
 
+function studentNavDisplayName(student) {
+  const first = String(student?.firstName ?? '').trim()
+  const last = String(student?.lastName ?? '').trim()
+  if (last && first) return `${last}, ${first}`
+  return first || last || 'Unnamed student'
+}
+
 function normalizeLastInitial(value) {
   const raw = String(value ?? '')
   const letter = raw.match(/[\p{L}]/u)?.[0] ?? raw.trim().slice(0, 1)
@@ -838,6 +845,7 @@ function AppShell({ user, signOut }) {
   const [scopeLocked, setScopeLocked] = useState(true)
   const [navBlock, setNavBlock] = useState(null)
   const scopeSaveRef = useRef(null)
+  const lessonLeaveGuardRef = useRef(null)
 
   const selectedStudent = useMemo(
     () => students.find((s) => s.id === selectedStudentId) ?? null,
@@ -972,6 +980,10 @@ function AppShell({ user, signOut }) {
     if (!scopeLocked && mainTab === TAB_SCOPE) {
       // Wrap so React does not treat the callback as a state updater.
       setNavBlock({ action })
+      return
+    }
+    if (lessonLeaveGuardRef.current?.isDirty?.()) {
+      lessonLeaveGuardRef.current.requestLeave(action)
       return
     }
     action()
@@ -1265,17 +1277,18 @@ function AppShell({ user, signOut }) {
         ) : (
           <List dense sx={{ overflow: 'auto', flex: '1 1 50%' }}>
             {students.map((student) => {
-              const name = studentDisplayName(student)
+              const name = studentNavDisplayName(student)
+              const fullName = studentDisplayName(student)
               return (
                 <ListItem
                   key={student.id}
                   disablePadding
                   secondaryAction={
-                    <Tooltip title={`Delete ${name}`}>
+                    <Tooltip title={`Delete ${fullName}`}>
                       <IconButton
                         edge="end"
                         size="small"
-                        aria-label={`Delete ${name}`}
+                        aria-label={`Delete ${fullName}`}>
                         onClick={(event) => {
                           event.stopPropagation()
                           askDeleteStudent(student)
@@ -1465,6 +1478,7 @@ function AppShell({ user, signOut }) {
                 setError={setError}
                 students={students}
                 groups={groups}
+                leaveGuardRef={lessonLeaveGuardRef}
               />
             ) : mainTab === TAB_SCOPE ? (
               <ScopeAndSequencePanel

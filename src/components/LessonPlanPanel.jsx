@@ -5,6 +5,11 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   IconButton,
   Paper,
   Stack,
@@ -14,6 +19,7 @@ import {
 } from '@mui/material'
 import PrintIcon from '@mui/icons-material/Print'
 import AddIcon from '@mui/icons-material/Add'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import GradingIcon from '@mui/icons-material/Grading'
 import EditIcon from '@mui/icons-material/Edit'
@@ -47,7 +53,7 @@ import {
   formatScoreTally,
   tallyScores,
 } from '../lib/fetchStudentLessonPlan'
-import { deleteLesson } from '../lib/crudRecords'
+import { deleteLesson, deletePassage, deleteSentence } from '../lib/crudRecords'
 import { publishLessonTemplate } from '../lib/lessonTemplates'
 import PublishLessonTemplateDialog from './PublishLessonTemplateDialog'
 import LessonTemplateGallery from './LessonTemplateGallery'
@@ -296,8 +302,8 @@ const GRADE_LESSON_COLUMNS = [
 
 const LESSON_MODE_VIEW = 0
 const LESSON_MODE_GRADE = 1
-const LESSON_MODE_CREATE = 2
-const LESSON_MODE_TEMPLATES = 3
+const LESSON_MODE_TEMPLATES = 2
+const LESSON_MODE_CREATE = 3
 
 export default function LessonPlanPanel({
   student,
@@ -312,6 +318,7 @@ export default function LessonPlanPanel({
   setError,
   students = [],
   groups = [],
+  leaveGuardRef,
 }) {
   const printRef = useRef(null)
   const lastGeneratedNameRef = useRef('')
@@ -342,6 +349,9 @@ export default function LessonPlanPanel({
   const [listModalConcept, setListModalConcept] = useState(null)
   const [multiWordModal, setMultiWordModal] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [leaveCreate, setLeaveCreate] = useState(null)
+  const [catalogItemToDelete, setCatalogItemToDelete] = useState(null)
+  const [deletingCatalogItem, setDeletingCatalogItem] = useState(false)
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -412,6 +422,8 @@ export default function LessonPlanPanel({
     setListModalConcept(null)
     setMultiWordModal(null)
     setPreviewLoading(false)
+    setLeaveCreate(null)
+    setCatalogItemToDelete(null)
   }, [student?.id])
 
   const wordLookup = useMemo(() => buildWordLookup(wordsByConceptId), [wordsByConceptId])
@@ -715,6 +727,37 @@ export default function LessonPlanPanel({
     && selectedReviewConceptIds.length > 0
     && Boolean(newConceptList)
 
+  const createIsDirty = useMemo(() => {
+    if (lessonMode !== LESSON_MODE_CREATE) return false
+    if (loadedLesson) return true
+    const name = String(lessonName ?? '').trim()
+    const nameIsCustom = Boolean(name) && name !== generatedLessonName
+    return Boolean(
+      nameIsCustom
+      || String(lessonNotes ?? '').trim()
+      || selectedNewConceptId
+      || selectedReviewConceptIds.length
+      || Object.values(listSlots).some(Boolean)
+      || Object.values(sentenceSlots).some(Boolean)
+      || Object.values(passageSlots).some(Boolean)
+      || activeStep > 0
+      || lessonDate !== todayIso(),
+    )
+  }, [
+    lessonMode,
+    loadedLesson,
+    lessonName,
+    generatedLessonName,
+    lessonNotes,
+    selectedNewConceptId,
+    selectedReviewConceptIds,
+    listSlots,
+    sentenceSlots,
+    passageSlots,
+    activeStep,
+    lessonDate,
+  ])
+
   useEffect(() => {
     setLessonName((current) => {
       const trimmed = String(current ?? '').trim()
@@ -734,6 +777,20 @@ export default function LessonPlanPanel({
     if (loading || loadingLists || loadingCatalog) return
     setPreviewLoading(false)
   }, [loadedLesson, snapshots, loading, loadingLists, loadingCatalog])
+
+  useEffect(() => {
+    if (!createIsDirty) return undefined
+    function onBeforeUnload(event) {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [createIsDirty])
+
+  useEffect(() => () => {
+    if (leaveGuardRef) leaveGuardRef.current = null
+  }, [leaveGuardRef])
 
   function handleSelectedNewConceptChange(conceptId) {
     setSelectedNewConceptId(conceptId)
@@ -951,6 +1008,36 @@ export default function LessonPlanPanel({
     setLessonName(loadedName)
   }
 
+  function handleStartCreate() {
+    startNewLesson()
+    setLessonMode(LESSON_MODE_CREATE)
+  }
+
+  function abandonCreate(nextMode = LESSON_MODE_VIEW) {
+    if (loadedLesson) applyLesson(loadedLesson)
+    else startNewLesson()
+    setLessonMode(nextMode)
+  }
+
+  function requestLeaveCreate({ nextMode = LESSON_MODE_VIEW, then } = {}) {
+    const finish = () => {
+      abandonCreate(nextMode)
+      then?.()
+    }
+    if (!createIsDirty) {
+      finish()
+      return
+    }
+    setLeaveCreate({ onConfirm: finish })
+  }
+
+  if (leaveGuardRef) {
+    leaveGuardRef.current = {
+      isDirty: () => createIsDirty,
+      requestLeave: (then) => requestLeaveCreate({ then }),
+    }
+  }
+
   async function handleSave() {
     const conceptId =
       selectedNewConceptId
@@ -1088,6 +1175,41 @@ export default function LessonPlanPanel({
     }
   }
 
+  async function handleConfirmDeleteCatalogItem() {
+    const item = catalogItemToDelete
+    if (!item?.id) return
+    setDeletingCatalogItem(true)
+    try {
+      if (item.kind === 'passage') {
+        await deletePassage(item.id)
+        setPassageSlots((prev) => {
+          const next = { ...prev }
+          for (const key of PASSAGE_SLOT_KEYS) {
+            if (next[key] === item.id) next[key] = null
+          }
+          return next
+        })
+      } else {
+        await deleteSentence(item.id)
+        setSentenceSlots((prev) => {
+          const next = { ...prev }
+          for (const key of SENTENCE_SLOT_KEYS) {
+            if (next[key] === item.id) next[key] = null
+          }
+          return next
+        })
+      }
+      setCatalogItemToDelete(null)
+      setNotice(item.kind === 'passage' ? 'Passage deleted.' : 'Sentence deleted.')
+      setError('')
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to delete ${item.kind}`)
+    } finally {
+      setDeletingCatalogItem(false)
+    }
+  }
+
   if (!student) {
     return (
       <Typography color="text.secondary">Select a student to preview their lesson plan.</Typography>
@@ -1114,25 +1236,46 @@ export default function LessonPlanPanel({
             </Stack>
           ) : null}
 
-          <Tabs
-            value={lessonMode}
-            onChange={(_event, value) => {
-              setLessonMode(value)
-              if (value === LESSON_MODE_CREATE) startNewLesson()
-            }}
-            variant="fullWidth"
-            sx={{
-              mb: 2,
-              borderBottom: 1,
-              borderColor: 'divider',
-              '& .MuiTab-root': { minHeight: 48, minWidth: 0, px: { xs: 0.5, sm: 1 } },
-            }}
-          >
-            <Tab icon={<ViewListIcon />} iconPosition="start" label="View" />
-            <Tab icon={<GradingIcon />} iconPosition="start" label="Grade" />
-            <Tab icon={<AddIcon />} iconPosition="start" label="Create" />
-            <Tab icon={<PublicIcon />} iconPosition="start" label="Global Template" />
-          </Tabs>
+          {lessonMode === LESSON_MODE_CREATE ? (
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              justifyContent="space-between"
+              sx={{
+                mb: 2,
+                pb: 1.5,
+                borderBottom: 1,
+                borderColor: 'divider',
+              }}
+            >
+              <Button
+                startIcon={<ArrowBackIcon />}
+                onClick={() => requestLeaveCreate()}
+              >
+                Back to Lessons
+              </Button>
+              <Typography variant="subtitle1">
+                {loadedLesson ? 'Edit lesson' : 'Create lesson'}
+              </Typography>
+            </Stack>
+          ) : (
+            <Tabs
+              value={lessonMode}
+              onChange={(_event, value) => setLessonMode(value)}
+              variant="fullWidth"
+              sx={{
+                mb: 2,
+                borderBottom: 1,
+                borderColor: 'divider',
+                '& .MuiTab-root': { minHeight: 48, minWidth: 0, px: { xs: 0.5, sm: 1 } },
+              }}
+            >
+              <Tab icon={<ViewListIcon />} iconPosition="start" label="Lessons" />
+              <Tab icon={<GradingIcon />} iconPosition="start" label="Grade" />
+              <Tab icon={<PublicIcon />} iconPosition="start" label="Global Template" />
+            </Tabs>
+          )}
 
           {lessonMode === LESSON_MODE_CREATE ? (
             <>
@@ -1177,6 +1320,8 @@ export default function LessonPlanPanel({
                 onCreateList={(concept) => setListModalConcept(concept)}
                 onCreateSentence={(concept) => setMultiWordModal({ kind: 'sentence', concept })}
                 onCreatePassage={(concept) => setMultiWordModal({ kind: 'passage', concept })}
+                onDeleteSentence={(item) => setCatalogItemToDelete({ ...item, kind: 'sentence' })}
+                onDeletePassage={(item) => setCatalogItemToDelete({ ...item, kind: 'passage' })}
               />
             </>
           ) : lessonMode === LESSON_MODE_TEMPLATES ? (
@@ -1190,11 +1335,29 @@ export default function LessonPlanPanel({
             />
           ) : (
             <>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                {lessonMode === LESSON_MODE_GRADE
-                  ? 'Select a saved plan to score lists, sentences, and passages on the right. Lesson scores stay at the bottom of that panel.'
-                  : 'Select a saved plan to preview it on the right. Edit opens it so you can change materials. Share copies a plan onto your other students. Publish posts a student-free template for every user. Delete removes it from this student.'}
-              </Typography>
+              <Stack
+                direction="row"
+                spacing={1.5}
+                alignItems="flex-start"
+                justifyContent="space-between"
+                sx={{ mb: 1.5 }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  {lessonMode === LESSON_MODE_GRADE
+                    ? 'Select a saved plan to score lists, sentences, and passages on the right. Lesson scores stay at the bottom of that panel.'
+                    : 'Select a saved plan to preview it on the right. Edit opens it so you can change materials. Share copies a plan onto your other students. Publish posts a student-free template for every user. Delete removes it from this student.'}
+                </Typography>
+                {lessonMode === LESSON_MODE_VIEW ? (
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={handleStartCreate}
+                    sx={{ flexShrink: 0 }}
+                  >
+                    Create lesson
+                  </Button>
+                ) : null}
+              </Stack>
               <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
                 <DataGridPro
                   rows={savedLessonRows}
@@ -1229,8 +1392,8 @@ export default function LessonPlanPanel({
                   localeText={{
                     noRowsLabel:
                       lessonMode === LESSON_MODE_GRADE
-                        ? 'No saved lesson plans yet. Switch to Create to make one, then grade it here.'
-                        : 'No saved lesson plans yet. Switch to Create to make one.',
+                        ? 'No saved lesson plans yet. Create one on Lessons, then grade it here.'
+                        : 'No saved lesson plans yet. Click Create lesson to make one.',
                   }}
                 />
               </Box>
@@ -1413,6 +1576,51 @@ export default function LessonPlanPanel({
         deleting={deletingLesson}
         onClose={() => !deletingLesson && setLessonToDelete(null)}
         onConfirm={() => void handleConfirmDeleteLesson()}
+      />
+      <Dialog
+        open={Boolean(leaveCreate)}
+        onClose={() => setLeaveCreate(null)}
+        aria-labelledby="leave-create-title"
+      >
+        <DialogTitle id="leave-create-title">Are you sure?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            You have an unsaved lesson plan. If you leave now, this work will be lost.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLeaveCreate(null)} autoFocus>
+            Stay
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => {
+              const finish = leaveCreate?.onConfirm
+              setLeaveCreate(null)
+              finish?.()
+            }}
+          >
+            Leave without saving
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <ConfirmDeleteDialog
+        open={Boolean(catalogItemToDelete)}
+        title={catalogItemToDelete?.kind === 'passage' ? 'Delete this passage?' : 'Delete this sentence?'}
+        description={
+          catalogItemToDelete
+            ? `Delete ${
+                catalogItemToDelete.kind === 'passage'
+                  ? `“${catalogItemToDelete.title || 'this passage'}”`
+                  : 'this sentence'
+              }? This cannot be undone.`
+            : ''
+        }
+        confirmLabel={catalogItemToDelete?.kind === 'passage' ? 'Delete passage' : 'Delete sentence'}
+        deleting={deletingCatalogItem}
+        onClose={() => !deletingCatalogItem && setCatalogItemToDelete(null)}
+        onConfirm={() => void handleConfirmDeleteCatalogItem()}
       />
     </Box>
   )

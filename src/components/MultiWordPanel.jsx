@@ -5,6 +5,7 @@ import {
   Button,
   Chip,
   CircularProgress,
+  IconButton,
   Paper,
   Stack,
   Tab,
@@ -18,7 +19,7 @@ import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
 import ViewListIcon from '@mui/icons-material/ViewList'
-import { DataGridPro, GridActionsCellItem, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import CreateMultiWordPanel from './CreateMultiWordPanel'
 import MultiWordPreview from './MultiWordPreview'
 import ConfirmDeleteDialog from './ConfirmDeleteDialog'
@@ -375,37 +376,49 @@ export default function MultiWordPanel({
     }
     base.push({
       field: 'actions',
-      type: 'actions',
       headerName: '',
-      width: 80,
-      getActions: (params) => [
-        <GridActionsCellItem
-          key="edit"
-          icon={<EditIcon />}
-          label="Edit"
-          onClick={() => {
-            const row = params.row
-            if (!row?.id) return
-            setKind(row.kind)
-            setEditItem({
-              id: row.id,
-              kind: row.kind,
-              title: row.title || '',
-              text: row.text || '',
-              focusConceptId: row.focusConceptId || null,
-            })
-            setSelectedId(row.id)
-            setMode(MODE_CREATE)
-            setNotice('')
-          }}
-        />,
-        <GridActionsCellItem
-          key="delete"
-          icon={<DeleteOutlineIcon />}
-          label="Delete"
-          onClick={() => setItemToDelete(params.row)}
-        />,
-      ],
+      width: 88,
+      minWidth: 88,
+      sortable: false,
+      filterable: false,
+      disableColumnMenu: true,
+      resizable: false,
+      renderCell: (params) => (
+        <Stack direction="row" spacing={0}>
+          <IconButton
+            size="small"
+            aria-label={`Edit ${params.row.kind === 'passage' ? 'passage' : 'sentence'}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              const row = params.row
+              if (!row?.id) return
+              setKind(row.kind)
+              setEditItem({
+                id: row.id,
+                kind: row.kind,
+                title: row.title || '',
+                text: row.text || '',
+                focusConceptId: row.focusConceptId || null,
+              })
+              setSelectedId(row.id)
+              setMode(MODE_CREATE)
+              setNotice('')
+            }}
+          >
+            <EditIcon fontSize="small" />
+          </IconButton>
+          <IconButton
+            size="small"
+            aria-label={`Delete ${params.row.kind === 'passage' ? 'passage' : 'sentence'}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              setItemToDelete(params.row)
+            }}
+          >
+            <DeleteOutlineIcon fontSize="small" />
+          </IconButton>
+        </Stack>
+      ),
     })
     return base
   }, [kind, alsoConceptIds.length])
@@ -570,6 +583,7 @@ export default function MultiWordPanel({
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 Select a saved sentence or passage to preview tagging on the right. Focus concept
                 finds an exact focus match. Also includes keeps items that also contain those concepts.
+                Edit or delete with the icons on each row.
               </Typography>
               <Stack spacing={1.5} sx={{ mb: 1.5 }}>
                 <ToggleButtonGroup
@@ -611,6 +625,7 @@ export default function MultiWordPanel({
                   initialState={{
                     pagination: { paginationModel: { pageSize: 10 } },
                     sorting: { sortModel: [{ field: 'createdAt', sort: 'desc' }] },
+                    pinnedColumns: { right: ['actions'] },
                   }}
                   slots={{ toolbar: GridToolbar }}
                   slotProps={{

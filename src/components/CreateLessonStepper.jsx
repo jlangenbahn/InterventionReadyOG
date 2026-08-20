@@ -405,6 +405,8 @@ export default function CreateLessonStepper({
   onCreateList,
   onCreateSentence,
   onCreatePassage,
+  onDeleteSentence,
+  onDeletePassage,
 }) {
   const newConceptListId = newConceptIds[0] ?? null
   const newConceptValue = conceptOptions.find((item) => item.id === selectedNewConceptId) ?? null
@@ -631,6 +633,7 @@ export default function CreateLessonStepper({
           <StepContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
               Only sentences whose focus concept matches the new or review concepts from Lesson setup are shown.
+              Use the trash icon on a row to delete a sentence.
             </Typography>
             <StepperSelectionGrid
               items={sentences}
@@ -645,6 +648,7 @@ export default function CreateLessonStepper({
                   : 'Select new and review concepts in Lesson setup to filter sentences by focus concept.'
               }
               getItemLabel={(sentence) => truncate(sentence.text, 60) || 'Untitled sentence'}
+              onDeleteItem={onDeleteSentence}
               header={
                 <CreateConceptActions
                   concepts={sentenceConcepts}
@@ -674,6 +678,7 @@ export default function CreateLessonStepper({
           <StepContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
               Only passages whose focus concept matches the new or review concepts from Lesson setup are shown.
+              Use the trash icon on a row to delete a passage.
             </Typography>
             <StepperSelectionGrid
               items={passages}
@@ -688,6 +693,7 @@ export default function CreateLessonStepper({
                   : 'Select new and review concepts in Lesson setup to filter passages by focus concept.'
               }
               getItemLabel={(passage) => passage.title || truncate(passage.text, 60) || 'Untitled passage'}
+              onDeleteItem={onDeletePassage}
               header={
                 <CreateConceptActions
                   concepts={sentenceConcepts}

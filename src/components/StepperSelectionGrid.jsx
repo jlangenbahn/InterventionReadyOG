@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import { Box, Chip, Stack, Typography } from '@mui/material'
+import { Box, Chip, IconButton, Stack, Typography } from '@mui/material'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 
 export default function StepperSelectionGrid({
@@ -16,6 +17,7 @@ export default function StepperSelectionGrid({
   getChipSx,
   gridSx,
   header = null,
+  onDeleteItem,
 }) {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const excluded = useMemo(() => new Set(excludeIds), [excludeIds])
@@ -60,6 +62,36 @@ export default function StepperSelectionGrid({
     onChange(selectedIds.filter((value) => value !== id))
   }
 
+  const gridColumns = useMemo(() => {
+    if (!onDeleteItem) return columns
+    return [
+      ...columns,
+      {
+        field: 'actions',
+        headerName: '',
+        width: 52,
+        minWidth: 52,
+        sortable: false,
+        filterable: false,
+        disableColumnMenu: true,
+        resizable: false,
+        renderCell: (params) => (
+          <IconButton
+            size="small"
+            aria-label="Delete"
+            onClick={(event) => {
+              event.stopPropagation()
+              const item = itemsById.get(params.id)
+              if (item) onDeleteItem(item)
+            }}
+          >
+            <DeleteOutlineIcon fontSize="small" />
+          </IconButton>
+        ),
+      },
+    ]
+  }, [columns, onDeleteItem, itemsById])
+
   return (
     <Box>
       {header ? <Box sx={{ mb: 1 }}>{header}</Box> : null}
@@ -89,7 +121,7 @@ export default function StepperSelectionGrid({
       <Box sx={{ height: 280, width: '100%' }}>
         <DataGridPro
           rows={rows}
-          columns={columns}
+          columns={gridColumns}
           getRowId={(row) => row.id}
           onRowClick={handleRowClick}
           getRowClassName={(params) => {
@@ -107,6 +139,7 @@ export default function StepperSelectionGrid({
           pageSizeOptions={[10, 25, 50]}
           initialState={{
             pagination: { paginationModel: { pageSize: 10 } },
+            pinnedColumns: onDeleteItem ? { right: ['actions'] } : undefined,
           }}
           slots={{ toolbar: GridToolbar }}
           slotProps={{
