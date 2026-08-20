@@ -1781,7 +1781,10 @@ export default function LessonPlanPanel({
           open
           student={student}
           concept={listModalConcept}
+          concepts={concepts}
           words={wordsByConceptId?.get(listModalConcept.id) ?? []}
+          studentLists={studentLists}
+          wordsByConceptId={wordsByConceptId}
           setError={setError}
           onClose={() => setListModalConcept(null)}
           onCreated={(created) => void handleListCreated(created)}

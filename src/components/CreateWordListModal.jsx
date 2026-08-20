@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Box,
   Button,
-  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -12,14 +11,12 @@ import {
   TextField,
 } from '@mui/material'
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd'
-import CasinoIcon from '@mui/icons-material/Casino'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import { createWordList } from '../lib/crudRecords'
 import { studentDisplayName } from '../lib/fetchStudentLessonPlan'
-import AskAndreaButton from './AskAndreaButton'
+import { emptyWordSelection, wordRowId } from '../lib/wordSelection'
 import HelpTip from './HelpTip'
-
-const RANDOM_WORD_COUNT = 10
+import WordSelectionActions from './WordSelectionActions'
 
 const WORD_COLUMNS = [
   { field: 'word', headerName: 'Word', flex: 1, minWidth: 120 },
@@ -31,32 +28,14 @@ const WORD_COLUMNS = [
   },
 ]
 
-function emptyWordSelection() {
-  return { type: 'include', ids: new Set() }
-}
-
-function wordRowId(row) {
-  return row?.conceptWordId || row?.id
-}
-
-function randomWordSelection(words, count = RANDOM_WORD_COUNT) {
-  const ids = words.map(wordRowId).filter(Boolean)
-  const pool = [...ids]
-  for (let i = pool.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[pool[i], pool[j]] = [pool[j], pool[i]]
-  }
-  return {
-    type: 'include',
-    ids: new Set(pool.slice(0, Math.min(count, pool.length))),
-  }
-}
-
 export default function CreateWordListModal({
   open = false,
   student,
   concept = null,
+  concepts = [],
   words = [],
+  studentLists,
+  wordsByConceptId,
   setError,
   onClose,
   onCreated,
@@ -122,18 +101,17 @@ export default function CreateWordListModal({
       </DialogTitle>
       <DialogContent sx={{ display: 'grid', gap: 1.5, pt: 1 }}>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-          <Chip size="small" color="primary" variant="outlined" label={`${words.length} words`} />
-          <Chip size="small" variant="outlined" label={`${selectedWordRows.length} selected`} />
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<CasinoIcon />}
-            disabled={creating || words.length === 0}
-            onClick={() => setWordSelection(randomWordSelection(words))}
-          >
-            Random {Math.min(RANDOM_WORD_COUNT, words.length) || RANDOM_WORD_COUNT}
-          </Button>
-          <AskAndreaButton disabled={creating || words.length === 0} />
+          <WordSelectionActions
+            words={words}
+            selectedCount={selectedWordRows.length}
+            disabled={creating}
+            student={student}
+            concept={concept}
+            concepts={concepts}
+            studentLists={studentLists}
+            wordsByConceptId={wordsByConceptId}
+            onSelectionChange={setWordSelection}
+          />
           {creating ? <CircularProgress size={16} /> : null}
         </Stack>
         <Box sx={{ height: 360, width: '100%' }}>

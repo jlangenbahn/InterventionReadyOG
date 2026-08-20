@@ -18,12 +18,16 @@ import {
   DialogTitle,
   Divider,
   Drawer,
+  FormControl,
   IconButton,
+  InputLabel,
   List,
   ListItem,
   ListItemButton,
   ListItemText,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Tab,
   Tabs,
@@ -332,6 +336,7 @@ function ScopeAndSequencePanel({
   // Local draft while editing — nothing hits the DB until Save.
   const [draftInventory, setDraftInventory] = useState(null)
   const [scopeSelection, setScopeSelection] = useState(emptyScopeSelection)
+  const [levelPreset, setLevelPreset] = useState('')
   const gridApiRef = useGridApiRef()
 
   const persistedInventory = useMemo(() => {
@@ -430,6 +435,7 @@ function ScopeAndSequencePanel({
       draftRef.current = null
       setDraftInventory(null)
       setScopeSelection(emptyScopeSelection())
+      setLevelPreset('')
     }
   }, [locked])
 
@@ -437,6 +443,7 @@ function ScopeAndSequencePanel({
     draftRef.current = null
     setDraftInventory(null)
     setScopeSelection(emptyScopeSelection())
+    setLevelPreset('')
   }, [student?.id])
 
   const toggleInScopeForRow = useCallback(
@@ -472,6 +479,31 @@ function ScopeAndSequencePanel({
     },
     [locked, selectedScopeRows, setDraft],
   )
+
+  const applyInScopeToAll = useCallback(
+    (inScope) => {
+      if (locked) return
+      setLevelPreset('')
+      setDraft((base) => base.map((entry) => ({ ...entry, inScope })))
+    },
+    [locked, setDraft],
+  )
+
+  const scopeLevels = useMemo(() => {
+    const levels = new Set()
+    for (const concept of concepts ?? []) {
+      const level = String(concept?.level ?? '').trim()
+      if (level) levels.add(level)
+    }
+    return [...levels].sort((a, b) => {
+      const left = Number(a)
+      const right = Number(b)
+      const leftNum = Number.isFinite(left) ? left : Number.POSITIVE_INFINITY
+      const rightNum = Number.isFinite(right) ? right : Number.POSITIVE_INFINITY
+      if (leftNum !== rightNum) return leftNum - rightNum
+      return String(a).localeCompare(String(b))
+    })
+  }, [concepts])
 
   const columns = useMemo(() => scopeColumnDefs(locked), [locked])
 
@@ -565,11 +597,13 @@ function ScopeAndSequencePanel({
 
   function applyLevelPreset(level) {
     if (locked) return
-    const target = String(level)
+    const target = String(level ?? '').trim()
+    setLevelPreset(target)
+    if (!target) return
     setDraft((base) =>
       base.map((entry) => {
         const concept = concepts.find((item) => item.id === entry.conceptId)
-        const isTargetLevel = String(concept?.level ?? '') === target
+        const isTargetLevel = String(concept?.level ?? '').trim() === target
         return { ...entry, inScope: isTargetLevel }
       }),
     )
@@ -674,40 +708,70 @@ function ScopeAndSequencePanel({
                 onClick={() => applyInScopeToSelected(true)}
                 disabled={locked || saving || !selectedScopeRows.length}
               >
-                Select in scope
+                Selected in
               </Button>
               <Button
                 onClick={() => applyInScopeToSelected(false)}
                 disabled={locked || saving || !selectedScopeRows.length}
               >
-                Unselect in scope
+                Selected out
+              </Button>
+              <Button onClick={() => applyInScopeToAll(true)} disabled={locked || saving || !rows.length}>
+                All in
+              </Button>
+              <Button onClick={() => applyInScopeToAll(false)} disabled={locked || saving || !rows.length}>
+                All out
               </Button>
             </ButtonGroup>
             <Chip size="small" variant="outlined" label={`${selectedScopeRows.length} selected`} />
           </ScopeToolbarGroup>
-          <ScopeToolbarGroup label="Scope presets">
-            <ButtonGroup variant="outlined" color="inherit" disabled={locked || saving} size="small">
-              <Button onClick={() => applyLevelPreset(1)}>Level 1</Button>
-              <Button onClick={() => applyLevelPreset(2)}>Level 2</Button>
-              <Button onClick={() => applyLevelPreset(3)}>Level 3</Button>
-              <Button startIcon={<RestartAltIcon />} onClick={() => setResetConfirmOpen(true)}>
-                Reset to unknown
-              </Button>
-            </ButtonGroup>
+          {scopeLevels.length ? (
+            <ScopeToolbarGroup label="Level">
+              <FormControl size="small" sx={{ minWidth: 110 }} disabled={locked || saving}>
+                <InputLabel id="scope-level-preset">Level</InputLabel>
+                <Select
+                  labelId="scope-level-preset"
+                  label="Level"
+                  value={levelPreset}
+                  onChange={(event) => applyLevelPreset(event.target.value)}
+                >
+                  <MenuItem value="">
+                    <em>Choose…</em>
+                  </MenuItem>
+                  {scopeLevels.map((level) => (
+                    <MenuItem key={level} value={level}>
+                      Level {level}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </ScopeToolbarGroup>
+          ) : null}
+          <ScopeToolbarGroup label="Mastery">
+            <Button
+              size="small"
+              variant="outlined"
+              color="inherit"
+              startIcon={<RestartAltIcon />}
+              disabled={locked || saving}
+              onClick={() => setResetConfirmOpen(true)}
+            >
+              Reset to unknown
+            </Button>
           </ScopeToolbarGroup>
         </Stack>
       </Stack>
 
       {locked ? (
         <Alert severity="warning" icon={<LockIcon />} sx={{ mb: 1.5 }}>
-          Editing is locked. Unlock to change In scope, Sequence, Mastery status, or use Scope
-          Presets. Changes are saved only when you click Save.
+          Editing is locked. Unlock to change In scope, Sequence, Mastery status, or bulk scope
+          actions. Changes are saved only when you click Save.
         </Alert>
       ) : (
         <Alert severity="info" icon={<SaveIcon />} sx={{ mb: 1.5 }}>
           Editing mode: changes stay on this page until you click Save. Click In scope once to
-          toggle, or select rows and use Select in scope / Unselect in scope. Save before leaving
-          this tab or switching students.
+          toggle, select rows and use Selected in / Selected out, or use All in / All out. A level
+          marks only that level in scope. Save before leaving this tab or switching students.
         </Alert>
       )}
 

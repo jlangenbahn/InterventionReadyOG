@@ -1,5 +1,6 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { generateLessonTextFn } from '../functions/generate-lesson-text/resource';
+import { selectFocusWordsFn } from '../functions/select-focus-words/resource';
 
 /**
  * Ported from ready-og Gen1 schema.graphql (app 6cvcpcvgbjdq3evrmqh4zyw4oi).
@@ -360,6 +361,21 @@ const schema = a.schema({
     })
     .returns(a.string())
     .handler(a.handler.function(generateLessonTextFn))
+    .authorization((allow) => [allow.authenticated()]),
+
+  /**
+   * Lambda-backed Bedrock Converse call. Picks a small, student-fit word set
+   * from a concept list. Same model family as generateLessonDraft; separate
+   * function because the prompt, payload, and JSON return shape differ.
+   */
+  selectFocusWords: a
+    .query()
+    .arguments({
+      payload: a.string().required(),
+      count: a.integer(),
+    })
+    .returns(a.string())
+    .handler(a.handler.function(selectFocusWordsFn))
     .authorization((allow) => [allow.authenticated()]),
 });
 
