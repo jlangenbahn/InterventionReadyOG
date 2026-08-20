@@ -1,5 +1,5 @@
 import { IconButton, Tooltip } from '@mui/material'
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
+import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined'
 
 export default function HelpTip({ title }) {
   if (!title) return null
