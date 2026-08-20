@@ -18,6 +18,15 @@ export const BRAND = {
   ink: '#1a2332',
   inkMuted: '#5c6370',
   readerInk: '#333333',
+  gold: '#D4AF37',
+  goldMid: '#E0C04A',
+  goldDark: '#8F7314',
+  goldBg: '#F8F3E4',
+  goldHover: '#F0E6C4',
+  goldSelected: '#E8C547',
+  goldSelectedHover: '#DDBB32',
+  goldHeader: '#F3EAC6',
+  goldBorder: '#D4C48A',
 }
 
 export const STUDENT_FONT_SIZE = '24px'
@@ -100,6 +109,44 @@ export const REVIEW_SLOT_COLORS = [
     rowSelected: BRAND.navyMid,
   },
 ]
+
+export const globalLessonGridSx = {
+  bgcolor: BRAND.goldBg,
+  '--DataGrid-containerBackground': BRAND.goldHeader,
+  '--DataGrid-pinnedBackground': BRAND.goldBg,
+  '--DataGrid-rowBorderColor': BRAND.goldBorder,
+  '& .MuiDataGrid-columnHeaders, & .MuiDataGrid-columnHeader': {
+    bgcolor: `${BRAND.goldHeader} !important`,
+    borderColor: BRAND.goldBorder,
+  },
+  '& .MuiDataGrid-filler, & .MuiDataGrid-overlayWrapper, & .MuiDataGrid-virtualScroller': {
+    bgcolor: 'transparent',
+  },
+  '& .MuiDataGrid-footerContainer': {
+    bgcolor: BRAND.goldBg,
+    borderColor: BRAND.goldBorder,
+  },
+  '& .MuiDataGrid-toolbarContainer': {
+    bgcolor: BRAND.goldBg,
+  },
+  '& .MuiDataGrid-row': {
+    bgcolor: BRAND.goldBg,
+    '&:hover': { bgcolor: BRAND.goldHover },
+    '& .MuiDataGrid-cell': { bgcolor: 'transparent' },
+  },
+  '& .MuiDataGrid-row.Mui-selected': {
+    bgcolor: `${BRAND.goldSelected} !important`,
+    '&:hover': { bgcolor: `${BRAND.goldSelectedHover} !important` },
+    '& .MuiDataGrid-cell': { bgcolor: 'transparent !important' },
+  },
+  '& .MuiDataGrid-cell': {
+    borderColor: BRAND.goldBorder,
+  },
+  '& .MuiDataGrid-cell--pinnedLeft, & .MuiDataGrid-cell--pinnedRight, & .MuiDataGrid-cell--pinnedLeft--last, & .MuiDataGrid-cell--pinnedRight--first': {
+    bgcolor: 'inherit !important',
+    backgroundImage: 'none',
+  },
+}
 
 export const UNREPRESENTED_COLORS = {
   bg: BRAND.grayBg,

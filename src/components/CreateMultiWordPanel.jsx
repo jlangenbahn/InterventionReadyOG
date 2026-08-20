@@ -14,11 +14,12 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import SaveIcon from '@mui/icons-material/Save'
+import AskAndreaButton from './AskAndreaButton'
+import HelpTip from './HelpTip'
 import { generateClient } from 'aws-amplify/data'
 import {
   buildWordCatalogIndex,
@@ -411,22 +412,21 @@ export default function CreateMultiWordPanel({
             }}
           >
             <Stack spacing={1}>
-              <Stack direction="row" spacing={1} alignItems="flex-start">
-                <AutoAwesomeIcon color="secondary" sx={{ mt: 0.25 }} />
-                <Box>
-                  <Typography variant="subtitle2">Generate with Andrea</Typography>
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    Andrea is the AI Agent for ReadyOG!. Pick a word list for this concept, then
-                    generate a simple {kind === 'passage' ? 'passage' : 'sentence'} into the editor.
-                    You can edit it before saving.
-                  </Typography>
-                </Box>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <AutoAwesomeIcon color="secondary" />
+                <Typography variant="subtitle2">Ask Andrea</Typography>
+                <HelpTip title="Andrea is our AI helper." />
               </Stack>
-              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                {sourceListConceptId
-                  ? 'Word lists for this concept'
-                  : "Word lists — select one to use as Andrea's source"}
-              </Typography>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                  {sourceListConceptId
+                    ? 'Word lists for this concept'
+                    : 'Word lists'}
+                </Typography>
+                <HelpTip
+                  title={`Pick a word list for this concept, then generate a simple ${kind === 'passage' ? 'passage' : 'sentence'} into the editor. You can edit it before saving.`}
+                />
+              </Stack>
               {sourceLists.length ? (
                 <List
                   dense
@@ -476,27 +476,17 @@ export default function CreateMultiWordPanel({
                   ) : null}
                 </Stack>
               ) : null}
-              <Tooltip
-                title={
+              <AskAndreaButton
+                size="medium"
+                loading={generating}
+                disabled={saving || !selectedSourceList}
+                tooltip={
                   selectedSourceList
-                    ? `Generate a ${kind} from “${selectedSourceList.name}”`
-                    : 'Select a word list first'
+                    ? `Andrea is our AI helper. Generate a ${kind} from “${selectedSourceList.name}”.`
+                    : 'Andrea is our AI helper. Select a word list first.'
                 }
-              >
-                <span>
-                  <Button
-                    variant="contained"
-                    color="secondary"
-                    startIcon={
-                      generating ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />
-                    }
-                    onClick={() => void handleGenerate()}
-                    disabled={generating || saving || !selectedSourceList}
-                  >
-                    Generate with Andrea
-                  </Button>
-                </span>
-              </Tooltip>
+                onClick={() => void handleGenerate()}
+              />
               {generateError ? (
                 <Alert severity="error" onClose={() => setGenerateError('')}>
                   {generateError}
@@ -529,29 +519,31 @@ export default function CreateMultiWordPanel({
                 : 'Write a sentence, or a list of words separated by spaces…'
             }
           />
-          <Autocomplete
-            options={focusOptions}
-            value={focusValue}
-            onChange={(_event, next) => {
-              setFocusTouched(true)
-              setFocusConceptId(next?.id ?? null)
-            }}
-            getOptionLabel={(option) => option?.name || ''}
-            isOptionEqualToValue={(option, selected) => option.id === selected.id}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Focus concept"
-                size="small"
-                required
-                helperText={
+          <Stack direction="row" spacing={0.5} alignItems="flex-start">
+            <Autocomplete
+              options={focusOptions}
+              value={focusValue}
+              onChange={(_event, next) => {
+                setFocusTouched(true)
+                setFocusConceptId(next?.id ?? null)
+              }}
+              getOptionLabel={(option) => option?.name || ''}
+              isOptionEqualToValue={(option, selected) => option.id === selected.id}
+              sx={{ flex: 1, minWidth: 0 }}
+              renderInput={(params) => (
+                <TextField {...params} label="Focus concept" size="small" required />
+              )}
+            />
+            <Box sx={{ pt: 0.75 }}>
+              <HelpTip
+                title={
                   kind === 'passage'
                     ? 'The unifying concept for this passage. Lesson creation filters passages by this.'
                     : 'The unifying concept for this sentence. Lesson creation filters sentences by this.'
                 }
               />
-            )}
-          />
+            </Box>
+          </Stack>
           <Stack direction="row" spacing={1} justifyContent="flex-end">
             <Button
               variant="contained"

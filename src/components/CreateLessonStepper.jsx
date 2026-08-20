@@ -15,6 +15,7 @@ import {
 import AddIcon from '@mui/icons-material/Add'
 import SaveIcon from '@mui/icons-material/Save'
 import StepperSelectionGrid from './StepperSelectionGrid'
+import HelpTip from './HelpTip'
 import { MASTERY_ROW_COLORS, REVIEW_SLOT_COLORS, UNREPRESENTED_COLORS } from '../theme'
 
 const LIST_COLUMNS = [
@@ -162,7 +163,7 @@ function CreateConceptActions({
   const colorByCoverage = representedIds != null
 
   return (
-    <Stack spacing={0.75}>
+    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap alignItems="center">
       <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
         {concepts.map((concept) => {
           const name = concept?.concept || 'concept'
@@ -200,10 +201,7 @@ function CreateConceptActions({
         })}
       </Stack>
       {colorByCoverage ? (
-        <Typography variant="caption" color="text.secondary">
-          Gray means that review concept has no list selected yet. Each color matches one of the
-          review concepts you chose.
-        </Typography>
+        <HelpTip title="Gray means that review concept has no list selected yet. Each color matches one of the review concepts you chose." />
       ) : null}
     </Stack>
   )
@@ -456,7 +454,15 @@ export default function CreateLessonStepper({
                   onChange={(event) => onLessonNameChange(event.target.value)}
                   placeholder={defaultNamePreview}
                   sx={{ flex: 1, minWidth: 0 }}
-                  helperText={`Default name is “${defaultNamePreview}”. Edit it if you want a custom title.`}
+                  slotProps={{
+                    input: {
+                      endAdornment: (
+                        <HelpTip
+                          title={`Default name is “${defaultNamePreview}”. Edit it if you want a custom title.`}
+                        />
+                      ),
+                    },
+                  }}
                 />
                 <TextField
                   label="Lesson date"
@@ -524,18 +530,24 @@ export default function CreateLessonStepper({
 
         <Step completed={Boolean(newConceptListId)}>
           <StepLabel
-            optional={<Typography variant="caption">Required</Typography>}
+            optional={
+              <Stack direction="row" spacing={0.25} alignItems="center">
+                <Typography variant="caption">Required</Typography>
+                <HelpTip
+                  title={
+                    selectedNewConceptId
+                      ? 'Only lists tagged with the selected new concept are shown.'
+                      : 'Select a new concept in Lesson setup to see matching lists.'
+                  }
+                />
+              </Stack>
+            }
             onClick={() => onStepChange(1)}
             sx={{ cursor: 'pointer' }}
           >
             New concept list
           </StepLabel>
           <StepContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              {selectedNewConceptId
-                ? 'Only lists tagged with the selected new concept are shown.'
-                : 'Select a new concept in Lesson setup to see matching lists.'}
-            </Typography>
             <StepperSelectionGrid
               items={newConceptLists}
               columns={LIST_COLUMNS}
@@ -573,18 +585,24 @@ export default function CreateLessonStepper({
 
         <Step completed={reviewIds.length > 0}>
           <StepLabel
-            optional={<Typography variant="caption">Up to 3</Typography>}
+            optional={
+              <Stack direction="row" spacing={0.25} alignItems="center">
+                <Typography variant="caption">Up to 3</Typography>
+                <HelpTip
+                  title={
+                    selectedReviewConceptIds.length
+                      ? 'Only lists tagged with the selected review concepts are shown. The new concept list is hidden so it is not chosen twice.'
+                      : 'Select review concepts in Lesson setup to see matching lists.'
+                  }
+                />
+              </Stack>
+            }
             onClick={() => onStepChange(2)}
             sx={{ cursor: 'pointer' }}
           >
             Review concept lists
           </StepLabel>
           <StepContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              {selectedReviewConceptIds.length
-                ? 'Only lists tagged with the selected review concepts are shown. The new concept list is hidden so it is not chosen twice.'
-                : 'Select review concepts in Lesson setup to see matching lists.'}
-            </Typography>
             <StepperSelectionGrid
               items={reviewConceptLists}
               columns={LIST_COLUMNS}
@@ -624,17 +642,18 @@ export default function CreateLessonStepper({
 
         <Step completed={sentenceIds.length > 0}>
           <StepLabel
-            optional={<Typography variant="caption">Up to 6</Typography>}
+            optional={
+              <Stack direction="row" spacing={0.25} alignItems="center">
+                <Typography variant="caption">Up to 6</Typography>
+                <HelpTip title="Only sentences whose focus concept matches the new or review concepts from Lesson setup are shown. Use the trash icon on a row to delete a sentence." />
+              </Stack>
+            }
             onClick={() => onStepChange(3)}
             sx={{ cursor: 'pointer' }}
           >
             Sentences
           </StepLabel>
           <StepContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Only sentences whose focus concept matches the new or review concepts from Lesson setup are shown.
-              Use the trash icon on a row to delete a sentence.
-            </Typography>
             <StepperSelectionGrid
               items={sentences}
               columns={SENTENCE_COLUMNS}
@@ -669,17 +688,18 @@ export default function CreateLessonStepper({
 
         <Step completed={passageIds.length > 0}>
           <StepLabel
-            optional={<Typography variant="caption">Up to 2</Typography>}
+            optional={
+              <Stack direction="row" spacing={0.25} alignItems="center">
+                <Typography variant="caption">Up to 2</Typography>
+                <HelpTip title="Only passages whose focus concept matches the new or review concepts from Lesson setup are shown. Use the trash icon on a row to delete a passage." />
+              </Stack>
+            }
             onClick={() => onStepChange(4)}
             sx={{ cursor: 'pointer' }}
           >
             Passages
           </StepLabel>
           <StepContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Only passages whose focus concept matches the new or review concepts from Lesson setup are shown.
-              Use the trash icon on a row to delete a passage.
-            </Typography>
             <StepperSelectionGrid
               items={passages}
               columns={PASSAGE_COLUMNS}

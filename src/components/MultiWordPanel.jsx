@@ -21,6 +21,7 @@ import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import CreateMultiWordPanel from './CreateMultiWordPanel'
 import MultiWordPreview from './MultiWordPreview'
 import ConfirmDeleteDialog from './ConfirmDeleteDialog'
+import HelpTip from './HelpTip'
 import {
   fetchStudentSentencesAndPassages,
   parseListData,
@@ -77,9 +78,11 @@ function ConceptFilterAutocomplete({
 }) {
   const disabled = new Set(disabledIds)
   return (
+    <Stack direction="row" spacing={0.5} alignItems="flex-start">
     <Autocomplete
       multiple={multiple}
       fullWidth
+      sx={{ flex: 1, minWidth: 0 }}
       options={options}
       value={value}
       onChange={(_event, next) => onChange(next)}
@@ -142,15 +145,15 @@ function ConceptFilterAutocomplete({
         )
       }}
       renderInput={(params) => (
-        <TextField
-          {...params}
-          label={label}
-          size="small"
-          required={required}
-          helperText={helperText}
-        />
+        <TextField {...params} label={label} size="small" required={required} />
       )}
     />
+      {helperText ? (
+        <Box sx={{ pt: 0.75 }}>
+          <HelpTip title={helperText} />
+        </Box>
+      ) : null}
+    </Stack>
   )
 }
 
@@ -552,9 +555,18 @@ export default function MultiWordPanel({
               >
                 Back to {kind === 'passage' ? 'Passages' : 'Sentences'}
               </Button>
-              <Typography variant="subtitle1">
-                {editItem ? `Edit ${kind}` : `Create ${kind}`}
-              </Typography>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <Typography variant="subtitle1">
+                  {editItem ? `Edit ${kind}` : `Create ${kind}`}
+                </Typography>
+                <HelpTip
+                  title={
+                    editItem
+                      ? 'Update the text or focus concept, then save. Tagging updates on the right.'
+                      : `Type a ${kind}. Tagging and concept weight update on the right as you go.`
+                  }
+                />
+              </Stack>
             </Stack>
           ) : (
             <Stack
@@ -568,11 +580,9 @@ export default function MultiWordPanel({
               <Button variant="contained" startIcon={<AddIcon />} onClick={handleNew} sx={{ flexShrink: 0 }}>
                 Create {kind}
               </Button>
+              <HelpTip title={`Click a ${kind} to preview tagging. Row icons edit or delete.`} />
               {notice ? <Chip size="small" color="success" label={notice} /> : null}
               {loading || loadingCatalog ? <CircularProgress size={16} /> : null}
-              <Typography variant="body2" color="text.secondary" sx={{ minWidth: 0, flex: 1 }}>
-                Click a {kind} to preview tagging. Row icons edit or delete.
-              </Typography>
             </Stack>
           )}
 
@@ -640,11 +650,6 @@ export default function MultiWordPanel({
             </>
           ) : (
             <>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                {editItem
-                  ? `Update the text or focus concept, then save. Tagging updates on the right.`
-                  : `Type a ${kind}. Tagging and concept weight update on the right as you go.`}
-              </Typography>
               <CreateMultiWordPanel
                 student={student}
                 concepts={concepts}

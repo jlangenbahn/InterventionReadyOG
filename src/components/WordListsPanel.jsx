@@ -26,6 +26,8 @@ import { generateClient } from 'aws-amplify/data'
 import { parseListData, resolveListWords, studentDisplayName } from '../lib/fetchStudentLessonPlan'
 import { deleteWordList, updateWordList } from '../lib/crudRecords'
 import ConfirmDeleteDialog from './ConfirmDeleteDialog'
+import AskAndreaButton from './AskAndreaButton'
+import HelpTip from './HelpTip'
 
 const client = generateClient()
 
@@ -371,7 +373,10 @@ export default function WordListsPanel({
                 >
                   Back to Word lists
                 </Button>
-                <Typography variant="subtitle1">Create list</Typography>
+                <Stack direction="row" spacing={0.5} alignItems="center">
+                  <Typography variant="subtitle1">Create list</Typography>
+                  <HelpTip title="Select a concept, choose words on the right, then save the list." />
+                </Stack>
               </Stack>
             ) : (
               <Stack
@@ -390,18 +395,13 @@ export default function WordListsPanel({
                 >
                   Create list
                 </Button>
+                <HelpTip title="Click a list to preview its words. Row icons rename or delete." />
                 {loadingLists ? <CircularProgress size={16} /> : null}
-                <Typography variant="body2" color="text.secondary" sx={{ minWidth: 0, flex: 1 }}>
-                  Click a list to preview its words. Row icons rename or delete.
-                </Typography>
               </Stack>
             )}
 
             {mode === MODE_CREATE ? (
               <>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                  Select a concept, choose words on the right, then save the list.
-                </Typography>
                 <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
                   <DataGridPro
                     rows={conceptRows}
@@ -515,6 +515,7 @@ export default function WordListsPanel({
                   >
                     Random {Math.min(RANDOM_WORD_COUNT, selectedWords.length) || RANDOM_WORD_COUNT}
                   </Button>
+                  <AskAndreaButton disabled={selectedWords.length === 0 || creatingList} />
                   <Button
                     size="small"
                     variant="contained"

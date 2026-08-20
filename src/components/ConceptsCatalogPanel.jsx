@@ -19,6 +19,7 @@ import {
 import EditIcon from '@mui/icons-material/Edit'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import { generateClient } from 'aws-amplify/data'
+import HelpTip from './HelpTip'
 
 const client = generateClient()
 
@@ -159,9 +160,7 @@ export default function ConceptsCatalogPanel({
           >
             {notice ? <Chip size="small" color="success" label={notice} /> : null}
             {loadingCatalog ? <CircularProgress size={16} /> : null}
-            <Typography variant="body2" color="text.secondary" sx={{ minWidth: 0, flex: 1 }}>
-              Click a concept to preview it. The row icon renames the label.
-            </Typography>
+            <HelpTip title="Click a concept to preview it. The row icon renames the label." />
           </Stack>
           <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
             <DataGridPro

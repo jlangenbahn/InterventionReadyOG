@@ -17,6 +17,7 @@ import {
   Tabs,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import PrintIcon from '@mui/icons-material/Print'
@@ -64,6 +65,8 @@ import {
   templateIsOwnedBy,
 } from '../lib/lessonTemplates'
 import PublishLessonTemplateDialog from './PublishLessonTemplateDialog'
+import HelpTip from './HelpTip'
+import { BRAND, globalLessonGridSx } from '../theme'
 
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
@@ -1368,6 +1371,8 @@ export default function LessonPlanPanel({
     )
   }
 
+  const viewingGlobal = showGlobalLessons && lessonMode === LESSON_MODE_VIEW
+
   return (
     <Box
       sx={{
@@ -1407,9 +1412,12 @@ export default function LessonPlanPanel({
               >
                 Back to Lessons
               </Button>
-              <Typography variant="subtitle1">
-                {loadedLesson ? 'Edit lesson' : 'Create lesson'}
-              </Typography>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <Typography variant="subtitle1">
+                  {loadedLesson ? 'Edit lesson' : 'Create lesson'}
+                </Typography>
+                <HelpTip title="Walk through each step to choose materials, then create the lesson. The preview on the right updates as you go." />
+              </Stack>
             </Stack>
           ) : (
             <Tabs
@@ -1424,16 +1432,20 @@ export default function LessonPlanPanel({
               }}
             >
               <Tab icon={<ViewListIcon />} iconPosition="start" label="Lessons" />
-              <Tab icon={<GradingIcon />} iconPosition="start" label="Grade" />
+              <Tab
+                icon={<GradingIcon />}
+                iconPosition="start"
+                label={
+                  <Tooltip title="Click a plan to score it on the right.">
+                    <span>Grade</span>
+                  </Tooltip>
+                }
+              />
             </Tabs>
           )}
 
           {lessonMode === LESSON_MODE_CREATE ? (
             <>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                Walk through each step to choose materials, then create the lesson. The preview on
-                the right updates as you go.
-              </Typography>
               <CreateLessonStepper
                 activeStep={activeStep}
                 onStepChange={setActiveStep}
@@ -1477,16 +1489,15 @@ export default function LessonPlanPanel({
             </>
           ) : (
             <>
-              <Stack
-                direction="row"
-                spacing={1}
-                alignItems="center"
-                flexWrap="wrap"
-                useFlexGap
-                sx={{ mb: 1.5 }}
-              >
-                {lessonMode === LESSON_MODE_VIEW ? (
-                  <>
+              {lessonMode === LESSON_MODE_VIEW ? (
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  justifyContent="space-between"
+                  sx={{ mb: 1.5 }}
+                >
+                  <Tooltip title="Create a new lesson plan for this student.">
                     <Button
                       variant="contained"
                       startIcon={<AddIcon />}
@@ -1495,29 +1506,56 @@ export default function LessonPlanPanel({
                     >
                       Create lesson
                     </Button>
-                    <ToggleButtonGroup
-                      exclusive
-                      size="small"
-                      value={showGlobalLessons ? 'global' : 'mine'}
-                      onChange={(_event, value) => {
-                        if (!value) return
-                        setShowGlobalLessons(value === 'global')
+                  </Tooltip>
+                  <ToggleButtonGroup
+                    exclusive
+                    size="small"
+                    value={showGlobalLessons ? 'global' : 'mine'}
+                    onChange={(_event, value) => {
+                      if (!value) return
+                      setShowGlobalLessons(value === 'global')
+                    }}
+                    sx={{
+                      flexShrink: 0,
+                      '& .MuiToggleButton-root': {
+                        px: 1.75,
+                        fontWeight: 700,
+                      },
+                    }}
+                  >
+                    <ToggleButton
+                      value="mine"
+                      aria-label="My lessons"
+                      sx={{
+                        '&.Mui-selected, &.Mui-selected:hover': {
+                          bgcolor: `${BRAND.navy} !important`,
+                          color: '#ffffff !important',
+                          borderColor: `${BRAND.navy} !important`,
+                        },
                       }}
-                      sx={{ flexShrink: 0 }}
                     >
-                      <ToggleButton value="mine">My lessons</ToggleButton>
-                      <ToggleButton value="global">Global lessons</ToggleButton>
-                    </ToggleButtonGroup>
-                  </>
-                ) : null}
-                <Typography variant="body2" color="text.secondary" sx={{ minWidth: 0, flex: 1 }}>
-                  {lessonMode === LESSON_MODE_GRADE
-                    ? 'Click a plan to score it on the right.'
-                    : showGlobalLessons
-                      ? 'Viewing global lessons. Import copies one onto this student.'
-                      : 'Viewing this student’s lessons. Click a plan to preview it.'}
-                </Typography>
-              </Stack>
+                      <Tooltip title="Viewing this student’s lessons. Click a plan to preview it.">
+                        <Box component="span">My lessons</Box>
+                      </Tooltip>
+                    </ToggleButton>
+                    <ToggleButton
+                      value="global"
+                      aria-label="Global lessons"
+                      sx={{
+                        '&.Mui-selected, &.Mui-selected:hover': {
+                          bgcolor: `${BRAND.gold} !important`,
+                          color: `${BRAND.navyDark} !important`,
+                          borderColor: `${BRAND.goldDark} !important`,
+                        },
+                      }}
+                    >
+                      <Tooltip title="Viewing global lessons. Import copies one onto this student.">
+                        <Box component="span">Global lessons</Box>
+                      </Tooltip>
+                    </ToggleButton>
+                  </ToggleButtonGroup>
+                </Stack>
+              ) : null}
               <Box
                 sx={{
                   height: { xs: 360, md: 'calc(100vh - 320px)' },
@@ -1525,24 +1563,14 @@ export default function LessonPlanPanel({
                   width: '100%',
                   borderRadius: 1,
                   border: 1,
-                  borderColor:
-                    showGlobalLessons && lessonMode === LESSON_MODE_VIEW
-                      ? 'secondary.dark'
-                      : 'divider',
-                  bgcolor:
-                    showGlobalLessons && lessonMode === LESSON_MODE_VIEW
-                      ? 'secondary.light'
-                      : 'background.paper',
+                  borderColor: viewingGlobal ? BRAND.goldDark : 'divider',
+                  bgcolor: viewingGlobal ? BRAND.goldBg : 'background.paper',
                   overflow: 'hidden',
                 }}
               >
                 <DataGridPro
-                  key={showGlobalLessons && lessonMode === LESSON_MODE_VIEW ? 'global' : 'student'}
-                  rows={
-                    showGlobalLessons && lessonMode === LESSON_MODE_VIEW
-                      ? globalLessonRows
-                      : savedLessonRows
-                  }
+                  key={viewingGlobal ? 'global' : 'student'}
+                  rows={viewingGlobal ? globalLessonRows : savedLessonRows}
                   columns={
                     lessonMode === LESSON_MODE_GRADE
                       ? gradeColumns
@@ -1552,38 +1580,26 @@ export default function LessonPlanPanel({
                   }
                   getRowId={(row) => row.id}
                   onRowClick={(params) => {
-                    if (showGlobalLessons && lessonMode === LESSON_MODE_VIEW) {
+                    if (viewingGlobal) {
                       previewGlobalLesson(params.id)
                       return
                     }
                     const lesson = savedLessons.find((item) => item.id === params.id)
                     if (lesson) applyLesson(lesson)
                   }}
-                  rowSelectionModel={
-                    showGlobalLessons && lessonMode === LESSON_MODE_VIEW
-                      ? globalSelectionModel
-                      : lessonSelectionModel
-                  }
+                  rowSelectionModel={viewingGlobal ? globalSelectionModel : lessonSelectionModel}
                   getRowClassName={(params) => {
-                    const selectedId =
-                      showGlobalLessons && lessonMode === LESSON_MODE_VIEW
-                        ? selectedTemplateId
-                        : loadedLesson?.id
+                    const selectedId = viewingGlobal ? selectedTemplateId : loadedLesson?.id
                     return params.id === selectedId ? 'Mui-selected' : ''
                   }}
-                  loading={
-                    showGlobalLessons && lessonMode === LESSON_MODE_VIEW
-                      ? loadingTemplates
-                      : loadingLessons
-                  }
+                  loading={viewingGlobal ? loadingTemplates : loadingLessons}
                   pagination
                   pageSizeOptions={[10, 25, 50]}
                   initialState={{
                     pagination: { paginationModel: { pageSize: 10 } },
-                    sorting:
-                      showGlobalLessons && lessonMode === LESSON_MODE_VIEW
-                        ? { sortModel: [{ field: 'name', sort: 'asc' }] }
-                        : { sortModel: [{ field: 'lessonDateLabel', sort: 'desc' }] },
+                    sorting: viewingGlobal
+                      ? { sortModel: [{ field: 'name', sort: 'asc' }] }
+                      : { sortModel: [{ field: 'lessonDateLabel', sort: 'desc' }] },
                     pinnedColumns: { right: ['actions'] },
                   }}
                   slots={{ toolbar: GridToolbar }}
@@ -1598,6 +1614,7 @@ export default function LessonPlanPanel({
                     border: 0,
                     bgcolor: 'transparent',
                     '& .MuiDataGrid-overlayWrapper': { bgcolor: 'transparent' },
+                    ...(viewingGlobal ? globalLessonGridSx : null),
                   }}
                   localeText={{
                     noRowsLabel:

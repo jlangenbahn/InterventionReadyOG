@@ -10,13 +10,14 @@ import {
   DialogTitle,
   Stack,
   TextField,
-  Typography,
 } from '@mui/material'
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd'
 import CasinoIcon from '@mui/icons-material/Casino'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import { createWordList } from '../lib/crudRecords'
 import { studentDisplayName } from '../lib/fetchStudentLessonPlan'
+import AskAndreaButton from './AskAndreaButton'
+import HelpTip from './HelpTip'
 
 const RANDOM_WORD_COUNT = 10
 
@@ -111,12 +112,15 @@ export default function CreateWordListModal({
 
   return (
     <Dialog open={open} onClose={handleClose} fullWidth maxWidth="md" scroll="paper">
-      <DialogTitle>Create {conceptName} list</DialogTitle>
+      <DialogTitle>
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <Box component="span">Create {conceptName} list</Box>
+          <HelpTip
+            title={`Select words tagged with ${conceptName} for ${studentDisplayName(student)}. Name the list (the concept is filled in as a default) and save to add it to this lesson step.`}
+          />
+        </Stack>
+      </DialogTitle>
       <DialogContent sx={{ display: 'grid', gap: 1.5, pt: 1 }}>
-        <Typography variant="body2" color="text.secondary">
-          Select words tagged with {conceptName} for {studentDisplayName(student)}. Name the list
-          (the concept is filled in as a default) and save to add it to this lesson step.
-        </Typography>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
           <Chip size="small" color="primary" variant="outlined" label={`${words.length} words`} />
           <Chip size="small" variant="outlined" label={`${selectedWordRows.length} selected`} />
@@ -129,6 +133,7 @@ export default function CreateWordListModal({
           >
             Random {Math.min(RANDOM_WORD_COUNT, words.length) || RANDOM_WORD_COUNT}
           </Button>
+          <AskAndreaButton disabled={creating || words.length === 0} />
           {creating ? <CircularProgress size={16} /> : null}
         </Stack>
         <Box sx={{ height: 360, width: '100%' }}>
@@ -168,7 +173,13 @@ export default function CreateWordListModal({
           }}
           required
           disabled={creating}
-          helperText="Change the default name if you want a more specific list."
+          slotProps={{
+            input: {
+              endAdornment: (
+                <HelpTip title="Change the default name if you want a more specific list." />
+              ),
+            },
+          }}
         />
       </DialogContent>
       <DialogActions>
