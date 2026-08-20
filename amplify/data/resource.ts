@@ -358,6 +358,7 @@ const schema = a.schema({
       kind: a.string().required(),
       conceptName: a.string().required(),
       words: a.string().required(),
+      studentContext: a.string(),
     })
     .returns(a.string())
     .handler(a.handler.function(generateLessonTextFn))

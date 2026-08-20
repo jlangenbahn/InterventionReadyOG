@@ -5,7 +5,7 @@ import {
 
 const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 const SYSTEM_PROMPT =
-  'You write tutoring materials for middle-school students who read at about a 4th-grade level. Keep non-target words very simple. Write coherent, easy-to-follow text. Use the provided target words with their exact spelling, including nonsense or decodable practice words. Prefer putting 2 or 3 target words in the same sentence when it still sounds natural. Return only the requested sentence or passage. Do not include a title, heading, markdown, hashtag, the concept name, labels, quotes, bullet points, or commentary. Start with the first sentence of the text.';
+  'You write tutoring materials for one specific student. The student is a middle-school reader at about a 4th-grade level. Use the student history when it is provided: prefer familiar words and review/mastered concepts as the surrounding language, and weave in the target words plus a little new practice. If the focus concept is new, keep almost all non-target words familiar. Keep non-target words very simple. Write coherent, easy-to-follow text. Use the provided target words with their exact spelling, including nonsense or decodable practice words. Prefer putting 2 or 3 target words in the same sentence when it still sounds natural. Do not copy previous sentences or passages. Return only the requested sentence or passage. Do not include a title, heading, markdown, hashtag, the concept name, labels, quotes, bullet points, or commentary. Start with the first sentence of the text.';
 
 const client = new BedrockRuntimeClient({
   maxAttempts: 5,
@@ -17,6 +17,7 @@ type GenerateEvent = {
     kind?: string | null;
     conceptName?: string | null;
     words?: string | null;
+    studentContext?: string | null;
   };
 };
 
@@ -85,10 +86,15 @@ export const handler = async (event: GenerateEvent): Promise<string> => {
     throw new Error('Select a word list with at least one word.');
   }
 
+  const studentContext = String(event.arguments?.studentContext || '').trim();
+  const historyBlock = studentContext
+    ? `\nStudent history JSON. Use familiar words and review/mastered concepts as the surrounding language. If the focus concept is new, keep almost all non-target words familiar. Include a little new practice, but do not copy recentTexts. ${studentContext}`
+    : '';
+
   const userText =
     kind === 'passage'
-      ? `Write a short simple passage of 4 to 7 short sentences that practices the concept ${conceptName}. Do not title the passage, do not use markdown, and do not repeat the concept name. Start with the first sentence. Use at least 80 percent of these target words, and use 2 or 3 of them in the same sentence when it still sounds natural. Error on the side of being too simple. Target words: ${words}`
-      : `Write one short simple sentence that practices the concept ${conceptName}. Do not include a title, markdown, or the concept name as a label. Use 2 or 3 of these target words in that sentence when possible. Target words: ${words}`;
+      ? `Write a short simple passage of 4 to 7 short sentences that practices the concept ${conceptName} for this student. Do not title the passage, do not use markdown, and do not repeat the concept name. Start with the first sentence. Use at least 80 percent of these target words, and use 2 or 3 of them in the same sentence when it still sounds natural. Error on the side of being too simple. Target words: ${words}${historyBlock}`
+      : `Write one short simple sentence that practices the concept ${conceptName} for this student. Do not include a title, markdown, or the concept name as a label. Use 2 or 3 of these target words in that sentence when possible. Target words: ${words}${historyBlock}`;
 
   try {
     const response = await client.send(

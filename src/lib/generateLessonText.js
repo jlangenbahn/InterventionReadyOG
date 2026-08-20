@@ -1,11 +1,12 @@
 import { client } from './amplifyClient'
 import { sanitizeGeneratedLessonText } from './sanitizeLessonText'
+import { buildStudentWordContext, loadStudentPracticeHistory } from './studentPracticeContext'
 
 function uniqueWords(words) {
   const seen = new Set()
   const result = []
   for (const raw of words ?? []) {
-    const word = String(raw ?? '').trim()
+    const word = typeof raw === 'string' ? raw.trim() : String(raw?.word ?? '').trim()
     if (!word) continue
     const key = word.toLowerCase()
     if (seen.has(key)) continue
@@ -38,11 +39,42 @@ function messageFromUnknown(err) {
   return ''
 }
 
+function compactGenerationContext(context) {
+  if (!context) return ''
+  return JSON.stringify({
+    student: context.student,
+    focusConcept: context.focusConcept,
+    scope: {
+      inScopeCount: context.scope?.inScopeCount,
+      masteryCounts: context.scope?.masteryCounts,
+      familiarConcepts: context.scope?.familiarConcepts,
+      newConcepts: context.scope?.newConcepts,
+    },
+    wordHistory: {
+      listCount: context.wordHistory?.listCount,
+      lessonCount: context.wordHistory?.lessonCount,
+      familiarWords: context.wordHistory?.familiarWords,
+      recentLists: context.wordHistory?.recentLists,
+      recentTexts: context.wordHistory?.recentTexts,
+    },
+    targetWords: context.candidates,
+  })
+}
+
 /**
- * Ask Bedrock (via the Amplify generation route) for a simple sentence or passage
- * built from a concept word list.
+ * Ask Bedrock for a simple sentence or passage built from a concept word list,
+ * tailored with this student's practice history when available.
  */
-export async function generateLessonText({ kind, conceptName, words }) {
+export async function generateLessonText({
+  kind,
+  conceptName,
+  words,
+  student,
+  concept,
+  concepts = [],
+  studentLists,
+  wordsByConceptId,
+}) {
   const generate = client.queries?.generateLessonDraft
   if (typeof generate !== 'function') {
     throw new Error(
@@ -55,6 +87,29 @@ export async function generateLessonText({ kind, conceptName, words }) {
     throw new Error('Select a word list with at least one word.')
   }
 
+  let studentContext = ''
+  if (student?.id) {
+    try {
+      const { lists, lessons } = await loadStudentPracticeHistory({
+        studentId: student.id,
+        studentLists,
+      })
+      studentContext = compactGenerationContext(
+        buildStudentWordContext({
+          student,
+          concept,
+          concepts,
+          words: unique,
+          lists,
+          lessons,
+          wordsByConceptId,
+        }),
+      )
+    } catch (err) {
+      console.warn('Andrea could not load student history for generation', err)
+    }
+  }
+
   const kindLabel = kind === 'passage' ? 'passage' : 'sentence'
   let data
   let errors
@@ -63,6 +118,7 @@ export async function generateLessonText({ kind, conceptName, words }) {
       kind: kindLabel,
       conceptName: String(conceptName || 'this concept').trim() || 'this concept',
       words: unique.join(', '),
+      studentContext: studentContext || undefined,
     })
     data = result?.data
     errors = result?.errors

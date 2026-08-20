@@ -222,10 +222,19 @@ export default function CreateMultiWordPanel({
     setGenerateError('')
     try {
       const conceptName = preferredFocusName || focusValue?.name || 'this concept'
+      const focusConcept =
+        concepts.find((item) => item.id === (preferredFocusId || focusConceptId)) ||
+        preferredFocusConcept ||
+        null
       const draft = await generateLessonText({
         kind,
         conceptName,
         words: selectedSourceList.words,
+        student,
+        concept: focusConcept,
+        concepts,
+        studentLists: lists,
+        wordsByConceptId,
       })
       const cleaned = sanitizeGeneratedLessonText(draft, {
         conceptName,
@@ -480,7 +489,7 @@ export default function CreateMultiWordPanel({
                 disabled={saving || !selectedSourceList}
                 tooltip={
                   selectedSourceList
-                    ? `Andrea is our AI helper. Generate a ${kind} from “${selectedSourceList.name}”.`
+                    ? `Andrea writes a ${kind} for this student from “${selectedSourceList.name}”, using familiar words and concepts plus the target list.`
                     : 'Andrea is our AI helper. Select a word list first.'
                 }
                 onClick={() => void handleGenerate()}
