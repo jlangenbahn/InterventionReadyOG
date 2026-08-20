@@ -1288,7 +1288,7 @@ function AppShell({ user, signOut }) {
                       <IconButton
                         edge="end"
                         size="small"
-                        aria-label={`Delete ${fullName}`}>
+                        aria-label={`Delete ${fullName}`}
                         onClick={(event) => {
                           event.stopPropagation()
                           askDeleteStudent(student)

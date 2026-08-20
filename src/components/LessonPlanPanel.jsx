@@ -54,9 +54,14 @@ import {
   tallyScores,
 } from '../lib/fetchStudentLessonPlan'
 import { deleteLesson, deletePassage, deleteSentence } from '../lib/crudRecords'
-import { publishLessonTemplate } from '../lib/lessonTemplates'
+import {
+  applyLessonTemplate,
+  deleteLessonTemplate,
+  listLessonTemplates,
+  publishLessonTemplate,
+  templateIsOwnedBy,
+} from '../lib/lessonTemplates'
 import PublishLessonTemplateDialog from './PublishLessonTemplateDialog'
-import LessonTemplateGallery from './LessonTemplateGallery'
 
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
@@ -302,8 +307,7 @@ const GRADE_LESSON_COLUMNS = [
 
 const LESSON_MODE_VIEW = 0
 const LESSON_MODE_GRADE = 1
-const LESSON_MODE_TEMPLATES = 2
-const LESSON_MODE_CREATE = 3
+const LESSON_MODE_CREATE = 2
 
 export default function LessonPlanPanel({
   student,
@@ -352,6 +356,13 @@ export default function LessonPlanPanel({
   const [leaveCreate, setLeaveCreate] = useState(null)
   const [catalogItemToDelete, setCatalogItemToDelete] = useState(null)
   const [deletingCatalogItem, setDeletingCatalogItem] = useState(false)
+  const [showGlobalLessons, setShowGlobalLessons] = useState(false)
+  const [globalTemplates, setGlobalTemplates] = useState([])
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null)
+  const [applyingTemplateId, setApplyingTemplateId] = useState(null)
+  const [templateToDelete, setTemplateToDelete] = useState(null)
+  const [deletingTemplate, setDeletingTemplate] = useState(false)
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -394,6 +405,22 @@ export default function LessonPlanPanel({
     }
   }, [student?.id, setError])
 
+  const loadGlobalTemplates = useCallback(async () => {
+    setLoadingTemplates(true)
+    try {
+      const items = await listLessonTemplates()
+      setGlobalTemplates(items)
+      setError('')
+      return items
+    } catch (err) {
+      setGlobalTemplates([])
+      setError(err instanceof Error ? err.message : 'Failed to load global lessons')
+      return []
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }, [setError])
+
   useEffect(() => {
     void load()
   }, [load])
@@ -401,6 +428,11 @@ export default function LessonPlanPanel({
   useEffect(() => {
     void loadSavedLessons()
   }, [loadSavedLessons])
+
+  useEffect(() => {
+    if (!showGlobalLessons) return
+    void loadGlobalTemplates()
+  }, [showGlobalLessons, loadGlobalTemplates])
 
   useEffect(() => {
     setListSlots({ ...EMPTY_LIST_SLOTS })
@@ -424,6 +456,9 @@ export default function LessonPlanPanel({
     setPreviewLoading(false)
     setLeaveCreate(null)
     setCatalogItemToDelete(null)
+    setShowGlobalLessons(false)
+    setSelectedTemplateId(null)
+    setTemplateToDelete(null)
   }, [student?.id])
 
   const wordLookup = useMemo(() => buildWordLookup(wordsByConceptId), [wordsByConceptId])
@@ -664,6 +699,72 @@ export default function LessonPlanPanel({
   const gradeColumns = useMemo(
     () => [...GRADE_LESSON_COLUMNS, lessonActionColumn],
     [lessonActionColumn],
+  )
+
+  const globalLessonRows = useMemo(
+    () =>
+      globalTemplates.map((item) => ({
+        id: item.id,
+        name: item.name || 'Untitled lesson',
+        newConcept: item.conceptName || '—',
+        reviews: (item.reviewConceptNames ?? []).filter(Boolean).join(', ') || '—',
+        mine: templateIsOwnedBy(item, username),
+      })),
+    [globalTemplates, username],
+  )
+
+  const globalSelectionModel = useMemo(
+    () => ({
+      type: 'include',
+      ids: new Set(selectedTemplateId ? [selectedTemplateId] : []),
+    }),
+    [selectedTemplateId],
+  )
+
+  const globalColumns = useMemo(
+    () => [
+      { field: 'name', headerName: 'Lesson', flex: 1.2, minWidth: 120 },
+      { field: 'newConcept', headerName: 'New concept', flex: 1, minWidth: 110 },
+      { field: 'reviews', headerName: 'Review concepts', flex: 1, minWidth: 140 },
+      {
+        field: 'actions',
+        headerName: '',
+        width: 148,
+        minWidth: 148,
+        sortable: false,
+        filterable: false,
+        disableColumnMenu: true,
+        resizable: false,
+        renderCell: (params) => (
+          <Stack direction="row" spacing={0.5} alignItems="center">
+            <Button
+              size="small"
+              variant="contained"
+              disabled={!student?.id || applyingTemplateId === params.id}
+              onClick={(event) => {
+                event.stopPropagation()
+                void applyGlobalLesson(params.id)
+              }}
+            >
+              {applyingTemplateId === params.id ? 'Applying…' : 'Apply'}
+            </Button>
+            {params.row.mine ? (
+              <IconButton
+                size="small"
+                aria-label={`Delete ${params.row.name || 'global lesson'}`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setTemplateToDelete(params.row)
+                }}
+              >
+                <DeleteOutlineIcon fontSize="small" />
+              </IconButton>
+            ) : null}
+          </Stack>
+        ),
+      },
+    ],
+    [student?.id, applyingTemplateId],
   )
 
   function listForSlot(key) {
@@ -1010,6 +1111,8 @@ export default function LessonPlanPanel({
 
   function handleStartCreate() {
     startNewLesson()
+    setShowGlobalLessons(false)
+    setSelectedTemplateId(null)
     setLessonMode(LESSON_MODE_CREATE)
   }
 
@@ -1104,6 +1207,7 @@ export default function LessonPlanPanel({
       setNotice(wasUpdate ? 'Lesson plan updated.' : 'Lesson plan saved.')
       setError('')
       if (!wasUpdate) {
+        setShowGlobalLessons(false)
         setLessonMode(LESSON_MODE_VIEW)
       }
     } catch (err) {
@@ -1123,9 +1227,10 @@ export default function LessonPlanPanel({
         summary,
         concepts,
       })
-      setNotice('Published as a public template. Other users can browse it under Lesson Plan → Global Template.')
+      setNotice('Published as a public template. Other users can browse it under Lessons → Global Lessons.')
       setPublishLesson(null)
       setError('')
+      if (showGlobalLessons) await loadGlobalTemplates()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to publish lesson template')
     } finally {
@@ -1137,8 +1242,53 @@ export default function LessonPlanPanel({
     const lessons = await loadSavedLessons()
     const refreshed = (lessons ?? []).find((item) => item.id === saved?.id) ?? saved
     if (refreshed?.id) applyLesson(refreshed)
+    setShowGlobalLessons(false)
+    setSelectedTemplateId(null)
     setLessonMode(LESSON_MODE_VIEW)
-    setNotice('Template applied as a new lesson plan.')
+    setNotice('Global lesson applied as a new lesson plan.')
+  }
+
+  async function applyGlobalLesson(templateId) {
+    const template = globalTemplates.find((item) => item.id === templateId)
+    if (!template) return
+    if (!student?.id) {
+      setError('Select a student before applying a global lesson.')
+      return
+    }
+    setApplyingTemplateId(templateId)
+    try {
+      const saved = await applyLessonTemplate({ template, studentId: student.id })
+      setError('')
+      await handleTemplateApplied(saved)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to apply global lesson')
+    } finally {
+      setApplyingTemplateId(null)
+    }
+  }
+
+  function previewGlobalLesson(templateId) {
+    const template = globalTemplates.find((item) => item.id === templateId)
+    if (!template) return
+    setSelectedTemplateId(templateId)
+    applyLesson(template, { previewOnly: true })
+  }
+
+  async function handleConfirmDeleteTemplate() {
+    if (!templateToDelete?.id) return
+    setDeletingTemplate(true)
+    try {
+      await deleteLessonTemplate(templateToDelete.id)
+      if (selectedTemplateId === templateToDelete.id) setSelectedTemplateId(null)
+      setTemplateToDelete(null)
+      await loadGlobalTemplates()
+      setError('')
+      setNotice('Global lesson deleted.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete global lesson')
+    } finally {
+      setDeletingTemplate(false)
+    }
   }
 
   async function handleShare(targetStudentIds) {
@@ -1229,10 +1379,10 @@ export default function LessonPlanPanel({
     >
       <Box sx={{ gridArea: 'work', minWidth: 0, '@media print': { display: 'none' } }}>
         <Paper sx={{ p: 2 }}>
-          {(notice || loading || loadingLists || loadingLessons || saving) ? (
+          {(notice || loading || loadingLists || loadingLessons || loadingTemplates || saving) ? (
             <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
               {notice ? <Chip size="small" color="success" label={notice} /> : null}
-              {loading || loadingLists || loadingLessons || saving ? <CircularProgress size={16} /> : null}
+              {loading || loadingLists || loadingLessons || loadingTemplates || saving ? <CircularProgress size={16} /> : null}
             </Stack>
           ) : null}
 
@@ -1273,7 +1423,6 @@ export default function LessonPlanPanel({
             >
               <Tab icon={<ViewListIcon />} iconPosition="start" label="Lessons" />
               <Tab icon={<GradingIcon />} iconPosition="start" label="Grade" />
-              <Tab icon={<PublicIcon />} iconPosition="start" label="Global Template" />
             </Tabs>
           )}
 
@@ -1324,61 +1473,93 @@ export default function LessonPlanPanel({
                 onDeletePassage={(item) => setCatalogItemToDelete({ ...item, kind: 'passage' })}
               />
             </>
-          ) : lessonMode === LESSON_MODE_TEMPLATES ? (
-            <LessonTemplateGallery
-              student={student}
-              concepts={concepts}
-              username={username}
-              setError={setError}
-              onSelect={(template) => applyLesson(template, { previewOnly: true })}
-              onApplied={(saved) => void handleTemplateApplied(saved)}
-            />
           ) : (
             <>
               <Stack
                 direction="row"
-                spacing={1.5}
-                alignItems="flex-start"
-                justifyContent="space-between"
+                spacing={1}
+                alignItems="center"
+                flexWrap="wrap"
+                useFlexGap
                 sx={{ mb: 1.5 }}
               >
-                <Typography variant="body2" color="text.secondary">
-                  {lessonMode === LESSON_MODE_GRADE
-                    ? 'Select a saved plan to score lists, sentences, and passages on the right. Lesson scores stay at the bottom of that panel.'
-                    : 'Select a saved plan to preview it on the right. Edit opens it so you can change materials. Share copies a plan onto your other students. Publish posts a student-free template for every user. Delete removes it from this student.'}
-                </Typography>
                 {lessonMode === LESSON_MODE_VIEW ? (
-                  <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={handleStartCreate}
-                    sx={{ flexShrink: 0 }}
-                  >
-                    Create lesson
-                  </Button>
+                  <>
+                    <Button
+                      variant="contained"
+                      startIcon={<AddIcon />}
+                      onClick={handleStartCreate}
+                      sx={{ flexShrink: 0 }}
+                    >
+                      Create lesson
+                    </Button>
+                    <Button
+                      variant={showGlobalLessons ? 'contained' : 'outlined'}
+                      startIcon={<PublicIcon />}
+                      onClick={() => setShowGlobalLessons((open) => !open)}
+                      sx={{ flexShrink: 0 }}
+                    >
+                      Global Lessons
+                    </Button>
+                  </>
                 ) : null}
+                <Typography variant="body2" color="text.secondary" sx={{ minWidth: 0, flex: 1 }}>
+                  {lessonMode === LESSON_MODE_GRADE
+                    ? 'Click a plan to score it on the right.'
+                    : showGlobalLessons
+                      ? 'Click a global lesson to preview. Apply copies it to this student.'
+                      : 'Click a plan to preview. Row icons edit, share, publish, or delete.'}
+                </Typography>
               </Stack>
               <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
                 <DataGridPro
-                  rows={savedLessonRows}
+                  key={showGlobalLessons && lessonMode === LESSON_MODE_VIEW ? 'global' : 'student'}
+                  rows={
+                    showGlobalLessons && lessonMode === LESSON_MODE_VIEW
+                      ? globalLessonRows
+                      : savedLessonRows
+                  }
                   columns={
                     lessonMode === LESSON_MODE_GRADE
                       ? gradeColumns
-                      : viewColumns
+                      : showGlobalLessons
+                        ? globalColumns
+                        : viewColumns
                   }
                   getRowId={(row) => row.id}
                   onRowClick={(params) => {
+                    if (showGlobalLessons && lessonMode === LESSON_MODE_VIEW) {
+                      previewGlobalLesson(params.id)
+                      return
+                    }
                     const lesson = savedLessons.find((item) => item.id === params.id)
                     if (lesson) applyLesson(lesson)
                   }}
-                  rowSelectionModel={lessonSelectionModel}
-                  getRowClassName={(params) => (params.id === loadedLesson?.id ? 'Mui-selected' : '')}
-                  loading={loadingLessons}
+                  rowSelectionModel={
+                    showGlobalLessons && lessonMode === LESSON_MODE_VIEW
+                      ? globalSelectionModel
+                      : lessonSelectionModel
+                  }
+                  getRowClassName={(params) => {
+                    const selectedId =
+                      showGlobalLessons && lessonMode === LESSON_MODE_VIEW
+                        ? selectedTemplateId
+                        : loadedLesson?.id
+                    return params.id === selectedId ? 'Mui-selected' : ''
+                  }}
+                  loading={
+                    showGlobalLessons && lessonMode === LESSON_MODE_VIEW
+                      ? loadingTemplates
+                      : loadingLessons
+                  }
                   pagination
                   pageSizeOptions={[10, 25, 50]}
                   initialState={{
                     pagination: { paginationModel: { pageSize: 10 } },
-                    sorting: { sortModel: [{ field: 'lessonDateLabel', sort: 'desc' }] },
+                    sorting:
+                      showGlobalLessons && lessonMode === LESSON_MODE_VIEW
+                        ? { sortModel: [{ field: 'name', sort: 'asc' }] }
+                        : { sortModel: [{ field: 'lessonDateLabel', sort: 'desc' }] },
                     pinnedColumns: { right: ['actions'] },
                   }}
                   slots={{ toolbar: GridToolbar }}
@@ -1393,7 +1574,9 @@ export default function LessonPlanPanel({
                     noRowsLabel:
                       lessonMode === LESSON_MODE_GRADE
                         ? 'No saved lesson plans yet. Create one on Lessons, then grade it here.'
-                        : 'No saved lesson plans yet. Click Create lesson to make one.',
+                        : showGlobalLessons
+                          ? 'No global lessons yet. Publish one from a saved plan.'
+                          : 'No saved lesson plans yet. Click Create lesson to make one.',
                   }}
                 />
               </Box>
@@ -1441,7 +1624,16 @@ export default function LessonPlanPanel({
               justifyContent="flex-end"
               sx={{ mb: 1, '@media print': { display: 'none' } }}
             >
-              {loadedLesson && lessonMode === LESSON_MODE_VIEW ? (
+              {showGlobalLessons && selectedTemplateId && lessonMode === LESSON_MODE_VIEW ? (
+                <Button
+                  variant="contained"
+                  disabled={applyingTemplateId === selectedTemplateId}
+                  onClick={() => void applyGlobalLesson(selectedTemplateId)}
+                >
+                  {applyingTemplateId === selectedTemplateId ? 'Applying…' : 'Apply'}
+                </Button>
+              ) : null}
+              {loadedLesson && lessonMode === LESSON_MODE_VIEW && !showGlobalLessons ? (
                 <Button
                   variant="outlined"
                   startIcon={<EditIcon />}
@@ -1450,7 +1642,7 @@ export default function LessonPlanPanel({
                   Edit
                 </Button>
               ) : null}
-              {loadedLesson && lessonMode !== LESSON_MODE_TEMPLATES ? (
+              {loadedLesson && !showGlobalLessons ? (
                 <Button
                   color="error"
                   variant="outlined"
@@ -1466,7 +1658,7 @@ export default function LessonPlanPanel({
                   Delete
                 </Button>
               ) : null}
-              {loadedLesson && lessonMode !== LESSON_MODE_TEMPLATES ? (
+              {loadedLesson && !showGlobalLessons ? (
                 <Button
                   variant="outlined"
                   startIcon={<PublicIcon />}
@@ -1621,6 +1813,19 @@ export default function LessonPlanPanel({
         deleting={deletingCatalogItem}
         onClose={() => !deletingCatalogItem && setCatalogItemToDelete(null)}
         onConfirm={() => void handleConfirmDeleteCatalogItem()}
+      />
+      <ConfirmDeleteDialog
+        open={Boolean(templateToDelete)}
+        title="Delete this global lesson?"
+        description={
+          templateToDelete
+            ? `Delete “${templateToDelete.name}”? Student lesson plans that already used it are not affected.`
+            : ''
+        }
+        confirmLabel="Delete global lesson"
+        deleting={deletingTemplate}
+        onClose={() => !deletingTemplate && setTemplateToDelete(null)}
+        onConfirm={() => void handleConfirmDeleteTemplate()}
       />
     </Box>
   )
