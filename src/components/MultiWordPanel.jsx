@@ -8,17 +8,15 @@ import {
   IconButton,
   Paper,
   Stack,
-  Tab,
-  Tabs,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
-import ViewListIcon from '@mui/icons-material/ViewList'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import CreateMultiWordPanel from './CreateMultiWordPanel'
 import MultiWordPreview from './MultiWordPreview'
@@ -163,9 +161,10 @@ export default function MultiWordPanel({
   loadingCatalog = false,
   studentLists = [],
   setError,
+  forcedKind = null,
 }) {
   const [mode, setMode] = useState(MODE_VIEW)
-  const [kind, setKind] = useState('sentence')
+  const [kind, setKind] = useState(forcedKind || 'sentence')
   const [loading, setLoading] = useState(false)
   const [sentences, setSentences] = useState([])
   const [passages, setPassages] = useState([])
@@ -205,7 +204,7 @@ export default function MultiWordPanel({
 
   useEffect(() => {
     setMode(MODE_VIEW)
-    setKind('sentence')
+    setKind(forcedKind || 'sentence')
     setSelectedId(null)
     setFocusConceptId(null)
     setAlsoConceptIds([])
@@ -213,7 +212,7 @@ export default function MultiWordPanel({
     setNotice('')
     setEditItem(null)
     setItemToDelete(null)
-  }, [student?.id])
+  }, [student?.id, forcedKind])
 
   const catalogIndex = useMemo(
     () => buildWordCatalogIndex(concepts, wordsByConceptId),
@@ -432,7 +431,7 @@ export default function MultiWordPanel({
           tagged: createPreview?.tagged,
           focusConceptId: createPreview?.focusConceptId ?? null,
           focusName: createPreview?.focusName || '',
-          emptyLabel: 'Type a sentence or passage on the left to see tagging and concept weight.',
+          emptyLabel: `Type a ${kind} on the left to see tagging and concept weight.`,
         }
       : {
           kind,
@@ -441,7 +440,7 @@ export default function MultiWordPanel({
           tagged: selectedTagged,
           focusConceptId: selectedItem?.focusConceptId ?? null,
           focusName: selectedItem?.focusConcept || '',
-          emptyLabel: 'Select a sentence or passage to see focus, coverage, and concept weight.',
+          emptyLabel: `Select a ${kind} to see focus, coverage, and concept weight.`,
         }
 
   function handleKindChange(next) {
@@ -536,65 +535,61 @@ export default function MultiWordPanel({
     >
       <Box sx={{ gridArea: 'work', minWidth: 0 }}>
         <Paper sx={{ p: 2 }}>
-          <Stack
-            direction="row"
-            spacing={1}
-            alignItems="center"
-            justifyContent="space-between"
-            flexWrap="wrap"
-            useFlexGap
-            sx={{ mb: 1 }}
-          >
-            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`${sentences.length} sentences`}
-              />
-              <Chip size="small" variant="outlined" label={`${passages.length} passages`} />
+          {mode === MODE_CREATE ? (
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              justifyContent="space-between"
+              sx={{ mb: 2, pb: 1.5, borderBottom: 1, borderColor: 'divider' }}
+            >
+              <Button
+                startIcon={<ArrowBackIcon />}
+                onClick={() => {
+                  setMode(MODE_VIEW)
+                  setEditItem(null)
+                }}
+              >
+                Back to {kind === 'passage' ? 'Passages' : 'Sentences'}
+              </Button>
+              <Typography variant="subtitle1">
+                {editItem ? `Edit ${kind}` : `Create ${kind}`}
+              </Typography>
+            </Stack>
+          ) : (
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              flexWrap="wrap"
+              useFlexGap
+              sx={{ mb: 1.5 }}
+            >
+              <Button variant="contained" startIcon={<AddIcon />} onClick={handleNew} sx={{ flexShrink: 0 }}>
+                Create {kind}
+              </Button>
               {notice ? <Chip size="small" color="success" label={notice} /> : null}
               {loading || loadingCatalog ? <CircularProgress size={16} /> : null}
+              <Typography variant="body2" color="text.secondary" sx={{ minWidth: 0, flex: 1 }}>
+                Click a {kind} to preview tagging. Row icons edit or delete.
+              </Typography>
             </Stack>
-            <Button variant="outlined" startIcon={<AddIcon />} onClick={handleNew}>
-              New
-            </Button>
-          </Stack>
-
-          <Tabs
-            value={mode}
-            onChange={(_event, value) => {
-              setMode(value)
-              if (value === MODE_VIEW) setEditItem(null)
-              if (value === MODE_CREATE && !editItem) setNotice('')
-            }}
-            variant="fullWidth"
-            sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
-          >
-            <Tab icon={<ViewListIcon />} iconPosition="start" label="View multi word" />
-            <Tab
-              icon={<AddIcon />}
-              iconPosition="start"
-              label={editItem ? 'Edit multi word' : 'Create multi word'}
-            />
-          </Tabs>
+          )}
 
           {mode === MODE_VIEW ? (
             <>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                Select a saved sentence or passage to preview tagging on the right. Focus concept
-                finds an exact focus match. Also includes keeps items that also contain those concepts.
-                Edit or delete with the icons on each row.
-              </Typography>
               <Stack spacing={1.5} sx={{ mb: 1.5 }}>
-                <ToggleButtonGroup
-                  exclusive
-                  size="small"
-                  value={kind}
-                  onChange={(_event, value) => handleKindChange(value)}
-                >
-                  <ToggleButton value="sentence">Sentences</ToggleButton>
-                  <ToggleButton value="passage">Passages</ToggleButton>
-                </ToggleButtonGroup>
+                {forcedKind ? null : (
+                  <ToggleButtonGroup
+                    exclusive
+                    size="small"
+                    value={kind}
+                    onChange={(_event, value) => handleKindChange(value)}
+                  >
+                    <ToggleButton value="sentence">Sentences</ToggleButton>
+                    <ToggleButton value="passage">Passages</ToggleButton>
+                  </ToggleButtonGroup>
+                )}
                 <ConceptFilterAutocomplete
                   label="Focus concept"
                   options={conceptOptions}
@@ -637,8 +632,8 @@ export default function MultiWordPanel({
                   density="compact"
                   localeText={{
                     noRowsLabel: focusConceptId
-                      ? `No ${kind}s match that focus${alsoConceptIds.length ? ' and also-includes' : ''}. Create one on Create multi word.`
-                      : `No saved ${kind}s yet. Switch to Create multi word to make one.`,
+                      ? `No ${kind}s match that focus${alsoConceptIds.length ? ' and also-includes' : ''}. Click Create ${kind} to make one.`
+                      : `No saved ${kind}s yet. Click Create ${kind} to make one.`,
                   }}
                 />
               </Box>
@@ -647,8 +642,8 @@ export default function MultiWordPanel({
             <>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 {editItem
-                  ? 'Update the text or focus concept, then save. Tagging and concept weight update on the right as you go.'
-                  : 'Type a sentence or passage. Tagging and concept weight update on the right as you go.'}
+                  ? `Update the text or focus concept, then save. Tagging updates on the right.`
+                  : `Type a ${kind}. Tagging and concept weight update on the right as you go.`}
               </Typography>
               <CreateMultiWordPanel
                 student={student}
@@ -657,7 +652,8 @@ export default function MultiWordPanel({
                 loadingCatalog={loadingCatalog}
                 setError={setError}
                 kind={kind}
-                onKindChange={handleKindChange}
+                onKindChange={forcedKind ? undefined : handleKindChange}
+                lockKind={Boolean(forcedKind)}
                 onPreviewChange={setCreatePreview}
                 onSaved={(payload) => void handleSaved(payload)}
                 embedded

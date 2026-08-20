@@ -47,7 +47,6 @@ import SaveIcon from '@mui/icons-material/Save'
 import LessonPlanPanel from './components/LessonPlanPanel'
 import DataPanel from './components/DataPanel'
 import ContentPanel from './components/ContentPanel'
-import ConceptsCatalogPanel from './components/ConceptsCatalogPanel'
 import GroupPanel from './components/GroupPanel'
 import ConfirmDeleteDialog from './components/ConfirmDeleteDialog'
 import { fetchStudentLists } from './lib/fetchStudentLessonPlan'
@@ -62,9 +61,8 @@ const DRAWER_WIDTH = 300
 const HEADER_BRAND_SIZE = 48
 const TAB_LESSON_PLAN = 0
 const TAB_SCOPE = 1
-const TAB_CONCEPTS = 2
-const TAB_CONTENT = 3
-const TAB_DATA = 4
+const TAB_CONTENT = 2
+const TAB_DATA = 3
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
 
@@ -1455,7 +1453,6 @@ function AppShell({ user, signOut }) {
             >
               <Tab label="Lesson Plan" />
               <Tab label="Scope & Sequence" />
-              <Tab label="Concepts" />
               <Tab label="Content" />
               <Tab label="Data" />
             </Tabs>
@@ -1491,14 +1488,6 @@ function AppShell({ user, signOut }) {
                 onLockedChange={setScopeLocked}
                 saveRef={scopeSaveRef}
               />
-            ) : mainTab === TAB_CONCEPTS ? (
-              <ConceptsCatalogPanel
-                concepts={concepts}
-                wordsByConceptId={wordsByConceptId}
-                loadingCatalog={loadingCatalog}
-                setError={setError}
-                onConceptUpdated={handleConceptUpdated}
-              />
             ) : mainTab === TAB_CONTENT ? (
               <ContentPanel
                 student={selectedStudent}
@@ -1509,6 +1498,7 @@ function AppShell({ user, signOut }) {
                 loadingLists={loadingLists}
                 onReloadLists={loadStudentLists}
                 setError={setError}
+                onConceptUpdated={handleConceptUpdated}
               />
             ) : mainTab === TAB_DATA ? (
               <DataPanel

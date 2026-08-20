@@ -33,6 +33,7 @@ export default function ConceptsCatalogPanel({
   const [label, setLabel] = useState('')
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
+  const [selectedId, setSelectedId] = useState(null)
 
   const rows = useMemo(
     () =>
@@ -66,16 +67,19 @@ export default function ConceptsCatalogPanel({
       },
       {
         field: 'actions',
-        headerName: 'Actions',
-        width: 90,
+        headerName: '',
+        width: 52,
+        minWidth: 52,
         sortable: false,
         filterable: false,
         disableColumnMenu: true,
+        resizable: false,
         renderCell: (params) => (
           <IconButton
             size="small"
             aria-label={`Edit ${params.row.concept || 'concept'}`}
-            onClick={() => {
+            onClick={(event) => {
+              event.stopPropagation()
               setEditing(params.row)
               setLabel(params.row.concept || '')
               setNotice('')
@@ -87,6 +91,17 @@ export default function ConceptsCatalogPanel({
       },
     ],
     [],
+  )
+
+  const selectedConcept = rows.find((row) => row.id === selectedId) ?? null
+  const selectedWords = useMemo(
+    () =>
+      (selectedId ? wordsByConceptId?.get(selectedId) ?? [] : []).map((row, index) => ({
+        id: row?.conceptWordId || row?.id || `${selectedId}-${index}`,
+        word: row?.word || '',
+        isNonsenseWord: Boolean(row?.isNonsenseWord),
+      })),
+    [selectedId, wordsByConceptId],
   )
 
   async function handleSave(event) {
@@ -122,40 +137,131 @@ export default function ConceptsCatalogPanel({
   }
 
   return (
-    <Box>
-      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
-        <Typography variant="body2" color="text.secondary">
-          Catalog concepts used across lists, lessons, sentences, and passages. You can rename a
-          concept label. IDs and relationship keys stay unchanged, and concepts cannot be deleted
-          from here.
-        </Typography>
-        {notice ? <Chip size="small" color="success" label={notice} /> : null}
-        {loadingCatalog ? <CircularProgress size={16} /> : null}
-      </Stack>
+    <>
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+        gridTemplateAreas: { xs: '"preview" "work"', md: '"work preview"' },
+        gap: 2,
+        alignItems: 'start',
+      }}
+    >
+      <Box sx={{ gridArea: 'work', minWidth: 0 }}>
+        <Paper sx={{ p: 2 }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            flexWrap="wrap"
+            useFlexGap
+            sx={{ mb: 1.5 }}
+          >
+            {notice ? <Chip size="small" color="success" label={notice} /> : null}
+            {loadingCatalog ? <CircularProgress size={16} /> : null}
+            <Typography variant="body2" color="text.secondary" sx={{ minWidth: 0, flex: 1 }}>
+              Click a concept to preview it. The row icon renames the label.
+            </Typography>
+          </Stack>
+          <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
+            <DataGridPro
+              rows={rows}
+              columns={columns}
+              getRowId={(row) => row.id}
+              onRowClick={(params) => setSelectedId(params.id)}
+              getRowClassName={(params) => (params.id === selectedId ? 'Mui-selected' : '')}
+              loading={loadingCatalog}
+              pagination
+              pageSizeOptions={[25, 50, 100]}
+              initialState={{
+                pagination: { paginationModel: { pageSize: 25 } },
+                sorting: { sortModel: [{ field: 'concept', sort: 'asc' }] },
+                pinnedColumns: { right: ['actions'] },
+              }}
+              slots={{ toolbar: GridToolbar }}
+              slotProps={{
+                toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 300 } },
+              }}
+              density="compact"
+              localeText={{ noRowsLabel: 'No concepts in the catalog yet.' }}
+            />
+          </Box>
+        </Paper>
+      </Box>
 
-      <Paper sx={{ p: 2 }}>
-        <Box sx={{ height: { xs: 480, md: 'calc(100vh - 240px)' }, minHeight: 360, width: '100%' }}>
-          <DataGridPro
-            rows={rows}
-            columns={columns}
-            getRowId={(row) => row.id}
-            loading={loadingCatalog}
-            disableRowSelectionOnClick
-            pagination
-            pageSizeOptions={[25, 50, 100]}
-            initialState={{
-              pagination: { paginationModel: { pageSize: 25 } },
-              sorting: { sortModel: [{ field: 'concept', sort: 'asc' }] },
-            }}
-            slots={{ toolbar: GridToolbar }}
-            slotProps={{
-              toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 300 } },
-            }}
-            density="compact"
-            localeText={{ noRowsLabel: 'No concepts in the catalog yet.' }}
-          />
-        </Box>
-      </Paper>
+      <Box
+        sx={{
+          gridArea: 'preview',
+          position: { md: 'sticky' },
+          top: { md: 88 },
+          maxHeight: { md: 'calc(100vh - 104px)' },
+          overflow: { md: 'auto' },
+        }}
+      >
+        {!selectedConcept ? (
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Typography color="text.secondary">
+              Select a concept to preview its details and tagged words.
+            </Typography>
+          </Paper>
+        ) : (
+          <Paper sx={{ p: 2 }}>
+            <Stack direction="row" spacing={1} alignItems="flex-start" justifyContent="space-between">
+              <Box>
+                <Typography variant="h6" sx={{ lineHeight: 1.3 }}>
+                  {selectedConcept.concept}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {[selectedConcept.category, selectedConcept.subcategory, selectedConcept.level]
+                    .filter(Boolean)
+                    .join(' · ') || 'No category metadata'}
+                </Typography>
+              </Box>
+              <IconButton
+                size="small"
+                aria-label={`Edit ${selectedConcept.concept}`}
+                onClick={() => {
+                  setEditing(selectedConcept)
+                  setLabel(selectedConcept.concept || '')
+                  setNotice('')
+                }}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Stack>
+            {selectedConcept.definition ? (
+              <Typography variant="body2" sx={{ mt: 1.5 }}>
+                {selectedConcept.definition}
+              </Typography>
+            ) : null}
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`${selectedWords.length} words`}
+              sx={{ mt: 1.5, mb: 1.5 }}
+            />
+            <Box sx={{ height: { xs: 280, md: 'calc(100vh - 320px)' }, minHeight: 220, width: '100%' }}>
+              <DataGridPro
+                rows={selectedWords}
+                columns={[
+                  { field: 'word', headerName: 'Word', flex: 1, minWidth: 120 },
+                  { field: 'isNonsenseWord', headerName: 'Nonsense', width: 100, type: 'boolean' },
+                ]}
+                getRowId={(row) => row.id}
+                disableRowSelectionOnClick
+                pagination
+                pageSizeOptions={[25, 50, 100]}
+                initialState={{
+                  pagination: { paginationModel: { pageSize: 25 } },
+                }}
+                density="compact"
+                localeText={{ noRowsLabel: 'No words tagged to this concept.' }}
+              />
+            </Box>
+          </Paper>
+        )}
+      </Box>
+      </Box>
 
       <Dialog
         open={Boolean(editing)}
@@ -218,6 +324,6 @@ export default function ConceptsCatalogPanel({
           </DialogActions>
         </Box>
       </Dialog>
-    </Box>
+    </>
   )
 }

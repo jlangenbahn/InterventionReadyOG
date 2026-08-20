@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  IconButton,
   Paper,
   Stack,
   TextField,
@@ -16,17 +17,21 @@ import {
 } from '@mui/material'
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd'
 import CasinoIcon from '@mui/icons-material/Casino'
+import AddIcon from '@mui/icons-material/Add'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
-import { DataGridPro, GridActionsCellItem, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import { generateClient } from 'aws-amplify/data'
-import { parseListData, studentDisplayName } from '../lib/fetchStudentLessonPlan'
+import { parseListData, resolveListWords, studentDisplayName } from '../lib/fetchStudentLessonPlan'
 import { deleteWordList, updateWordList } from '../lib/crudRecords'
 import ConfirmDeleteDialog from './ConfirmDeleteDialog'
 
 const client = generateClient()
 
 const RANDOM_WORD_COUNT = 10
+const MODE_VIEW = 0
+const MODE_CREATE = 1
 
 const WORD_COLUMNS = [
   { field: 'word', headerName: 'Word', flex: 1, minWidth: 120 },
@@ -114,6 +119,8 @@ export default function WordListsPanel({
   const [renamingList, setRenamingList] = useState(false)
   const [listToDelete, setListToDelete] = useState(null)
   const [deletingList, setDeletingList] = useState(false)
+  const [mode, setMode] = useState(MODE_VIEW)
+  const [selectedListId, setSelectedListId] = useState(null)
 
   const selectedConcept = useMemo(
     () => concepts.find((item) => item.id === selectedConceptId) ?? null,
@@ -168,31 +175,68 @@ export default function WordListsPanel({
     [studentLists, conceptById],
   )
 
+  const selectedList = useMemo(
+    () => studentLists.find((list) => list.id === selectedListId) ?? null,
+    [studentLists, selectedListId],
+  )
+
+  const wordLookup = useMemo(() => {
+    const lookup = new Map()
+    for (const rows of wordsByConceptId?.values() ?? []) {
+      for (const row of rows ?? []) {
+        if (row?.wordId) lookup.set(row.wordId, row.word)
+        if (row?.id) lookup.set(row.id, row.word)
+      }
+    }
+    return lookup
+  }, [wordsByConceptId])
+
+  const selectedListWords = useMemo(
+    () =>
+      (selectedList ? resolveListWords(selectedList, wordLookup) : []).map((word, index) => ({
+        id: `${selectedListId}-${index}-${word}`,
+        word,
+      })),
+    [selectedList, selectedListId, wordLookup],
+  )
+
   const listColumns = useMemo(
     () => [
       ...LIST_COLUMNS,
       {
         field: 'actions',
-        type: 'actions',
         headerName: '',
-        width: 80,
-        getActions: (params) => [
-          <GridActionsCellItem
-            key="rename"
-            icon={<EditIcon />}
-            label="Rename"
-            onClick={() => {
-              setListToRename(params.row)
-              setRenameValue(params.row.name || '')
-            }}
-          />,
-          <GridActionsCellItem
-            key="delete"
-            icon={<DeleteOutlineIcon />}
-            label="Delete"
-            onClick={() => setListToDelete(params.row)}
-          />,
-        ],
+        width: 88,
+        minWidth: 88,
+        sortable: false,
+        filterable: false,
+        disableColumnMenu: true,
+        resizable: false,
+        renderCell: (params) => (
+          <Stack direction="row" spacing={0}>
+            <IconButton
+              size="small"
+              aria-label={`Rename ${params.row.name || 'list'}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                setListToRename(params.row)
+                setRenameValue(params.row.name || '')
+              }}
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+            <IconButton
+              size="small"
+              aria-label={`Delete ${params.row.name || 'list'}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                setListToDelete(params.row)
+              }}
+            >
+              <DeleteOutlineIcon fontSize="small" />
+            </IconButton>
+          </Stack>
+        ),
       },
     ],
     [],
@@ -210,6 +254,8 @@ export default function WordListsPanel({
   useEffect(() => {
     setSelectedConceptId(null)
     setWordSelection(emptyWordSelection())
+    setMode(MODE_VIEW)
+    setSelectedListId(null)
   }, [student?.id])
 
   function openCreateList() {
@@ -240,6 +286,7 @@ export default function WordListsPanel({
     setDeletingList(true)
     try {
       await deleteWordList(listToDelete.id)
+      if (selectedListId === listToDelete.id) setSelectedListId(null)
       setError('')
       setListToDelete(null)
       await loadLists()
@@ -281,6 +328,8 @@ export default function WordListsPanel({
       setError('')
       setCreateListOpen(false)
       setWordSelection(emptyWordSelection())
+      setSelectedListId(data.id)
+      setMode(MODE_VIEW)
       await loadLists()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create list')
@@ -308,31 +357,101 @@ export default function WordListsPanel({
       >
         <Box sx={{ gridArea: 'work', minWidth: 0 }}>
           <Paper sx={{ p: 2 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Select a concept to view its words on the right and save a list for this student.
-            </Typography>
-            <Box sx={{ height: { xs: 360, md: 'calc(100vh - 280px)' }, minHeight: 280, width: '100%' }}>
-              <DataGridPro
-                rows={conceptRows}
-                columns={CONCEPT_COLUMNS}
-                getRowId={(row) => row.id}
-                onRowClick={(params) => setSelectedConceptId(params.id)}
-                getRowClassName={(params) => (params.id === selectedConceptId ? 'Mui-selected' : '')}
-                loading={loadingCatalog}
-                pagination
-                pageSizeOptions={[25, 50, 100]}
-                initialState={{
-                  pagination: { paginationModel: { pageSize: 25 } },
-                  sorting: { sortModel: [{ field: 'concept', sort: 'asc' }] },
-                }}
-                slots={{ toolbar: GridToolbar }}
-                slotProps={{
-                  toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 300 } },
-                }}
-                density="compact"
-                localeText={{ noRowsLabel: 'No concepts in the catalog yet.' }}
-              />
-            </Box>
+            {mode === MODE_CREATE ? (
+              <Stack
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                justifyContent="space-between"
+                sx={{ mb: 2, pb: 1.5, borderBottom: 1, borderColor: 'divider' }}
+              >
+                <Button
+                  startIcon={<ArrowBackIcon />}
+                  onClick={() => setMode(MODE_VIEW)}
+                >
+                  Back to Word lists
+                </Button>
+                <Typography variant="subtitle1">Create list</Typography>
+              </Stack>
+            ) : (
+              <Stack
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                flexWrap="wrap"
+                useFlexGap
+                sx={{ mb: 1.5 }}
+              >
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={() => setMode(MODE_CREATE)}
+                  sx={{ flexShrink: 0 }}
+                >
+                  Create list
+                </Button>
+                {loadingLists ? <CircularProgress size={16} /> : null}
+                <Typography variant="body2" color="text.secondary" sx={{ minWidth: 0, flex: 1 }}>
+                  Click a list to preview its words. Row icons rename or delete.
+                </Typography>
+              </Stack>
+            )}
+
+            {mode === MODE_CREATE ? (
+              <>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  Select a concept, choose words on the right, then save the list.
+                </Typography>
+                <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
+                  <DataGridPro
+                    rows={conceptRows}
+                    columns={CONCEPT_COLUMNS}
+                    getRowId={(row) => row.id}
+                    onRowClick={(params) => setSelectedConceptId(params.id)}
+                    getRowClassName={(params) => (params.id === selectedConceptId ? 'Mui-selected' : '')}
+                    loading={loadingCatalog}
+                    pagination
+                    pageSizeOptions={[25, 50, 100]}
+                    initialState={{
+                      pagination: { paginationModel: { pageSize: 25 } },
+                      sorting: { sortModel: [{ field: 'concept', sort: 'asc' }] },
+                    }}
+                    slots={{ toolbar: GridToolbar }}
+                    slotProps={{
+                      toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 300 } },
+                    }}
+                    density="compact"
+                    localeText={{ noRowsLabel: 'No concepts in the catalog yet.' }}
+                  />
+                </Box>
+              </>
+            ) : (
+              <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
+                <DataGridPro
+                  rows={myListRows}
+                  columns={listColumns}
+                  getRowId={(row) => row.id}
+                  onRowClick={(params) => setSelectedListId(params.id)}
+                  getRowClassName={(params) => (params.id === selectedListId ? 'Mui-selected' : '')}
+                  loading={loadingLists}
+                  pagination
+                  pageSizeOptions={[10, 25, 50]}
+                  initialState={{
+                    pagination: { paginationModel: { pageSize: 10 } },
+                    sorting: { sortModel: [{ field: 'name', sort: 'asc' }] },
+                    pinnedColumns: { right: ['actions'] },
+                  }}
+                  slots={{ toolbar: GridToolbar }}
+                  slotProps={{
+                    toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 300 } },
+                  }}
+                  density="compact"
+                  localeText={{
+                    noRowsLabel: 'No lists yet. Click Create list to make one.',
+                  }}
+                />
+              </Box>
+            )}
           </Paper>
         </Box>
 
@@ -345,11 +464,11 @@ export default function WordListsPanel({
             overflow: { md: 'auto' },
           }}
         >
-          <Stack spacing={1.5}>
-            {!selectedConcept ? (
+          {mode === MODE_CREATE ? (
+            !selectedConcept ? (
               <Paper variant="outlined" sx={{ p: 2 }}>
                 <Typography color="text.secondary">
-                  Select a concept on the left to see tagged words and create a list.
+                  Select a concept on the left to choose words and save a list.
                 </Typography>
               </Paper>
             ) : (
@@ -399,16 +518,15 @@ export default function WordListsPanel({
                   <Button
                     size="small"
                     variant="contained"
-                    color="success"
                     startIcon={<PlaylistAddIcon />}
                     disabled={selectedWordRows.length === 0 || creatingList}
                     onClick={openCreateList}
                     sx={{ ml: 'auto' }}
                   >
-                    Create list
+                    Save list
                   </Button>
                 </Stack>
-                <Box sx={{ height: 320, width: '100%' }}>
+                <Box sx={{ height: { xs: 320, md: 'calc(100vh - 280px)' }, minHeight: 240, width: '100%' }}>
                   <DataGridPro
                     key={selectedConceptId}
                     rows={selectedWords}
@@ -431,21 +549,62 @@ export default function WordListsPanel({
                   />
                 </Box>
               </Paper>
-            )}
-
-            <Paper sx={{ p: 2 }}>
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap">
-                <Typography variant="subtitle1">My lists</Typography>
-                <Chip size="small" variant="outlined" label={`${myListRows.length} lists`} />
-                {loadingLists ? <CircularProgress size={16} /> : null}
-              </Stack>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Rename or delete a list with the icons on each row.
+            )
+          ) : !selectedList ? (
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <Typography color="text.secondary">
+                Select a list to preview its words.
               </Typography>
-              <Box sx={{ height: 240, width: '100%' }}>
+            </Paper>
+          ) : (
+            <Paper sx={{ p: 2 }}>
+              <Stack direction="row" spacing={1} alignItems="flex-start" justifyContent="space-between">
+                <Box>
+                  <Typography variant="h6" sx={{ lineHeight: 1.3 }}>
+                    {selectedList.name || 'Untitled list'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {conceptById.get(selectedList.conceptID)?.concept || 'Unknown concept'}
+                  </Typography>
+                </Box>
+                <Stack direction="row" spacing={0.5}>
+                  <IconButton
+                    size="small"
+                    aria-label="Rename list"
+                    onClick={() => {
+                      setListToRename({
+                        id: selectedList.id,
+                        name: selectedList.name || '',
+                      })
+                      setRenameValue(selectedList.name || '')
+                    }}
+                  >
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    aria-label="Delete list"
+                    onClick={() =>
+                      setListToDelete({
+                        id: selectedList.id,
+                        name: selectedList.name || 'this list',
+                      })
+                    }
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
+              </Stack>
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`${selectedListWords.length} words`}
+                sx={{ mt: 1, mb: 1.5 }}
+              />
+              <Box sx={{ height: { xs: 320, md: 'calc(100vh - 280px)' }, minHeight: 240, width: '100%' }}>
                 <DataGridPro
-                  rows={myListRows}
-                  columns={listColumns}
+                  rows={selectedListWords}
+                  columns={[{ field: 'word', headerName: 'Word', flex: 1, minWidth: 120 }]}
                   getRowId={(row) => row.id}
                   disableRowSelectionOnClick
                   pagination
@@ -453,16 +612,12 @@ export default function WordListsPanel({
                   initialState={{
                     pagination: { paginationModel: { pageSize: 25 } },
                   }}
-                  slots={{ toolbar: GridToolbar }}
-                  slotProps={{ toolbar: { showQuickFilter: true } }}
                   density="compact"
-                  localeText={{
-                    noRowsLabel: 'No lists yet. Select words and click Create list.',
-                  }}
+                  localeText={{ noRowsLabel: 'This list has no words.' }}
                 />
               </Box>
             </Paper>
-          </Stack>
+          )}
         </Box>
       </Box>
 

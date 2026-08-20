@@ -3,6 +3,16 @@ import { Box, Chip, IconButton, Stack, Typography } from '@mui/material'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 
+function limitIds(ids, maxCount) {
+  const unique = []
+  for (const id of ids ?? []) {
+    if (!id || unique.includes(id)) continue
+    unique.push(id)
+    if (unique.length >= maxCount) break
+  }
+  return unique
+}
+
 export default function StepperSelectionGrid({
   items = [],
   columns = [],
@@ -21,6 +31,7 @@ export default function StepperSelectionGrid({
 }) {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const excluded = useMemo(() => new Set(excludeIds), [excludeIds])
+  const atMax = selectedIds.length >= maxCount
 
   const rows = useMemo(
     () =>
@@ -44,18 +55,20 @@ export default function StepperSelectionGrid({
     return map
   }, [items])
 
-  function handleRowClick(params) {
-    const id = params.id
-    if (selectedSet.has(id)) {
-      onChange(selectedIds.filter((value) => value !== id))
-      return
-    }
-    if (maxCount <= 1) {
-      onChange([id])
-      return
-    }
-    if (selectedIds.length >= maxCount) return
-    onChange([...selectedIds, id])
+  const selectionModel = useMemo(
+    () => ({
+      type: 'include',
+      ids: selectedSet,
+    }),
+    [selectedSet],
+  )
+
+  function handleSelectionModelChange(model) {
+    const incoming = [...(model?.ids ?? [])]
+    const incomingSet = new Set(incoming)
+    const kept = selectedIds.filter((id) => incomingSet.has(id))
+    const added = incoming.filter((id) => !selectedSet.has(id))
+    onChange(limitIds([...kept, ...added], maxCount))
   }
 
   function removeId(id) {
@@ -123,13 +136,17 @@ export default function StepperSelectionGrid({
           rows={rows}
           columns={gridColumns}
           getRowId={(row) => row.id}
-          onRowClick={handleRowClick}
+          rowSelectionModel={selectionModel}
+          onRowSelectionModelChange={handleSelectionModelChange}
+          isRowSelectable={(params) => selectedSet.has(params.id) || !atMax}
+          disableMultipleRowSelection={maxCount <= 1}
           getRowClassName={(params) => {
             const item = itemsById.get(params.id)
             const slotClass = item && getItemClassName ? getItemClassName(item) : ''
             return [
               selectedSet.has(params.id) ? 'Mui-selected stepper-selected-row' : '',
               slotClass,
+              atMax && !selectedSet.has(params.id) ? 'stepper-row-disabled' : '',
             ]
               .filter(Boolean)
               .join(' ')
@@ -152,6 +169,10 @@ export default function StepperSelectionGrid({
           sx={{
             '& .stepper-selected-row': {
               bgcolor: 'action.selected',
+            },
+            '& .stepper-row-disabled': {
+              opacity: 0.45,
+              cursor: 'not-allowed',
             },
             ...gridSx,
           }}

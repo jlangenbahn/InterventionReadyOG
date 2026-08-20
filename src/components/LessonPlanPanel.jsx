@@ -15,6 +15,8 @@ import {
   Stack,
   Tab,
   Tabs,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import PrintIcon from '@mui/icons-material/Print'
@@ -746,7 +748,7 @@ export default function LessonPlanPanel({
                 void applyGlobalLesson(params.id)
               }}
             >
-              {applyingTemplateId === params.id ? 'Applying…' : 'Apply'}
+              {applyingTemplateId === params.id ? 'Importing…' : 'Import'}
             </Button>
             {params.row.mine ? (
               <IconButton
@@ -949,7 +951,7 @@ export default function LessonPlanPanel({
   }
 
   function handleNewConceptChange(ids) {
-    const nextId = ids[0] ?? null
+    const nextId = (ids ?? []).slice(0, 1)[0] ?? null
     const remainingReviews = idsFromSlots(listSlots, REVIEW_SLOT_KEYS).filter((id) => id !== nextId)
     setListSlots({
       newConcept: nextId,
@@ -960,16 +962,16 @@ export default function LessonPlanPanel({
   function handleReviewChange(ids) {
     setListSlots((prev) => ({
       ...prev,
-      ...slotsFromIds(REVIEW_SLOT_KEYS, ids),
+      ...slotsFromIds(REVIEW_SLOT_KEYS, (ids ?? []).slice(0, REVIEW_SLOT_KEYS.length)),
     }))
   }
 
   function handleSentenceChange(ids) {
-    setSentenceSlots(slotsFromIds(SENTENCE_SLOT_KEYS, ids))
+    setSentenceSlots(slotsFromIds(SENTENCE_SLOT_KEYS, (ids ?? []).slice(0, SENTENCE_SLOT_KEYS.length)))
   }
 
   function handlePassageChange(ids) {
-    setPassageSlots(slotsFromIds(PASSAGE_SLOT_KEYS, ids))
+    setPassageSlots(slotsFromIds(PASSAGE_SLOT_KEYS, (ids ?? []).slice(0, PASSAGE_SLOT_KEYS.length)))
   }
 
   async function handleListCreated(created) {
@@ -1245,7 +1247,7 @@ export default function LessonPlanPanel({
     setShowGlobalLessons(false)
     setSelectedTemplateId(null)
     setLessonMode(LESSON_MODE_VIEW)
-    setNotice('Global lesson applied as a new lesson plan.')
+    setNotice('Global lesson imported as a new lesson plan.')
   }
 
   async function applyGlobalLesson(templateId) {
@@ -1261,7 +1263,7 @@ export default function LessonPlanPanel({
       setError('')
       await handleTemplateApplied(saved)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to apply global lesson')
+      setError(err instanceof Error ? err.message : 'Failed to import global lesson')
     } finally {
       setApplyingTemplateId(null)
     }
@@ -1493,25 +1495,47 @@ export default function LessonPlanPanel({
                     >
                       Create lesson
                     </Button>
-                    <Button
-                      variant={showGlobalLessons ? 'contained' : 'outlined'}
-                      startIcon={<PublicIcon />}
-                      onClick={() => setShowGlobalLessons((open) => !open)}
+                    <ToggleButtonGroup
+                      exclusive
+                      size="small"
+                      value={showGlobalLessons ? 'global' : 'mine'}
+                      onChange={(_event, value) => {
+                        if (!value) return
+                        setShowGlobalLessons(value === 'global')
+                      }}
                       sx={{ flexShrink: 0 }}
                     >
-                      Global Lessons
-                    </Button>
+                      <ToggleButton value="mine">My lessons</ToggleButton>
+                      <ToggleButton value="global">Global lessons</ToggleButton>
+                    </ToggleButtonGroup>
                   </>
                 ) : null}
                 <Typography variant="body2" color="text.secondary" sx={{ minWidth: 0, flex: 1 }}>
                   {lessonMode === LESSON_MODE_GRADE
                     ? 'Click a plan to score it on the right.'
                     : showGlobalLessons
-                      ? 'Click a global lesson to preview. Apply copies it to this student.'
-                      : 'Click a plan to preview. Row icons edit, share, publish, or delete.'}
+                      ? 'Viewing global lessons. Import copies one onto this student.'
+                      : 'Viewing this student’s lessons. Click a plan to preview it.'}
                 </Typography>
               </Stack>
-              <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
+              <Box
+                sx={{
+                  height: { xs: 360, md: 'calc(100vh - 320px)' },
+                  minHeight: 280,
+                  width: '100%',
+                  borderRadius: 1,
+                  border: 1,
+                  borderColor:
+                    showGlobalLessons && lessonMode === LESSON_MODE_VIEW
+                      ? 'secondary.dark'
+                      : 'divider',
+                  bgcolor:
+                    showGlobalLessons && lessonMode === LESSON_MODE_VIEW
+                      ? 'secondary.light'
+                      : 'background.paper',
+                  overflow: 'hidden',
+                }}
+              >
                 <DataGridPro
                   key={showGlobalLessons && lessonMode === LESSON_MODE_VIEW ? 'global' : 'student'}
                   rows={
@@ -1570,6 +1594,11 @@ export default function LessonPlanPanel({
                     },
                   }}
                   density="compact"
+                  sx={{
+                    border: 0,
+                    bgcolor: 'transparent',
+                    '& .MuiDataGrid-overlayWrapper': { bgcolor: 'transparent' },
+                  }}
                   localeText={{
                     noRowsLabel:
                       lessonMode === LESSON_MODE_GRADE
@@ -1630,7 +1659,7 @@ export default function LessonPlanPanel({
                   disabled={applyingTemplateId === selectedTemplateId}
                   onClick={() => void applyGlobalLesson(selectedTemplateId)}
                 >
-                  {applyingTemplateId === selectedTemplateId ? 'Applying…' : 'Apply'}
+                  {applyingTemplateId === selectedTemplateId ? 'Importing…' : 'Import'}
                 </Button>
               ) : null}
               {loadedLesson && lessonMode === LESSON_MODE_VIEW && !showGlobalLessons ? (
