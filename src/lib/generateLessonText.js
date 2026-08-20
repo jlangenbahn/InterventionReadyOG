@@ -1,8 +1,5 @@
-import { generateClient } from 'aws-amplify/data'
+import { client } from './amplifyClient'
 import { sanitizeGeneratedLessonText } from './sanitizeLessonText'
-
-/** Module-scope Amplify Data client — never instantiate inside a component. */
-const client = generateClient({ authMode: 'userPool' })
 
 function uniqueWords(words) {
   const seen = new Set()

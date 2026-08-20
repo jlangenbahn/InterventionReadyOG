@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Authenticator, ThemeProvider as AmplifyThemeProvider } from '@aws-amplify/ui-react'
-import { generateClient } from 'aws-amplify/data'
 import {
   Alert,
   AppBar,
@@ -54,13 +53,13 @@ import ContentPanel from './components/ContentPanel'
 import GroupPanel from './components/GroupPanel'
 import ConfirmDeleteDialog from './components/ConfirmDeleteDialog'
 import { fetchStudentLists } from './lib/fetchStudentLessonPlan'
+import { client } from './lib/amplifyClient'
 import { deleteInstructorGroup, fetchInstructorGroups, saveInstructorGroup } from './lib/groups'
 import { deleteStudentCascade, updateStudent } from './lib/crudRecords'
 import { downloadCsvTable, downloadXlsxTable, sanitizeFileStem } from './lib/exportTable'
 import { amplifyTheme, masteryRowSx, theme } from './theme'
 import readyOgLogo from './assets/readyog-logo.png'
 
-const client = generateClient()
 const DRAWER_WIDTH = 300
 const HEADER_BRAND_SIZE = 48
 const TAB_LESSON_PLAN = 0

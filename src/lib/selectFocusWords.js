@@ -1,4 +1,3 @@
-import { generateClient } from 'aws-amplify/data'
 import {
   SCORE_CORRECT,
   SCORE_INCORRECT,
@@ -10,9 +9,8 @@ import {
   resolveListWords,
   studentDisplayName,
 } from './fetchStudentLessonPlan'
+import { client } from './amplifyClient'
 import { FOCUS_WORD_COUNT, wordRowId } from './wordSelection'
-
-const client = generateClient({ authMode: 'userPool' })
 
 function messageFromErrors(errors) {
   return (errors ?? [])

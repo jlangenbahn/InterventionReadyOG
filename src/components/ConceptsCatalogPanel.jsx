@@ -18,10 +18,8 @@ import {
 } from '@mui/material'
 import EditIcon from '@mui/icons-material/Edit'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
-import { generateClient } from 'aws-amplify/data'
+import { client } from '../lib/amplifyClient'
 import HelpTip from './HelpTip'
-
-const client = generateClient()
 
 export default function ConceptsCatalogPanel({
   concepts = [],

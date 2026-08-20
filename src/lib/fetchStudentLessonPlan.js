@@ -1,4 +1,4 @@
-import { generateClient } from 'aws-amplify/data'
+import { client } from './amplifyClient'
 import {
   canonicalToPlan,
   getLessonPlan,
@@ -6,9 +6,6 @@ import {
   planFieldSelection,
   serializeScores,
 } from './lessonPlanDocument'
-
-/** Module-scope Amplify Data client — never instantiate inside a component. */
-const client = generateClient()
 
 export { client }
 export { getLessonPlan, getLessonScores, parseLessonData } from './lessonPlanDocument'

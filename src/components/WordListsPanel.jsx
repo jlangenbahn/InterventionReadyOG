@@ -21,15 +21,13 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
-import { generateClient } from 'aws-amplify/data'
 import { parseListData, resolveListWords, studentDisplayName } from '../lib/fetchStudentLessonPlan'
+import { client } from '../lib/amplifyClient'
 import { deleteWordList, updateWordList } from '../lib/crudRecords'
 import { emptyWordSelection, wordRowId } from '../lib/wordSelection'
 import ConfirmDeleteDialog from './ConfirmDeleteDialog'
 import HelpTip from './HelpTip'
 import WordSelectionActions from './WordSelectionActions'
-
-const client = generateClient()
 
 const MODE_VIEW = 0
 const MODE_CREATE = 1

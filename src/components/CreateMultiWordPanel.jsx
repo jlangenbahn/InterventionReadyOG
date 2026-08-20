@@ -20,7 +20,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import SaveIcon from '@mui/icons-material/Save'
 import AskAndreaButton from './AskAndreaButton'
 import HelpTip from './HelpTip'
-import { generateClient } from 'aws-amplify/data'
+import { client } from '../lib/amplifyClient'
 import {
   buildWordCatalogIndex,
   serializeTagResult,
@@ -30,8 +30,6 @@ import { updatePassage, updateSentence } from '../lib/crudRecords'
 import { resolveListWords } from '../lib/fetchStudentLessonPlan'
 import { generateLessonText } from '../lib/generateLessonText'
 import { sanitizeGeneratedLessonText } from '../lib/sanitizeLessonText'
-
-const client = generateClient()
 
 function buildWordLookup(wordsByConceptId) {
   const lookup = new Map()
