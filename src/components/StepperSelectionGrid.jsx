@@ -63,12 +63,23 @@ export default function StepperSelectionGrid({
     [selectedSet],
   )
 
-  function handleSelectionModelChange(model) {
-    const incoming = [...(model?.ids ?? [])]
-    const incomingSet = new Set(incoming)
-    const kept = selectedIds.filter((id) => incomingSet.has(id))
-    const added = incoming.filter((id) => !selectedSet.has(id))
-    onChange(limitIds([...kept, ...added], maxCount))
+  function toggleId(id) {
+    if (!id) return
+    if (selectedSet.has(id)) {
+      onChange(selectedIds.filter((value) => value !== id))
+      return
+    }
+    if (maxCount <= 1) {
+      onChange([id])
+      return
+    }
+    if (atMax) return
+    onChange(limitIds([...selectedIds, id], maxCount))
+  }
+
+  function handleRowClick(params, event) {
+    if (event?.target?.closest?.('button')) return
+    toggleId(params.id)
   }
 
   function removeId(id) {
@@ -126,8 +137,8 @@ export default function StepperSelectionGrid({
         ) : (
           <Typography variant="body2" color="text.secondary">
             {maxCount <= 1
-              ? 'Click a row to select it.'
-              : `Click up to ${maxCount} rows to select them.`}
+              ? 'Click a row to select it. Click again to remove it.'
+              : `Click up to ${maxCount} rows to select them. Click a selected row to remove it.`}
           </Typography>
         )}
       </Stack>
@@ -137,9 +148,9 @@ export default function StepperSelectionGrid({
           columns={gridColumns}
           getRowId={(row) => row.id}
           rowSelectionModel={selectionModel}
-          onRowSelectionModelChange={handleSelectionModelChange}
+          disableRowSelectionOnClick
+          onRowClick={handleRowClick}
           isRowSelectable={(params) => selectedSet.has(params.id) || !atMax}
-          disableMultipleRowSelection={maxCount <= 1}
           getRowClassName={(params) => {
             const item = itemsById.get(params.id)
             const slotClass = item && getItemClassName ? getItemClassName(item) : ''
@@ -167,6 +178,9 @@ export default function StepperSelectionGrid({
             noRowsLabel: noRowsLabel || 'No rows',
           }}
           sx={{
+            '& .MuiDataGrid-row': {
+              cursor: 'pointer',
+            },
             '& .stepper-selected-row': {
               bgcolor: 'action.selected',
             },
