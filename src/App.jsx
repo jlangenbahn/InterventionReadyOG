@@ -973,6 +973,7 @@ function AppShell({ user, signOut }) {
   const [studentsNavOpen, setStudentsNavOpen] = useState(true)
   const [groupsNavOpen, setGroupsNavOpen] = useState(true)
   const [scheduleCreateNonce, setScheduleCreateNonce] = useState(0)
+  const [openLessonId, setOpenLessonId] = useState(null)
   const scopeSaveRef = useRef(null)
   const lessonLeaveGuardRef = useRef(null)
 
@@ -1125,6 +1126,7 @@ function AppShell({ user, signOut }) {
       setSelectedGroupId(null)
       setCreatingGroup(false)
       setViewingSchedule(false)
+      setOpenLessonId(null)
       setScopeLocked(true)
     })
   }
@@ -1574,12 +1576,14 @@ function AppShell({ user, signOut }) {
         ) : viewingSchedule ? (
           <SchedulePanel
             students={students}
+            groups={groups}
             setError={setError}
             createNonce={scheduleCreateNonce}
-            onOpenStudent={(studentId) => {
+            onOpenStudent={(studentId, lessonId) => {
               requestNavigation(() => {
                 setViewingSchedule(false)
                 setSelectedStudentId(studentId)
+                setOpenLessonId(lessonId || null)
                 setSelectedGroupId(null)
                 setCreatingGroup(false)
                 setMainTab(TAB_LESSON_PLAN)
@@ -1673,6 +1677,7 @@ function AppShell({ user, signOut }) {
                 students={students}
                 groups={groups}
                 leaveGuardRef={lessonLeaveGuardRef}
+                openLessonId={openLessonId}
               />
             ) : mainTab === TAB_SCOPE ? (
               <ScopeAndSequencePanel

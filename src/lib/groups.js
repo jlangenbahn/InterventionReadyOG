@@ -1,4 +1,5 @@
 import { client } from './fetchStudentLessonPlan'
+import { deleteScheduledLessonsForGroup } from './schedule'
 
 async function listAll(model, options = {}) {
   if (!model?.list) return []
@@ -99,4 +100,5 @@ export async function deleteInstructorGroup(groupId) {
 
   const result = await client.models.Group.delete({ id: groupId })
   if (result.errors?.length) throw new Error(result.errors.map((item) => item.message).join(', '))
+  await deleteScheduledLessonsForGroup(groupId)
 }

@@ -1,7 +1,27 @@
 import { client } from './amplifyClient'
+import { copyLessonToStudents, fetchStudentLessons } from './fetchStudentLessonPlan'
 import { BRAND } from '../theme'
 
-const SELECTION = ['id', 'title', 'startAt', 'endAt', 'notes', 'studentID', 'lessonID', 'createdAt', 'updatedAt']
+const SELECTION = [
+  'id',
+  'title',
+  'startAt',
+  'endAt',
+  'notes',
+  'studentID',
+  'groupID',
+  'lessonID',
+  'attendees',
+  'createdAt',
+  'updatedAt',
+]
+
+const GROUP_COLOR = {
+  bg: BRAND.gold,
+  fg: BRAND.navyDark,
+  accent: BRAND.navy,
+  hover: BRAND.goldSelectedHover,
+}
 
 const STUDENT_COLORS = [
   { bg: BRAND.navy, fg: '#ffffff', accent: BRAND.gold, hover: BRAND.navyDark },
@@ -165,6 +185,67 @@ export function studentScheduleColor(studentId) {
   return STUDENT_COLORS[hash % STUDENT_COLORS.length]
 }
 
+export function eventScheduleColor(item) {
+  if (item?.groupID) return GROUP_COLOR
+  return studentScheduleColor(item?.studentID)
+}
+
+export function parseAttendees(value) {
+  let current = value
+  for (let i = 0; i < 3; i += 1) {
+    if (Array.isArray(current)) {
+      return current
+        .map((entry) => ({
+          studentId: entry?.studentId || entry?.studentID || null,
+          lessonId: entry?.lessonId || entry?.lessonID || null,
+        }))
+        .filter((entry) => entry.studentId)
+    }
+    if (typeof current !== 'string') break
+    const trimmed = current.trim()
+    if (!trimmed) return []
+    try {
+      current = JSON.parse(trimmed)
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+export function serializeAttendees(attendees) {
+  return JSON.stringify(
+    (attendees ?? [])
+      .filter((entry) => entry?.studentId)
+      .map((entry) => ({
+        studentId: entry.studentId,
+        lessonId: entry.lessonId || null,
+      })),
+  )
+}
+
+export function normalizeScheduledLesson(item) {
+  if (!item?.id) return item
+  let attendees = parseAttendees(item.attendees)
+  if (!attendees.length && item.studentID) {
+    attendees = [{ studentId: item.studentID, lessonId: item.lessonID || null }]
+  }
+  return { ...item, attendees }
+}
+
+export function isGroupEvent(item) {
+  return Boolean(item?.groupID)
+}
+
+function lessonMatchKey(lesson) {
+  const name = String(lesson?.name ?? '').trim().toLowerCase()
+  if (name) return `name:${name}`
+  const number = lesson?.lessonNumber
+  const concept = lesson?.concepts
+  if (number != null && concept) return `slot:${number}:${concept}`
+  return ''
+}
+
 export function defaultLessonTimes(slotStart) {
   const start = parseScheduleDate(slotStart) ?? new Date()
   const snapped = new Date(start)
@@ -230,10 +311,47 @@ export function layoutDayEvents(items) {
 
 export async function fetchScheduledLessons() {
   if (!client.models.ScheduledLesson) return []
-  const items = await listAll(client.models.ScheduledLesson, { selectionSet: SELECTION })
+  const items = await listAll(client.models.ScheduledLesson, { selectionSet: SELECTION }).catch(async () =>
+    listAll(client.models.ScheduledLesson, {
+      selectionSet: ['id', 'title', 'startAt', 'endAt', 'notes', 'studentID', 'lessonID', 'createdAt', 'updatedAt'],
+    }),
+  )
   return (items ?? [])
     .filter((item) => item?.id)
+    .map(normalizeScheduledLesson)
     .sort((a, b) => String(a.startAt ?? '').localeCompare(String(b.startAt ?? '')))
+}
+
+export async function ensureGroupLessonAttendees(sourceLesson, studentIds) {
+  const ids = [...new Set((studentIds ?? []).filter(Boolean))]
+  if (!sourceLesson?.id) {
+    return ids.map((studentId) => ({ studentId, lessonId: null }))
+  }
+
+  const sourceKey = lessonMatchKey(sourceLesson)
+  const attendees = []
+  const toCopy = []
+  for (const studentId of ids) {
+    if (studentId === sourceLesson.studentID) {
+      attendees.push({ studentId, lessonId: sourceLesson.id })
+      continue
+    }
+    const existing = await fetchStudentLessons(studentId)
+    const match =
+      sourceKey
+        ? existing.find((lesson) => lessonMatchKey(lesson) === sourceKey)
+        : null
+    if (match?.id) attendees.push({ studentId, lessonId: match.id })
+    else toCopy.push(studentId)
+  }
+  if (toCopy.length) {
+    const copied = await copyLessonToStudents(sourceLesson, toCopy)
+    const byStudent = new Map((copied ?? []).map((lesson) => [lesson.studentID, lesson.id]))
+    for (const studentId of toCopy) {
+      attendees.push({ studentId, lessonId: byStudent.get(studentId) || null })
+    }
+  }
+  return attendees
 }
 
 export async function saveScheduledLesson({
@@ -243,12 +361,16 @@ export async function saveScheduledLesson({
   endAt,
   notes,
   studentID,
+  groupID,
   lessonID,
+  attendees,
 }) {
   if (!client.models.ScheduledLesson) {
     throw new Error('Schedule is still deploying. Wait for Amplify to finish, then try again.')
   }
-  if (!studentID) throw new Error('Choose a student for this lesson.')
+  const isGroup = Boolean(groupID)
+  if (!isGroup && !studentID) throw new Error('Choose a student or a group for this lesson.')
+  if (isGroup && !groupID) throw new Error('Choose a group for this lesson.')
   const startIso = typeof startAt === 'string' ? startAt : fromDateTimeLocal(startAt)
   const endIso = typeof endAt === 'string' ? endAt : fromDateTimeLocal(endAt)
   const start = parseScheduleDate(startIso)
@@ -256,28 +378,103 @@ export async function saveScheduledLesson({
   if (!start || !end) throw new Error('Start and end times are required.')
   if (end <= start) throw new Error('End time must be after the start time.')
 
+  const normalizedAttendees = (attendees ?? [])
+    .filter((entry) => entry?.studentId)
+    .map((entry) => ({ studentId: entry.studentId, lessonId: entry.lessonId || null }))
+  const primaryStudent = isGroup ? null : studentID
+  const primaryLesson = isGroup
+    ? normalizedAttendees.find((entry) => entry.lessonId)?.lessonId || null
+    : lessonID || normalizedAttendees[0]?.lessonId || null
+
   const payload = {
     title: String(title ?? '').trim() || null,
     startAt: start.toISOString(),
     endAt: end.toISOString(),
     notes: String(notes ?? '').trim() || null,
-    studentID,
+    studentID: primaryStudent || null,
+    groupID: isGroup ? groupID : null,
+    lessonID: primaryLesson || null,
+    attendees: serializeAttendees(
+      isGroup
+        ? normalizedAttendees
+        : [{ studentId: studentID, lessonId: primaryLesson }],
+    ),
   }
-  if (id) payload.lessonID = lessonID || null
-  else if (lessonID) payload.lessonID = lessonID
 
-  const result = id
-    ? await client.models.ScheduledLesson.update({ id, ...payload }, { selectionSet: SELECTION })
-    : await client.models.ScheduledLesson.create(payload, { selectionSet: SELECTION })
+  const write = (body, selectionSet) =>
+    id
+      ? client.models.ScheduledLesson.update({ id, ...body }, { selectionSet })
+      : client.models.ScheduledLesson.create(body, { selectionSet })
+
+  let result = await write(payload, SELECTION)
+  if (result.errors?.length) {
+    const { attendees: _attendees, groupID: _groupID, ...legacy } = payload
+    result = await write(legacy, [
+      'id',
+      'title',
+      'startAt',
+      'endAt',
+      'notes',
+      'studentID',
+      'lessonID',
+      'createdAt',
+      'updatedAt',
+    ])
+    if (isGroup && result.errors?.length) {
+      throw new Error(
+        'Group scheduling needs a backend update. Push this change so Amplify can add group fields, then try again.',
+      )
+    }
+  }
   throwIfErrors(result)
   if (!result?.data?.id) throw new Error('Failed to save calendar item')
-  return result.data
+  return normalizeScheduledLesson(result.data)
 }
 
 export async function deleteScheduledLesson(id) {
   if (!id || !client.models.ScheduledLesson) return
   const result = await client.models.ScheduledLesson.delete({ id })
   throwIfErrors(result)
+}
+
+export async function removeStudentFromSchedule(studentId) {
+  if (!studentId || !client.models.ScheduledLesson) return
+  const items = await fetchScheduledLessons()
+  const toDelete = []
+  const toUpdate = []
+  for (const item of items) {
+    if (item.studentID === studentId && !item.groupID) {
+      toDelete.push(item.id)
+      continue
+    }
+    const nextAttendees = (item.attendees ?? []).filter((entry) => entry.studentId !== studentId)
+    if (nextAttendees.length === (item.attendees ?? []).length) continue
+    if (!nextAttendees.length) toDelete.push(item.id)
+    else toUpdate.push({ ...item, attendees: nextAttendees })
+  }
+  await Promise.all(toDelete.map((id) => deleteScheduledLesson(id)))
+  await Promise.all(
+    toUpdate.map((item) =>
+      saveScheduledLesson({
+        id: item.id,
+        title: item.title,
+        startAt: item.startAt,
+        endAt: item.endAt,
+        notes: item.notes,
+        studentID: item.studentID,
+        groupID: item.groupID,
+        lessonID: item.lessonID,
+        attendees: item.attendees,
+      }),
+    ),
+  )
+}
+
+export async function deleteScheduledLessonsForGroup(groupId) {
+  if (!groupId || !client.models.ScheduledLesson) return
+  const items = await fetchScheduledLessons()
+  const ids = items.filter((item) => item.groupID === groupId).map((item) => item.id)
+  await Promise.all(ids.map((id) => deleteScheduledLesson(id)))
 }
 
 export function scheduleModelReady() {

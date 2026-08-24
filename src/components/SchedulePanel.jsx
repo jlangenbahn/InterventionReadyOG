@@ -23,17 +23,28 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 import CalendarViewWeekIcon from '@mui/icons-material/CalendarViewWeek'
+import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
+import EditIcon from '@mui/icons-material/Edit'
+import GroupsIcon from '@mui/icons-material/Groups'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
 import PersonIcon from '@mui/icons-material/Person'
 import SaveIcon from '@mui/icons-material/Save'
 import TodayIcon from '@mui/icons-material/Today'
 import ConfirmDeleteDialog from './ConfirmDeleteDialog'
-import { fetchStudentLessons, formatLessonDisplayName, studentDisplayName } from '../lib/fetchStudentLessonPlan'
+import {
+  fetchLessonsForStudents,
+  fetchStudentLessons,
+  formatLessonDisplayName,
+  studentDisplayName,
+} from '../lib/fetchStudentLessonPlan'
 import {
   addDays,
   addMinutes,
   defaultLessonTimes,
   deleteScheduledLesson,
+  ensureGroupLessonAttendees,
+  eventScheduleColor,
   eventsForDay,
   fetchScheduledLessons,
   formatClock,
@@ -42,6 +53,7 @@ import {
   formatTimeRange,
   formatWeekRange,
   fromDateTimeLocal,
+  isGroupEvent,
   isSameDay,
   layoutDayEvents,
   minutesSinceMidnight,
@@ -52,12 +64,11 @@ import {
   startOfMonth,
   startOfMonthGrid,
   startOfWorkWeek,
-  studentScheduleColor,
   toDateTimeLocal,
 } from '../lib/schedule'
 import { BRAND } from '../theme'
 
-const DETAIL_WIDTH = 360
+const DETAIL_WIDTH = 400
 const SLOT_MINUTES = 30
 const SLOT_PX = 44
 const GUTTER_PX = 64
@@ -66,7 +77,7 @@ const DEFAULT_END_HOUR = 18
 const WORK_DAYS = 5
 const MONTH_MORE_LIMIT = 3
 
-function emptyDraft(students, slotStart) {
+function emptyDraft(students, groups, slotStart) {
   const { startAt, endAt } = defaultLessonTimes(slotStart ?? new Date())
   if (!slotStart) {
     startAt.setHours(9, 0, 0, 0)
@@ -74,7 +85,9 @@ function emptyDraft(students, slotStart) {
   }
   return {
     id: null,
+    audience: 'student',
     studentID: students[0]?.id ?? '',
+    groupID: groups[0]?.id ?? '',
     title: '',
     startLocal: toDateTimeLocal(startAt),
     endLocal: toDateTimeLocal(endAt),
@@ -84,15 +97,53 @@ function emptyDraft(students, slotStart) {
 }
 
 function itemToDraft(item) {
+  const attendees = item?.attendees ?? []
   return {
     id: item.id,
-    studentID: item.studentID ?? '',
+    audience: item.groupID ? 'group' : 'student',
+    studentID: item.studentID || attendees[0]?.studentId || '',
+    groupID: item.groupID ?? '',
     title: item.title ?? '',
     startLocal: toDateTimeLocal(item.startAt),
     endLocal: toDateTimeLocal(item.endAt),
     notes: item.notes ?? '',
-    lessonID: item.lessonID ?? '',
+    lessonID: item.lessonID || attendees.find((entry) => entry.lessonId)?.lessonId || '',
   }
+}
+
+function lessonLabel(lesson) {
+  if (!lesson) return ''
+  return (
+    formatLessonDisplayName(lesson.name, '', lesson.lessonNumber)
+    || (lesson.lessonNumber != null ? `Lesson ${lesson.lessonNumber}` : 'Lesson plan')
+  )
+}
+
+function formatWhen(start, end) {
+  const from = parseScheduleDate(start)
+  if (!from) return ''
+  const day = from.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  })
+  return `${day} · ${formatTimeRange(start, end)}`
+}
+
+function eventPrimaryName(item, studentsById, groupsById) {
+  if (item?.groupID) return groupsById.get(item.groupID)?.name || 'Group lesson'
+  return studentDisplayName(studentsById.get(item?.studentID || item?.attendees?.[0]?.studentId))
+}
+
+function eventSecondaryName(item, studentsById) {
+  if (item?.groupID) {
+    const names = (item.attendees ?? [])
+      .map((entry) => studentDisplayName(studentsById.get(entry.studentId)))
+      .filter((name) => name && name !== 'Unnamed student')
+    if (names.length) return names.join(', ')
+    return `${(item.attendees ?? []).length} students`
+  }
+  return item?.title || ''
 }
 
 function visibleHourRange(items) {
@@ -122,6 +173,7 @@ function hourLabels(startMinutes, endMinutes) {
 
 export default function SchedulePanel({
   students = [],
+  groups = [],
   setError,
   onOpenStudent,
   createNonce = 0,
@@ -133,7 +185,8 @@ export default function SchedulePanel({
   const [saving, setSaving] = useState(false)
   const [selectedId, setSelectedId] = useState(null)
   const [draft, setDraft] = useState(null)
-  const [studentLessons, setStudentLessons] = useState([])
+  const [editing, setEditing] = useState(false)
+  const [lessonOptions, setLessonOptions] = useState([])
   const [loadingLessons, setLoadingLessons] = useState(false)
   const [itemToDelete, setItemToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
@@ -174,38 +227,65 @@ export default function SchedulePanel({
   const beginCreate = useCallback(
     (slotStart) => {
       setSelectedId(null)
-      setDraft(emptyDraft(students, slotStart))
+      setEditing(true)
+      setDraft(emptyDraft(students, groups, slotStart))
     },
-    [students],
+    [students, groups],
   )
 
   useEffect(() => {
     if (!createNonce) return
     setSelectedId(null)
-    setDraft(emptyDraft(students))
-    // students is read for the initial picker value; the form updates if the roster changes.
+    setEditing(true)
+    setDraft(emptyDraft(students, groups))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createNonce])
 
   const selectItem = useCallback((item) => {
     if (!item?.id) return
     setSelectedId(item.id)
+    setEditing(false)
     setDraft(itemToDraft(item))
   }, [])
 
+  const studentsById = useMemo(
+    () => new Map(students.map((student) => [student.id, student])),
+    [students],
+  )
+  const groupsById = useMemo(
+    () => new Map(groups.map((group) => [group.id, group])),
+    [groups],
+  )
+
+  const selectedGroup = groupsById.get(draft?.groupID) ?? null
+  const lessonStudentIds = useMemo(() => {
+    if (editing) {
+      if (draft?.audience === 'group') return selectedGroup?.studentIds ?? []
+      return draft?.studentID ? [draft.studentID] : []
+    }
+    const item = items.find((entry) => entry.id === selectedId)
+    if (item?.attendees?.length) return item.attendees.map((entry) => entry.studentId)
+    if (item?.studentID) return [item.studentID]
+    return []
+  }, [editing, draft?.audience, draft?.studentID, selectedGroup, items, selectedId])
+
   useEffect(() => {
-    if (!draft?.studentID) {
-      setStudentLessons([])
+    if (!lessonStudentIds.length) {
+      setLessonOptions([])
       return undefined
     }
     let cancelled = false
     setLoadingLessons(true)
-    fetchStudentLessons(draft.studentID)
+    const request =
+      lessonStudentIds.length === 1
+        ? fetchStudentLessons(lessonStudentIds[0])
+        : fetchLessonsForStudents(lessonStudentIds)
+    request
       .then((lessons) => {
-        if (!cancelled) setStudentLessons(lessons ?? [])
+        if (!cancelled) setLessonOptions(lessons ?? [])
       })
       .catch(() => {
-        if (!cancelled) setStudentLessons([])
+        if (!cancelled) setLessonOptions([])
       })
       .finally(() => {
         if (!cancelled) setLoadingLessons(false)
@@ -213,12 +293,7 @@ export default function SchedulePanel({
     return () => {
       cancelled = true
     }
-  }, [draft?.studentID])
-
-  const studentsById = useMemo(
-    () => new Map(students.map((student) => [student.id, student])),
-    [students],
-  )
+  }, [lessonStudentIds])
 
   const rangeItems = useMemo(() => {
     if (view === 'month') {
@@ -268,22 +343,38 @@ export default function SchedulePanel({
 
   async function handleSave(event) {
     event?.preventDefault()
-    if (!draft?.studentID) return
+    const isGroup = draft?.audience === 'group'
+    if (!isGroup && !draft?.studentID) return
+    if (isGroup && !draft?.groupID) return
+    const memberIds = isGroup ? selectedGroup?.studentIds ?? [] : [draft.studentID]
+    if (isGroup && !memberIds.length) {
+      setError('This group has no students. Add students to the group, then schedule it.')
+      return
+    }
     setSaving(true)
     try {
+      const sourceLesson = draft.lessonID
+        ? lessonOptions.find((lesson) => lesson.id === draft.lessonID) ?? { id: draft.lessonID, studentID: draft.studentID }
+        : null
+      const attendees = isGroup
+        ? await ensureGroupLessonAttendees(sourceLesson, memberIds)
+        : [{ studentId: draft.studentID, lessonId: draft.lessonID || null }]
       const saved = await saveScheduledLesson({
         id: draft.id,
         title: draft.title,
         startAt: fromDateTimeLocal(draft.startLocal),
         endAt: fromDateTimeLocal(draft.endLocal),
         notes: draft.notes,
-        studentID: draft.studentID,
+        studentID: isGroup ? null : draft.studentID,
+        groupID: isGroup ? draft.groupID : null,
         lessonID: draft.lessonID || null,
+        attendees,
       })
       const records = await fetchScheduledLessons()
       setItems(records)
       setSelectedId(saved.id)
       setDraft(itemToDraft(saved))
+      setEditing(false)
       const savedStart = parseScheduleDate(saved.startAt)
       if (savedStart) setAnchor(savedStart)
       setError('')
@@ -304,6 +395,7 @@ export default function SchedulePanel({
       if (selectedId === target.id) {
         setSelectedId(null)
         setDraft(null)
+        setEditing(false)
       }
       setItemToDelete(null)
       setError('')
@@ -328,10 +420,11 @@ export default function SchedulePanel({
     const height = Math.max(SLOT_PX * 0.8, ((end.getTime() - start.getTime()) / 60_000 / SLOT_MINUTES) * SLOT_PX)
     const pack = layout.get(item.id) ?? { col: 0, colCount: 1 }
     const widthPct = 100 / pack.colCount
-    const student = studentsById.get(item.studentID)
-    const name = studentDisplayName(student)
-    const color = studentScheduleColor(item.studentID)
+    const name = eventPrimaryName(item, studentsById, groupsById)
+    const secondary = eventSecondaryName(item, studentsById)
+    const color = eventScheduleColor(item)
     const selected = item.id === selectedId || (!selectedId && draft?.id === item.id)
+    const grouped = isGroupEvent(item)
     return (
       <Box
         key={item.id}
@@ -370,102 +463,249 @@ export default function SchedulePanel({
         <Typography variant="caption" sx={{ display: 'block', lineHeight: 1.2, opacity: 0.9 }}>
           {formatTimeRange(start, end)}
         </Typography>
-        <Box
-          component="button"
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation()
-            selectItem(item)
-          }}
-          style={{
-            all: 'unset',
-            display: 'block',
-            cursor: 'pointer',
-            fontWeight: 700,
-            fontSize: '0.75rem',
-            lineHeight: 1.25,
-            textDecoration: 'underline',
-            textUnderlineOffset: 2,
-            maxWidth: '100%',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {name}
-        </Box>
-        {item.title ? (
+        <Stack direction="row" spacing={0.5} alignItems="center" sx={{ minWidth: 0 }}>
+          {grouped ? <GroupsIcon sx={{ fontSize: 14, flexShrink: 0 }} /> : null}
+          <Box
+            component="button"
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              selectItem(item)
+            }}
+            style={{
+              all: 'unset',
+              display: 'block',
+              cursor: 'pointer',
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              lineHeight: 1.25,
+              textDecoration: 'underline',
+              textUnderlineOffset: 2,
+              maxWidth: '100%',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {name}
+          </Box>
+        </Stack>
+        {secondary ? (
           <Typography variant="caption" noWrap sx={{ display: 'block', opacity: 0.95 }}>
-            {item.title}
+            {secondary}
           </Typography>
         ) : null}
       </Box>
     )
   }
 
-  function renderDetail() {
-    if (!draft) {
+  function renderAttendeeLinks(item) {
+    const attendees = item?.attendees?.length
+      ? item.attendees
+      : item?.studentID
+        ? [{ studentId: item.studentID, lessonId: item.lessonID }]
+        : []
+    if (!attendees.length) {
       return (
-        <Stack spacing={2} sx={{ p: 2 }}>
-          <Typography variant="h6">Lesson details</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Select a lesson on the calendar to view or edit it, or create a new one.
-          </Typography>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => beginCreate()}>
-            New lesson
-          </Button>
-        </Stack>
+        <Typography variant="body2" color="text.secondary">
+          No students are linked to this calendar item.
+        </Typography>
       )
     }
+    return (
+      <Stack spacing={1.25}>
+        {attendees.map((entry) => {
+          const student = studentsById.get(entry.studentId)
+          const lesson = lessonOptions.find((option) => option.id === entry.lessonId)
+          const name = studentDisplayName(student)
+          return (
+            <Paper key={entry.studentId} variant="outlined" sx={{ p: 1.25 }}>
+              <Stack spacing={0.5}>
+                <Button
+                  size="small"
+                  startIcon={<PersonIcon />}
+                  onClick={() => onOpenStudent?.(entry.studentId)}
+                  sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
+                >
+                  {name}
+                </Button>
+                {entry.lessonId ? (
+                  <Button
+                    size="small"
+                    startIcon={<MenuBookIcon />}
+                    onClick={() => onOpenStudent?.(entry.studentId, entry.lessonId)}
+                    sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
+                  >
+                    {lessonLabel(lesson) || 'Open lesson plan'}
+                  </Button>
+                ) : (
+                  <Typography variant="caption" color="text.secondary" sx={{ pl: 1 }}>
+                    No lesson plan linked
+                  </Typography>
+                )}
+              </Stack>
+            </Paper>
+          )
+        })}
+      </Stack>
+    )
+  }
 
-    const student = studentsById.get(draft.studentID)
+  function renderReadOnlyDetail(item) {
+    const grouped = isGroupEvent(item)
+    const group = groupsById.get(item.groupID)
+    const student = studentsById.get(item.studentID || item.attendees?.[0]?.studentId)
+    return (
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Stack spacing={1.5} sx={{ p: 2, flex: 1, overflow: 'auto' }}>
+          <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="h6">
+                {item.title || eventPrimaryName(item, studentsById, groupsById)}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {formatWhen(item.startAt, item.endAt)}
+              </Typography>
+            </Box>
+            <Button size="small" variant="outlined" startIcon={<EditIcon />} onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+          </Stack>
+          <Chip
+            size="small"
+            icon={grouped ? <GroupsIcon /> : <PersonIcon />}
+            label={grouped ? `Group · ${group?.name || 'Untitled group'}` : studentDisplayName(student)}
+            sx={{ alignSelf: 'flex-start' }}
+          />
+          {item.title && grouped ? (
+            <Typography variant="body2">{item.title}</Typography>
+          ) : null}
+          <Box>
+            <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+              {grouped ? 'Students and lessons' : 'Student and lesson'}
+            </Typography>
+            <Box sx={{ mt: 1 }}>{renderAttendeeLinks(item)}</Box>
+          </Box>
+          {item.notes ? (
+            <Box>
+              <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                Notes
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap' }}>
+                {item.notes}
+              </Typography>
+            </Box>
+          ) : null}
+        </Stack>
+        <Divider />
+        <Stack direction="row" spacing={1} sx={{ p: 1.5 }} justifyContent="flex-start">
+          <Button
+            color="error"
+            startIcon={<DeleteOutlineIcon />}
+            onClick={() => setItemToDelete(item)}
+          >
+            Delete
+          </Button>
+        </Stack>
+      </Box>
+    )
+  }
+
+  function renderEditor() {
     const isNew = !draft.id
-
+    const isGroup = draft.audience === 'group'
+    const canSave = isGroup ? Boolean(draft.groupID) : Boolean(draft.studentID)
     return (
       <Box component="form" onSubmit={(event) => void handleSave(event)} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         <Stack spacing={1.5} sx={{ p: 2, flex: 1, overflow: 'auto' }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-            <Typography variant="h6">{isNew ? 'New lesson' : 'Lesson details'}</Typography>
-            {student ? (
-              <Button
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Typography variant="h6">{isNew ? 'New lesson' : 'Edit lesson'}</Typography>
+            {!isNew ? (
+              <IconButton
                 size="small"
-                startIcon={<PersonIcon />}
-                onClick={() => onOpenStudent?.(student.id)}
+                aria-label="Cancel editing"
+                onClick={() => {
+                  const current = items.find((item) => item.id === draft.id)
+                  if (current) setDraft(itemToDraft(current))
+                  setEditing(false)
+                }}
               >
-                {studentDisplayName(student)}
-              </Button>
+                <CloseIcon fontSize="small" />
+              </IconButton>
             ) : null}
           </Stack>
 
-            {students.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                Add a student in the left nav before scheduling a lesson.
-              </Typography>
-            ) : null}
-          <FormControl fullWidth size="small" required>
-            <InputLabel id="schedule-student">Student</InputLabel>
-            <Select
-              labelId="schedule-student"
-              label="Student"
-              value={draft.studentID}
-              onChange={(event) =>
-                setDraft((prev) => ({ ...prev, studentID: event.target.value, lessonID: '' }))
-              }
-            >
-              {students.map((item) => (
-                <MenuItem key={item.id} value={item.id}>
-                  {studentDisplayName(item)}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <ToggleButtonGroup
+            exclusive
+            fullWidth
+            size="small"
+            value={draft.audience}
+            onChange={(_event, value) => {
+              if (!value) return
+              setDraft((prev) => ({ ...prev, audience: value, lessonID: '' }))
+            }}
+          >
+            <ToggleButton value="student">Student</ToggleButton>
+            <ToggleButton value="group">Group</ToggleButton>
+          </ToggleButtonGroup>
+
+          {isGroup && groups.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              Create a group in the left nav before scheduling a group lesson.
+            </Typography>
+          ) : null}
+
+          {isGroup ? (
+            <FormControl fullWidth size="small" required>
+              <InputLabel id="schedule-group">Group</InputLabel>
+              <Select
+                labelId="schedule-group"
+                label="Group"
+                value={draft.groupID}
+                onChange={(event) =>
+                  setDraft((prev) => ({ ...prev, groupID: event.target.value, lessonID: '' }))
+                }
+              >
+                {groups.map((group) => (
+                  <MenuItem key={group.id} value={group.id}>
+                    {group.name || 'Untitled group'} ({(group.studentIds ?? []).length})
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          ) : (
+            <FormControl fullWidth size="small" required>
+              <InputLabel id="schedule-student">Student</InputLabel>
+              <Select
+                labelId="schedule-student"
+                label="Student"
+                value={draft.studentID}
+                onChange={(event) =>
+                  setDraft((prev) => ({ ...prev, studentID: event.target.value, lessonID: '' }))
+                }
+              >
+                {students.map((item) => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {studentDisplayName(item)}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+
+          {isGroup && selectedGroup ? (
+            <Typography variant="caption" color="text.secondary">
+              {(selectedGroup.studentIds ?? []).map((id) => studentDisplayName(studentsById.get(id))).join(', ')
+                || 'This group has no students.'}
+            </Typography>
+          ) : null}
 
           <TextField
             label="Title"
             size="small"
             value={draft.title}
             onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))}
-            placeholder="Optional — student name is shown on the calendar"
+            placeholder={isGroup ? 'Optional — the group name is shown on the calendar' : 'Optional — student name is shown on the calendar'}
           />
           <TextField
             label="Start"
@@ -503,13 +743,21 @@ export default function SchedulePanel({
               <MenuItem value="">
                 <em>None</em>
               </MenuItem>
-              {studentLessons.map((lesson) => (
+              {lessonOptions.map((lesson) => (
                 <MenuItem key={lesson.id} value={lesson.id}>
-                  {formatLessonDisplayName(lesson.name, '', lesson.lessonNumber) || `Lesson ${lesson.lessonNumber ?? ''}`.trim()}
+                  {isGroup
+                    ? `${studentDisplayName(studentsById.get(lesson.studentID))} · ${lessonLabel(lesson)}`
+                    : lessonLabel(lesson)}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
+          {isGroup ? (
+            <Typography variant="caption" color="text.secondary">
+              One calendar item is created for the group. Each student is linked to their own copy of
+              this lesson. Missing copies are created automatically.
+            </Typography>
+          ) : null}
           {loadingLessons ? (
             <Typography variant="caption" color="text.secondary">
               Loading lesson plans…
@@ -521,7 +769,7 @@ export default function SchedulePanel({
             value={draft.notes}
             onChange={(event) => setDraft((prev) => ({ ...prev, notes: event.target.value }))}
             multiline
-            minRows={4}
+            minRows={3}
           />
         </Stack>
         <Divider />
@@ -535,14 +783,37 @@ export default function SchedulePanel({
               Delete
             </Button>
           ) : (
-            <Button onClick={() => setDraft(null)}>Cancel</Button>
+            <Button onClick={() => { setDraft(null); setEditing(false) }}>Cancel</Button>
           )}
-          <Button type="submit" variant="contained" startIcon={<SaveIcon />} disabled={saving || !draft.studentID}>
+          <Button type="submit" variant="contained" startIcon={<SaveIcon />} disabled={saving || !canSave}>
             {saving ? 'Saving…' : isNew ? 'Create' : 'Save'}
           </Button>
         </Stack>
       </Box>
     )
+  }
+
+  function renderDetail() {
+    if (!draft) {
+      return (
+        <Stack spacing={2} sx={{ p: 2 }}>
+          <Typography variant="h6">Lesson details</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Select a lesson on the calendar to view it, or create a new one. Use Edit to change an
+            existing item.
+          </Typography>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => beginCreate()}>
+            New lesson
+          </Button>
+        </Stack>
+      )
+    }
+
+    if (!editing && draft.id && selectedItem) {
+      return renderReadOnlyDetail(selectedItem)
+    }
+
+    return renderEditor()
   }
 
   return (
@@ -813,9 +1084,8 @@ export default function SchedulePanel({
                     </Box>
                     <Stack spacing={0.25} sx={{ mt: 0.25 }}>
                       {visible.map((item) => {
-                        const student = studentsById.get(item.studentID)
-                        const name = studentDisplayName(student)
-                        const color = studentScheduleColor(item.studentID)
+                        const name = eventPrimaryName(item, studentsById, groupsById)
+                        const color = eventScheduleColor(item)
                         const selected = item.id === selectedId
                         return (
                           <Tooltip
@@ -825,6 +1095,7 @@ export default function SchedulePanel({
                             <Chip
                               size="small"
                               clickable
+                              icon={isGroupEvent(item) ? <GroupsIcon sx={{ fontSize: 14 }} /> : undefined}
                               label={`${formatClock(item.startAt)} ${name}`}
                               onClick={(event) => {
                                 event.stopPropagation()
@@ -841,6 +1112,7 @@ export default function SchedulePanel({
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
                                 },
+                                '& .MuiChip-icon': { color: color.fg, ml: 0.5 },
                                 outline: selected ? `2px solid ${BRAND.gold}` : 'none',
                               }}
                             />
@@ -882,7 +1154,11 @@ export default function SchedulePanel({
         title="Delete this scheduled lesson?"
         description={
           itemToDelete
-            ? `Remove “${itemToDelete.title || studentDisplayName(studentsById.get(itemToDelete.studentID)) || 'this lesson'}” from the calendar? This cannot be undone.`
+            ? `Remove “${itemToDelete.title || eventPrimaryName(itemToDelete, studentsById, groupsById) || 'this lesson'}” from the calendar? ${
+                isGroupEvent(itemToDelete)
+                  ? 'Student lesson plans stay. Only this calendar item is removed.'
+                  : 'This cannot be undone.'
+              }`
             : ''
         }
         confirmLabel="Delete lesson"

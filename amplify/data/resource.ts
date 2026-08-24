@@ -101,6 +101,7 @@ const schema = a.schema({
       name: a.string().required(),
       groupData: a.json(),
       students: a.hasMany('GroupStudent', 'groupId'),
+      ScheduledLessons: a.hasMany('ScheduledLesson', 'groupID'),
     })
     .authorization((allow) => [allow.owner()]),
 
@@ -351,9 +352,11 @@ const schema = a.schema({
     .authorization((allow) => [allow.authenticated()]),
 
   /**
-   * Calendar appointment for a student lesson. Separate from Lesson so
+   * Calendar appointment for one student or a group. Separate from Lesson so
    * instructors can schedule time before (or without) a full lesson plan.
-   * Optional lessonID links the appointment to an existing plan.
+   * Individual items use studentID + lessonID. Group items use groupID and
+   * attendees JSON [{ studentId, lessonId }] so one calendar block can link
+   * every group member to their own copy of the same lesson.
    */
   ScheduledLesson: a
     .model({
@@ -361,13 +364,18 @@ const schema = a.schema({
       startAt: a.datetime().required(),
       endAt: a.datetime().required(),
       notes: a.string(),
-      studentID: a.id().required(),
+      studentID: a.id(),
       student: a.belongsTo('Student', 'studentID'),
+      groupID: a.id(),
+      group: a.belongsTo('Group', 'groupID'),
       lessonID: a.id(),
       lesson: a.belongsTo('Lesson', 'lessonID'),
+      /** [{ studentId, lessonId }] — required for group lessons. */
+      attendees: a.json(),
     })
     .secondaryIndexes((index) => [
       index('studentID').sortKeys(['startAt']).queryField('listScheduledLessonByStudentID'),
+      index('groupID').sortKeys(['startAt']).queryField('listScheduledLessonByGroupID'),
     ])
     .authorization((allow) => [allow.owner()]),
 

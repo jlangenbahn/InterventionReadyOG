@@ -328,6 +328,7 @@ export default function LessonPlanPanel({
   students = [],
   groups = [],
   leaveGuardRef,
+  openLessonId = null,
 }) {
   const printRef = useRef(null)
   const lastGeneratedNameRef = useRef('')
@@ -1113,6 +1114,15 @@ export default function LessonPlanPanel({
     lastGeneratedNameRef.current = defaultLessonPlanName(lesson?.lessonNumber, loadedConcept)
     setLessonName(loadedName)
   }
+
+  useEffect(() => {
+    if (!openLessonId || !student?.id) return
+    if (loadedLesson?.id === openLessonId) return
+    const lesson = savedLessons.find((item) => item.id === openLessonId)
+    if (!lesson) return
+    applyLesson(lesson)
+    setLessonMode(LESSON_MODE_VIEW)
+  }, [openLessonId, student?.id, savedLessons, loadedLesson?.id])
 
   function handleStartCreate() {
     startNewLesson()
