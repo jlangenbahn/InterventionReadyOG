@@ -92,6 +92,7 @@ const schema = a.schema({
       Passages: a.hasMany('Passage', 'studentID'),
       Concepts: a.hasMany('StudentConcept', 'studentId'),
       Groups: a.hasMany('GroupStudent', 'studentId'),
+      ScheduledLessons: a.hasMany('ScheduledLesson', 'studentID'),
     })
     .authorization((allow) => [allow.owner()]),
 
@@ -176,6 +177,7 @@ const schema = a.schema({
       passages: a.hasMany('PassageLesson', 'lessonId'),
       sentences: a.hasMany('SentenceLesson', 'lessonId'),
       lists: a.hasMany('ListLesson', 'lessonId'),
+      scheduledItems: a.hasMany('ScheduledLesson', 'lessonID'),
       lessonNumber: a.integer(),
       name: a.string(),
       /** Typed materials (slots + frozen snapshots). */
@@ -347,6 +349,27 @@ const schema = a.schema({
       lesson: a.belongsTo('Lesson', 'lessonId'),
     })
     .authorization((allow) => [allow.authenticated()]),
+
+  /**
+   * Calendar appointment for a student lesson. Separate from Lesson so
+   * instructors can schedule time before (or without) a full lesson plan.
+   * Optional lessonID links the appointment to an existing plan.
+   */
+  ScheduledLesson: a
+    .model({
+      title: a.string(),
+      startAt: a.datetime().required(),
+      endAt: a.datetime().required(),
+      notes: a.string(),
+      studentID: a.id().required(),
+      student: a.belongsTo('Student', 'studentID'),
+      lessonID: a.id(),
+      lesson: a.belongsTo('Lesson', 'lessonID'),
+    })
+    .secondaryIndexes((index) => [
+      index('studentID').sortKeys(['startAt']).queryField('listScheduledLessonByStudentID'),
+    ])
+    .authorization((allow) => [allow.owner()]),
 
   /**
    * Lambda-backed Bedrock Converse call. Amplify a.generation() mapping templates

@@ -9,6 +9,7 @@ import {
   Checkbox,
   Chip,
   CircularProgress,
+  Collapse,
   CssBaseline,
   Dialog,
   DialogActions,
@@ -38,8 +39,10 @@ import {
 } from '@mui/material'
 import { DataGridPro, GridToolbar, useGridApiRef } from '@mui/x-data-grid-pro'
 import AddIcon from '@mui/icons-material/Add'
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import LockIcon from '@mui/icons-material/Lock'
 import LogoutIcon from '@mui/icons-material/Logout'
@@ -51,6 +54,7 @@ import LessonPlanPanel from './components/LessonPlanPanel'
 import DataPanel from './components/DataPanel'
 import ContentPanel from './components/ContentPanel'
 import GroupPanel from './components/GroupPanel'
+import SchedulePanel from './components/SchedulePanel'
 import ConfirmDeleteDialog from './components/ConfirmDeleteDialog'
 import { fetchStudentLists } from './lib/fetchStudentLessonPlan'
 import { client } from './lib/amplifyClient'
@@ -873,6 +877,66 @@ function ScopeAndSequencePanel({
   )
 }
 
+function NavSectionHeader({
+  title,
+  expanded = true,
+  onToggleExpand,
+  onAdd,
+  addLabel,
+  selected = false,
+  onSelect,
+  icon = null,
+}) {
+  return (
+    <Box
+      sx={{
+        px: 1.25,
+        py: 1,
+        display: 'flex',
+        alignItems: 'center',
+        bgcolor: selected ? 'rgba(168, 198, 250, 0.32)' : 'transparent',
+      }}
+    >
+      {onToggleExpand ? (
+        <IconButton
+          size="small"
+          aria-label={expanded ? `Collapse ${title}` : `Expand ${title}`}
+          onClick={onToggleExpand}
+        >
+          <ExpandMoreIcon
+            fontSize="small"
+            sx={{
+              transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+              transition: 'transform 120ms',
+            }}
+          />
+        </IconButton>
+      ) : null}
+      <Box
+        onClick={onSelect ?? onToggleExpand}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          flex: 1,
+          minWidth: 0,
+          cursor: onSelect || onToggleExpand ? 'pointer' : 'default',
+          userSelect: 'none',
+        }}
+      >
+        {!onToggleExpand ? icon : null}
+        <Typography variant="subtitle1" sx={{ py: 0.5 }}>
+          {title}
+        </Typography>
+      </Box>
+      {onAdd ? (
+        <IconButton color="primary" size="small" aria-label={addLabel} onClick={onAdd}>
+          <AddIcon />
+        </IconButton>
+      ) : null}
+    </Box>
+  )
+}
+
 function AppShell({ user, signOut }) {
   const [students, setStudents] = useState([])
   const [selectedStudentId, setSelectedStudentId] = useState(null)
@@ -905,6 +969,10 @@ function AppShell({ user, signOut }) {
   const [deletingStudent, setDeletingStudent] = useState(false)
   const [scopeLocked, setScopeLocked] = useState(true)
   const [navBlock, setNavBlock] = useState(null)
+  const [viewingSchedule, setViewingSchedule] = useState(false)
+  const [studentsNavOpen, setStudentsNavOpen] = useState(true)
+  const [groupsNavOpen, setGroupsNavOpen] = useState(true)
+  const [scheduleCreateNonce, setScheduleCreateNonce] = useState(0)
   const scopeSaveRef = useRef(null)
   const lessonLeaveGuardRef = useRef(null)
 
@@ -1051,21 +1119,23 @@ function AppShell({ user, signOut }) {
   }
 
   function handleSelectStudent(studentId) {
-    if (studentId === selectedStudentId && !creatingGroup && !selectedGroupId) return
+    if (studentId === selectedStudentId && !creatingGroup && !selectedGroupId && !viewingSchedule) return
     requestNavigation(() => {
       setSelectedStudentId(studentId)
       setSelectedGroupId(null)
       setCreatingGroup(false)
+      setViewingSchedule(false)
       setScopeLocked(true)
     })
   }
 
   function handleSelectGroup(groupId) {
-    if (groupId === selectedGroupId && !creatingGroup) return
+    if (groupId === selectedGroupId && !creatingGroup && !viewingSchedule) return
     requestNavigation(() => {
       setSelectedGroupId(groupId)
       setSelectedStudentId(null)
       setCreatingGroup(false)
+      setViewingSchedule(false)
       setScopeLocked(true)
     })
   }
@@ -1075,7 +1145,30 @@ function AppShell({ user, signOut }) {
       setCreatingGroup(true)
       setSelectedGroupId(null)
       setSelectedStudentId(null)
+      setViewingSchedule(false)
       setScopeLocked(true)
+    })
+  }
+
+  function handleSelectSchedule() {
+    if (viewingSchedule) return
+    requestNavigation(() => {
+      setViewingSchedule(true)
+      setSelectedStudentId(null)
+      setSelectedGroupId(null)
+      setCreatingGroup(false)
+      setScopeLocked(true)
+    })
+  }
+
+  function handleStartCreateScheduledLesson() {
+    requestNavigation(() => {
+      setViewingSchedule(true)
+      setSelectedStudentId(null)
+      setSelectedGroupId(null)
+      setCreatingGroup(false)
+      setScopeLocked(true)
+      setScheduleCreateNonce((current) => current + 1)
     })
   }
 
@@ -1200,6 +1293,9 @@ function AppShell({ user, signOut }) {
         await loadStudents()
         if (data?.id) {
           setSelectedStudentId(data.id)
+          setSelectedGroupId(null)
+          setCreatingGroup(false)
+          setViewingSchedule(false)
           setScopeLocked(true)
         }
       }
@@ -1313,133 +1409,155 @@ function AppShell({ user, signOut }) {
         }}
       >
         <Toolbar />
-        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography variant="subtitle1">Students</Typography>
-          <IconButton
-            color="primary"
-            size="small"
-            aria-label="Add student"
-            onClick={openCreateStudent}
-          >
-            <AddIcon />
-          </IconButton>
-        </Box>
-        <Divider />
-        {loadingStudents ? (
-          <Box sx={{ p: 3, display: 'flex', justifyContent: 'center' }}>
-            <CircularProgress size={28} />
-          </Box>
-        ) : students.length === 0 ? (
-          <Box sx={{ p: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              No students yet. Click + to add your first student.
-            </Typography>
-          </Box>
-        ) : (
-          <List dense sx={{ overflow: 'auto', flex: '1 1 50%' }}>
-            {students.map((student) => {
-              const name = studentNavDisplayName(student)
-              const fullName = studentDisplayName(student)
-              return (
-                <ListItem
-                  key={student.id}
-                  disablePadding
-                  secondaryAction={
-                    <Tooltip title={`Delete ${fullName}`}>
-                      <IconButton
-                        edge="end"
-                        size="small"
-                        aria-label={`Delete ${fullName}`}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          askDeleteStudent(student)
-                        }}
+        <Box sx={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
+          <NavSectionHeader
+            title="Students"
+            expanded={studentsNavOpen}
+            onToggleExpand={() => setStudentsNavOpen((open) => !open)}
+            onAdd={openCreateStudent}
+            addLabel="Add student"
+          />
+          <Divider />
+          <Collapse in={studentsNavOpen} timeout="auto" unmountOnExit={false}>
+            {loadingStudents ? (
+              <Box sx={{ p: 3, display: 'flex', justifyContent: 'center' }}>
+                <CircularProgress size={28} />
+              </Box>
+            ) : students.length === 0 ? (
+              <Box sx={{ p: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  No students yet. Click + to add your first student.
+                </Typography>
+              </Box>
+            ) : (
+              <List dense disablePadding>
+                {students.map((student) => {
+                  const name = studentNavDisplayName(student)
+                  const fullName = studentDisplayName(student)
+                  return (
+                    <ListItem
+                      key={student.id}
+                      disablePadding
+                      secondaryAction={
+                        <Tooltip title={`Delete ${fullName}`}>
+                          <IconButton
+                            edge="end"
+                            size="small"
+                            aria-label={`Delete ${fullName}`}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              askDeleteStudent(student)
+                            }}
+                          >
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      }
+                    >
+                      <ListItemButton
+                        selected={
+                          !creatingGroup &&
+                          !selectedGroupId &&
+                          !viewingSchedule &&
+                          student.id === selectedStudentId
+                        }
+                        onClick={() => handleSelectStudent(student.id)}
                       >
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  }
-                >
-                  <ListItemButton
-                    selected={!creatingGroup && !selectedGroupId && student.id === selectedStudentId}
-                    onClick={() => handleSelectStudent(student.id)}
-                  >
-                    <PersonIcon fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
-                    <ListItemText
-                      primary={name}
-                      secondary={student.customID ? `ID ${student.customID}` : null}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              )
-            })}
-          </List>
-        )}
-        <Divider />
-        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography variant="subtitle1">Groups</Typography>
-          <IconButton
-            color="primary"
-            size="small"
-            aria-label="Add group"
-            onClick={handleStartCreateGroup}
-          >
-            <AddIcon />
-          </IconButton>
-        </Box>
-        <Divider />
-        {loadingGroups ? (
-          <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
-            <CircularProgress size={22} />
-          </Box>
-        ) : groups.length === 0 ? (
-          <Box sx={{ p: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              No groups yet. Click + to bundle students.
-            </Typography>
-          </Box>
-        ) : (
-          <List dense sx={{ overflow: 'auto', flex: '1 1 50%' }}>
-            {groups.map((group) => {
-              const groupName = group.name || 'Untitled group'
-              return (
-                <ListItem
-                  key={group.id}
-                  disablePadding
-                  secondaryAction={
-                    <Tooltip title={`Delete ${groupName}`}>
-                      <IconButton
-                        edge="end"
-                        size="small"
-                        aria-label={`Delete ${groupName}`}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          askDeleteGroup(group)
-                        }}
+                        <PersonIcon fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
+                        <ListItemText
+                          primary={name}
+                          secondary={student.customID ? `ID ${student.customID}` : null}
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  )
+                })}
+              </List>
+            )}
+          </Collapse>
+          <Divider />
+          <NavSectionHeader
+            title="Groups"
+            expanded={groupsNavOpen}
+            onToggleExpand={() => setGroupsNavOpen((open) => !open)}
+            onAdd={handleStartCreateGroup}
+            addLabel="Add group"
+          />
+          <Divider />
+          <Collapse in={groupsNavOpen} timeout="auto" unmountOnExit={false}>
+            {loadingGroups ? (
+              <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
+                <CircularProgress size={22} />
+              </Box>
+            ) : groups.length === 0 ? (
+              <Box sx={{ p: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  No groups yet. Click + to bundle students.
+                </Typography>
+              </Box>
+            ) : (
+              <List dense disablePadding>
+                {groups.map((group) => {
+                  const groupName = group.name || 'Untitled group'
+                  return (
+                    <ListItem
+                      key={group.id}
+                      disablePadding
+                      secondaryAction={
+                        <Tooltip title={`Delete ${groupName}`}>
+                          <IconButton
+                            edge="end"
+                            size="small"
+                            aria-label={`Delete ${groupName}`}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              askDeleteGroup(group)
+                            }}
+                          >
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      }
+                    >
+                      <ListItemButton
+                        selected={!creatingGroup && !viewingSchedule && group.id === selectedGroupId}
+                        onClick={() => handleSelectGroup(group.id)}
                       >
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  }
-                >
-                  <ListItemButton
-                    selected={!creatingGroup && group.id === selectedGroupId}
-                    onClick={() => handleSelectGroup(group.id)}
-                  >
-                    <GroupsIcon fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
-                    <ListItemText
-                      primary={groupName}
-                      secondary={`${(group.studentIds ?? []).length} students`}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              )
-            })}
-          </List>
-        )}
+                        <GroupsIcon fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
+                        <ListItemText
+                          primary={groupName}
+                          secondary={`${(group.studentIds ?? []).length} students`}
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  )
+                })}
+              </List>
+            )}
+          </Collapse>
+          <Divider />
+          <NavSectionHeader
+            title="Schedule"
+            selected={viewingSchedule}
+            onSelect={handleSelectSchedule}
+            onAdd={handleStartCreateScheduledLesson}
+            addLabel="Add scheduled lesson"
+            icon={
+              <CalendarMonthIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+            }
+          />
+        </Box>
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box component="main" sx={{
+        flexGrow: 1,
+        p: viewingSchedule ? 2 : 3,
+        minWidth: 0,
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: viewingSchedule ? 'hidden' : 'auto',
+      }}>
         <Toolbar />
         {error ? (
           <Paper sx={{ p: 2, mb: 2, bgcolor: 'secondary.light' }}>
@@ -1447,12 +1565,28 @@ function AppShell({ user, signOut }) {
           </Paper>
         ) : null}
 
-        {!selectedStudent && !creatingGroup && !selectedGroup ? (
+        {!selectedStudent && !creatingGroup && !selectedGroup && !viewingSchedule ? (
           <Paper sx={{ p: 3 }}>
             <Typography color="text.secondary">
-              Select a student, choose a group, or click Groups + to create one.
+              Select a student, choose a group, open Schedule, or click + to create one.
             </Typography>
           </Paper>
+        ) : viewingSchedule ? (
+          <SchedulePanel
+            students={students}
+            setError={setError}
+            createNonce={scheduleCreateNonce}
+            onOpenStudent={(studentId) => {
+              requestNavigation(() => {
+                setViewingSchedule(false)
+                setSelectedStudentId(studentId)
+                setSelectedGroupId(null)
+                setCreatingGroup(false)
+                setMainTab(TAB_LESSON_PLAN)
+                setScopeLocked(true)
+              })
+            }}
+          />
         ) : creatingGroup || selectedGroup ? (
           <>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap">

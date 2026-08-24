@@ -208,22 +208,26 @@ export async function deleteLesson(lessonId) {
 
 /**
  * Permanently remove a student and the records that belong to them:
- * lessons, lists, sentences, passages, and group membership.
+ * lessons, lists, sentences, passages, scheduled lessons, and group membership.
  */
 export async function deleteStudentCascade(studentId) {
   if (!studentId) throw new Error('Student is required')
 
-  const [lists, lessons, sentences, passages] = await Promise.all([
+  const [lists, lessons, sentences, passages, scheduledLessons] = await Promise.all([
     listIdsByField(client.models.List, 'studentID', studentId),
     listIdsByField(client.models.Lesson, 'studentID', studentId),
     listIdsByField(client.models.Sentence, 'studentID', studentId),
     listIdsByField(client.models.Passage, 'studentID', studentId),
+    client.models.ScheduledLesson
+      ? listIdsByField(client.models.ScheduledLesson, 'studentID', studentId)
+      : Promise.resolve([]),
   ])
 
   for (const listId of lists) await deleteWordList(listId)
   for (const sentenceId of sentences) await deleteSentence(sentenceId)
   for (const passageId of passages) await deletePassage(passageId)
   for (const lessonId of lessons) await deleteLesson(lessonId)
+  await deleteByIds(client.models.ScheduledLesson, scheduledLessons)
 
   await Promise.all([
     deleteWhere(client.models.GroupStudent, 'studentId', studentId),
