@@ -248,6 +248,12 @@ export default function SchedulePanel({
     setDraft(itemToDraft(item))
   }, [])
 
+  const closeDetail = useCallback(() => {
+    setSelectedId(null)
+    setDraft(null)
+    setEditing(false)
+  }, [])
+
   const studentsById = useMemo(
     () => new Map(students.map((student) => [student.id, student])),
     [students],
@@ -567,9 +573,16 @@ export default function SchedulePanel({
                 {formatWhen(item.startAt, item.endAt)}
               </Typography>
             </Box>
-            <Button size="small" variant="outlined" startIcon={<EditIcon />} onClick={() => setEditing(true)}>
-              Edit
-            </Button>
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              <Button size="small" variant="outlined" startIcon={<EditIcon />} onClick={() => setEditing(true)}>
+                Edit
+              </Button>
+              <Tooltip title="Hide details">
+                <IconButton size="small" aria-label="Hide lesson details" onClick={closeDetail}>
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Stack>
           </Stack>
           <Chip
             size="small"
@@ -632,7 +645,13 @@ export default function SchedulePanel({
               >
                 <CloseIcon fontSize="small" />
               </IconButton>
-            ) : null}
+            ) : (
+              <Tooltip title="Hide details">
+                <IconButton size="small" aria-label="Hide lesson details" onClick={closeDetail}>
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
           </Stack>
 
           <ToggleButtonGroup
@@ -783,7 +802,7 @@ export default function SchedulePanel({
               Delete
             </Button>
           ) : (
-            <Button onClick={() => { setDraft(null); setEditing(false) }}>Cancel</Button>
+            <Button onClick={closeDetail}>Cancel</Button>
           )}
           <Button type="submit" variant="contained" startIcon={<SaveIcon />} disabled={saving || !canSave}>
             {saving ? 'Saving…' : isNew ? 'Create' : 'Save'}
@@ -1133,21 +1152,59 @@ export default function SchedulePanel({
         )}
       </Box>
 
-      <Paper
-        elevation={0}
+      <Box
         sx={{
-          width: DETAIL_WIDTH,
+          width: draft ? DETAIL_WIDTH : 0,
           flexShrink: 0,
-          borderLeft: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 0,
+          overflow: 'hidden',
+          transition: (theme) =>
+            theme.transitions.create('width', {
+              easing: theme.transitions.easing.sharp,
+              duration: draft
+                ? theme.transitions.duration.enteringScreen
+                : theme.transitions.duration.leavingScreen,
+            }),
           display: 'flex',
-          flexDirection: 'column',
-          bgcolor: 'background.paper',
         }}
       >
-        {renderDetail()}
-      </Paper>
+        <Paper
+          elevation={0}
+          sx={{
+            width: DETAIL_WIDTH,
+            height: '100%',
+            flexShrink: 0,
+            borderLeft: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 0,
+            display: 'flex',
+            bgcolor: 'background.paper',
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              flexShrink: 0,
+              borderRight: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Tooltip title="Hide details">
+              <IconButton
+                size="small"
+                aria-label="Hide lesson details"
+                onClick={closeDetail}
+                sx={{ mt: 1.25, mx: 0.25 }}
+              >
+                <ChevronRightIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            {draft ? renderDetail() : null}
+          </Box>
+        </Paper>
+      </Box>
 
       <ConfirmDeleteDialog
         open={Boolean(itemToDelete)}

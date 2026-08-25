@@ -47,7 +47,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import LockIcon from '@mui/icons-material/Lock'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
-import GroupsIcon from '@mui/icons-material/Groups'
+import Groups3Icon from '@mui/icons-material/Groups3'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SaveIcon from '@mui/icons-material/Save'
 import LessonPlanPanel from './components/LessonPlanPanel'
@@ -897,21 +897,25 @@ function NavSectionHeader({
         bgcolor: selected ? 'rgba(168, 198, 250, 0.32)' : 'transparent',
       }}
     >
-      {onToggleExpand ? (
-        <IconButton
-          size="small"
-          aria-label={expanded ? `Collapse ${title}` : `Expand ${title}`}
-          onClick={onToggleExpand}
-        >
-          <ExpandMoreIcon
-            fontSize="small"
-            sx={{
-              transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
-              transition: 'transform 120ms',
-            }}
-          />
-        </IconButton>
-      ) : null}
+      <IconButton
+        size="small"
+        aria-label={
+          onToggleExpand
+            ? expanded
+              ? `Collapse ${title}`
+              : `Expand ${title}`
+            : `Open ${title}`
+        }
+        onClick={onToggleExpand ?? onSelect}
+      >
+        <ExpandMoreIcon
+          fontSize="small"
+          sx={{
+            transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+            transition: 'transform 120ms',
+          }}
+        />
+      </IconButton>
       <Box
         onClick={onSelect ?? onToggleExpand}
         sx={{
@@ -923,7 +927,7 @@ function NavSectionHeader({
           userSelect: 'none',
         }}
       >
-        {!onToggleExpand ? icon : null}
+        {icon}
         <Typography variant="subtitle1" sx={{ py: 0.5 }}>
           {title}
         </Typography>
@@ -969,7 +973,7 @@ function AppShell({ user, signOut }) {
   const [deletingStudent, setDeletingStudent] = useState(false)
   const [scopeLocked, setScopeLocked] = useState(true)
   const [navBlock, setNavBlock] = useState(null)
-  const [viewingSchedule, setViewingSchedule] = useState(false)
+  const [viewingSchedule, setViewingSchedule] = useState(true)
   const [studentsNavOpen, setStudentsNavOpen] = useState(true)
   const [groupsNavOpen, setGroupsNavOpen] = useState(true)
   const [scheduleCreateNonce, setScheduleCreateNonce] = useState(0)
@@ -1014,7 +1018,6 @@ function AppShell({ user, signOut }) {
         ),
       )
       setStudents(items)
-      setSelectedStudentId((current) => current ?? items[0]?.id ?? null)
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load students')
@@ -1413,11 +1416,23 @@ function AppShell({ user, signOut }) {
         <Toolbar />
         <Box sx={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
           <NavSectionHeader
+            title="Schedule"
+            selected={viewingSchedule}
+            onSelect={handleSelectSchedule}
+            onAdd={handleStartCreateScheduledLesson}
+            addLabel="Add scheduled lesson"
+            icon={
+              <CalendarMonthIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+            }
+          />
+          <Divider />
+          <NavSectionHeader
             title="Students"
             expanded={studentsNavOpen}
             onToggleExpand={() => setStudentsNavOpen((open) => !open)}
             onAdd={openCreateStudent}
             addLabel="Add student"
+            icon={<PersonIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />}
           />
           <Divider />
           <Collapse in={studentsNavOpen} timeout="auto" unmountOnExit={false}>
@@ -1484,6 +1499,7 @@ function AppShell({ user, signOut }) {
             onToggleExpand={() => setGroupsNavOpen((open) => !open)}
             onAdd={handleStartCreateGroup}
             addLabel="Add group"
+            icon={<Groups3Icon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />}
           />
           <Divider />
           <Collapse in={groupsNavOpen} timeout="auto" unmountOnExit={false}>
@@ -1525,7 +1541,7 @@ function AppShell({ user, signOut }) {
                         selected={!creatingGroup && !viewingSchedule && group.id === selectedGroupId}
                         onClick={() => handleSelectGroup(group.id)}
                       >
-                        <GroupsIcon fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
+                        <Groups3Icon fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
                         <ListItemText
                           primary={groupName}
                           secondary={`${(group.studentIds ?? []).length} students`}
@@ -1537,17 +1553,6 @@ function AppShell({ user, signOut }) {
               </List>
             )}
           </Collapse>
-          <Divider />
-          <NavSectionHeader
-            title="Schedule"
-            selected={viewingSchedule}
-            onSelect={handleSelectSchedule}
-            onAdd={handleStartCreateScheduledLesson}
-            addLabel="Add scheduled lesson"
-            icon={
-              <CalendarMonthIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-            }
-          />
         </Box>
       </Drawer>
 
