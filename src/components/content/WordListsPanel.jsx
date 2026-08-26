@@ -30,6 +30,7 @@ import { deleteWordList, updateWordList } from '../../lib/crudRecords'
 import { emptyWordSelection, wordRowId } from '../../lib/wordSelection'
 import ConfirmDeleteDialog from '../shared/ConfirmDeleteDialog'
 import HelpTip from '../shared/HelpTip'
+import StudentContentExplainer from './StudentContentExplainer'
 import WordSelectionActions from './WordSelectionActions'
 
 const MODE_VIEW = 0
@@ -374,7 +375,13 @@ export default function WordListsPanel({
                 >
                   Create list
                 </Button>
-                <HelpTip title="Click a list to preview its words. Row icons rename or delete." />
+                <HelpTip
+                  title={
+                    myListRows.length
+                      ? 'Click a list to preview its words. Row icons rename or delete.'
+                      : 'Lists on this page belong to this student only. Create the first list to get started.'
+                  }
+                />
                 {loadingLists ? <CircularProgress size={16} /> : null}
               </Stack>
             )}
@@ -404,6 +411,45 @@ export default function WordListsPanel({
                   />
                 </Box>
               </>
+            ) : loadingLists && myListRows.length === 0 ? (
+              <Box
+                sx={{
+                  minHeight: { xs: 280, md: 'calc(100vh - 320px)' },
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <CircularProgress size={28} />
+              </Box>
+            ) : myListRows.length === 0 ? (
+              <Box
+                sx={{
+                  minHeight: { xs: 280, md: 'calc(100vh - 320px)' },
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  px: 2,
+                  py: 4,
+                }}
+              >
+                <Stack spacing={1.5} alignItems="center" textAlign="center" sx={{ maxWidth: 420 }}>
+                  <Typography variant="h6">
+                    {studentDisplayName(student)} doesn’t have any word lists yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Create the first list for this student. It will stay on this page — other
+                    students’ lists are not shown here.
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => setMode(MODE_CREATE)}
+                  >
+                    Create {studentDisplayName(student)}’s first list
+                  </Button>
+                </Stack>
+              </Box>
             ) : (
               <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
                 <DataGridPro
@@ -425,9 +471,6 @@ export default function WordListsPanel({
                     toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 300 } },
                   }}
                   density="compact"
-                  localeText={{
-                    noRowsLabel: 'No lists yet. Click Create list to make one.',
-                  }}
                 />
               </Box>
             )}
@@ -523,9 +566,16 @@ export default function WordListsPanel({
             )
           ) : !selectedList ? (
             <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography color="text.secondary">
-                Select a list to preview its words.
-              </Typography>
+              <StudentContentExplainer
+                kind="list"
+                student={student}
+                empty={myListRows.length === 0}
+                selectHint={
+                  myListRows.length
+                    ? 'Select a list on the left to preview its words here.'
+                    : undefined
+                }
+              />
             </Paper>
           ) : (
             <Paper sx={{ p: 2 }}>

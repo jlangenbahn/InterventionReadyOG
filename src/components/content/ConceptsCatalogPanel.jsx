@@ -23,6 +23,7 @@ import EditIcon from '@mui/icons-material/Edit'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import { client } from '../../lib/amplifyClient'
 import HelpTip from '../shared/HelpTip'
+import StudentContentExplainer from './StudentContentExplainer'
 
 export default function ConceptsCatalogPanel({
   concepts = [],
@@ -200,9 +201,7 @@ export default function ConceptsCatalogPanel({
       >
         {!selectedConcept ? (
           <Paper variant="outlined" sx={{ p: 2 }}>
-            <Typography color="text.secondary">
-              Select a concept to preview its details and tagged words.
-            </Typography>
+            <StudentContentExplainer kind="catalog" empty />
           </Paper>
         ) : (
           <Paper sx={{ p: 2 }}>

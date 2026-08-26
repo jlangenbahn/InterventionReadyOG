@@ -25,12 +25,14 @@ import CreateMultiWordPanel from './CreateMultiWordPanel'
 import MultiWordPreview from './MultiWordPreview'
 import ConfirmDeleteDialog from '../shared/ConfirmDeleteDialog'
 import HelpTip from '../shared/HelpTip'
+import StudentContentExplainer from './StudentContentExplainer'
 import {
   fetchStudentSentencesAndPassages,
   parseListData,
   parseScopeAndSequence,
   resolvePassageFocusId,
   resolveSentenceFocusId,
+  studentDisplayName,
 } from '../../lib/fetchStudentLessonPlan'
 import { deletePassage, deleteSentence } from '../../lib/crudRecords'
 import { buildWordCatalogIndex, tagMultiWordText } from '../../lib/tagMultiWordText'
@@ -583,13 +585,55 @@ export default function MultiWordPanel({
               <Button variant="contained" startIcon={<AddIcon />} onClick={handleNew} sx={{ flexShrink: 0 }}>
                 Create {kind}
               </Button>
-              <HelpTip title={`Click a ${kind} to preview tagging. Row icons edit or delete.`} />
+              <HelpTip
+                title={
+                  browseItems.length
+                    ? `Click a ${kind} to preview tagging. Row icons edit or delete.`
+                    : `${kind === 'passage' ? 'Passages' : 'Sentences'} on this tab belong to this student only. Create the first one to get started.`
+                }
+              />
               {notice ? <Chip size="small" color="success" label={notice} /> : null}
               {loading || loadingCatalog ? <CircularProgress size={16} /> : null}
             </Stack>
           )}
 
           {mode === MODE_VIEW ? (
+            (loading || loadingCatalog) && browseItems.length === 0 ? (
+              <Box
+                sx={{
+                  minHeight: { xs: 280, md: 'calc(100vh - 360px)' },
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <CircularProgress size={28} />
+              </Box>
+            ) : browseItems.length === 0 ? (
+              <Box
+                sx={{
+                  minHeight: { xs: 280, md: 'calc(100vh - 360px)' },
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  px: 2,
+                  py: 4,
+                }}
+              >
+                <Stack spacing={1.5} alignItems="center" textAlign="center" sx={{ maxWidth: 440 }}>
+                  <Typography variant="h6">
+                    {studentDisplayName(student)} doesn’t have any {kind}s yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Create the first {kind} for this student. {kind === 'passage' ? 'Passages' : 'Sentences'}{' '}
+                    on this tab belong to {studentDisplayName(student)} only.
+                  </Typography>
+                  <Button variant="contained" startIcon={<AddIcon />} onClick={handleNew}>
+                    Create {studentDisplayName(student)}’s first {kind}
+                  </Button>
+                </Stack>
+              </Box>
+            ) : (
             <>
               <Stack spacing={1.5} sx={{ mb: 1.5 }}>
                 {forcedKind ? null : (
@@ -646,11 +690,12 @@ export default function MultiWordPanel({
                   localeText={{
                     noRowsLabel: focusConceptId
                       ? `No ${kind}s match that focus${alsoConceptIds.length ? ' and also-includes' : ''}. Click Create ${kind} to make one.`
-                      : `No saved ${kind}s yet. Click Create ${kind} to make one.`,
+                      : `No ${kind}s match the current filters.`,
                   }}
                 />
               </Box>
             </>
+            )
           ) : (
             <>
               <CreateMultiWordPanel
@@ -682,12 +727,27 @@ export default function MultiWordPanel({
           overflow: { md: 'auto' },
         }}
       >
-        <MultiWordPreview
-          {...preview}
-          onEdit={mode === MODE_VIEW && selectedItem ? () => handleEditItem(selectedItem) : undefined}
-          onDelete={mode === MODE_VIEW && selectedItem ? () => setItemToDelete(selectedItem) : undefined}
-          deleting={deleting}
-        />
+        {mode === MODE_VIEW && !selectedItem ? (
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <StudentContentExplainer
+              kind={kind === 'passage' ? 'passage' : 'sentence'}
+              student={student}
+              empty={browseItems.length === 0}
+              selectHint={
+                browseItems.length
+                  ? `Select a ${kind} on the left to see focus, coverage, and concept weight.`
+                  : undefined
+              }
+            />
+          </Paper>
+        ) : (
+          <MultiWordPreview
+            {...preview}
+            onEdit={mode === MODE_VIEW && selectedItem ? () => handleEditItem(selectedItem) : undefined}
+            onDelete={mode === MODE_VIEW && selectedItem ? () => setItemToDelete(selectedItem) : undefined}
+            deleting={deleting}
+          />
+        )}
       </Box>
 
       <ConfirmDeleteDialog
