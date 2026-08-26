@@ -1687,11 +1687,7 @@ function AppShell({ user, signOut }) {
               </Button>
             </Stack>
 
-            <Tabs
-              value={mainTab}
-              onChange={handleMainTabChange}
-              sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
-            >
+            <Tabs value={mainTab} onChange={handleMainTabChange} sx={{ mb: 2 }}>
               <Tab label="Lesson Plan" />
               <Tab label="Scope & Sequence" />
               <Tab label="Content" />

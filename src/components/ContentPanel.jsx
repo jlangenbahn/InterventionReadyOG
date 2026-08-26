@@ -32,12 +32,7 @@ export default function ContentPanel({
         value={subTab}
         onChange={(_event, value) => setSubTab(value)}
         variant="fullWidth"
-        sx={{
-          mb: 2,
-          borderBottom: 1,
-          borderColor: 'divider',
-          '& .MuiTab-root': { minHeight: 48, minWidth: 0, px: { xs: 0.5, sm: 1 } },
-        }}
+        sx={{ mb: 2 }}
       >
         <Tab icon={<FormatListBulletedIcon />} iconPosition="start" label="Word lists" />
         <Tab icon={<ShortTextIcon />} iconPosition="start" label="Sentences" />

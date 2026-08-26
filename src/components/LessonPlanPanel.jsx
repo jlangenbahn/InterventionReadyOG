@@ -1459,12 +1459,7 @@ export default function LessonPlanPanel({
               value={lessonMode}
               onChange={(_event, value) => setLessonMode(value)}
               variant="fullWidth"
-              sx={{
-                mb: 2,
-                borderBottom: 1,
-                borderColor: 'divider',
-                '& .MuiTab-root': { minHeight: 48, minWidth: 0, px: { xs: 0.5, sm: 1 } },
-              }}
+              sx={{ mb: 2 }}
             >
               <Tab icon={<ViewListIcon />} iconPosition="start" label="Lessons" />
               <Tab
@@ -1529,8 +1524,7 @@ export default function LessonPlanPanel({
                   direction="row"
                   spacing={1}
                   alignItems="center"
-                  justifyContent="space-between"
-                  sx={{ mb: 1.5 }}
+                  sx={{ mb: 1.5, width: '100%' }}
                 >
                   <Tooltip title="Create a new lesson plan for this student.">
                     <Button
@@ -1551,6 +1545,7 @@ export default function LessonPlanPanel({
                       setShowGlobalLessons(value === 'global')
                     }}
                     sx={{
+                      ml: 'auto',
                       flexShrink: 0,
                       '& .MuiToggleButton-root': {
                         px: 1.75,

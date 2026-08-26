@@ -114,25 +114,12 @@ const chipSx = {
   },
 }
 
-function Placeholder({ tag, value }) {
-  const hasValue = value != null && String(value).trim() !== ''
-  if (hasValue) {
-    return (
-      <Box component="span" sx={{ color: 'inherit', fontFamily: 'inherit', fontWeight: 400 }}>
-        {value}
-      </Box>
-    )
-  }
+function Placeholder({ value }) {
+  const text = value != null ? String(value).trim() : ''
+  if (!text) return null
   return (
-    <Box
-      component="span"
-      sx={{
-        color: '#d32f2f',
-        fontFamily: '"Courier New", Courier, monospace',
-        fontWeight: 700,
-      }}
-    >
-      {tag}
+    <Box component="span" sx={{ color: 'inherit', fontFamily: 'inherit', fontWeight: 400 }}>
+      {text}
     </Box>
   )
 }
@@ -327,20 +314,20 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
           }}
         >
           <Box>
-            Student: <Placeholder tag="<<STUDENT>>" value={studentName} />
+            Student: <Placeholder value={studentName} />
           </Box>
           <Box>
-            Date: <Placeholder tag="<<DATE>>" value={date} />
+            Date: <Placeholder value={date} />
           </Box>
           <Box>
-            Lesson #: <Placeholder tag="<<LESSON>>" value={lessonNumber} />
+            Lesson #: <Placeholder value={lessonNumber} />
           </Box>
           <Box>
-            Instructor: <Placeholder tag="<<INSTRUCTOR>>" value={instructor} />
+            Instructor: <Placeholder value={instructor} />
           </Box>
           {lessonName ? (
             <Box sx={{ gridColumn: '1 / -1' }}>
-              Name: <Placeholder tag="<<NAME>>" value={lessonName} />
+              Name: <Placeholder value={lessonName} />
             </Box>
           ) : null}
         </Box>
@@ -352,7 +339,7 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <Box sx={rowSx}>
               <Box sx={labelSx}>SOAP Notes</Box>
-              <Box sx={contentSx}>{soapNotes || '[SOAP Notes Field]'}</Box>
+              <Box sx={contentSx}>{soapNotes || '\u00a0'}</Box>
             </Box>
             <Box sx={rowSx}>
               <Box sx={labelSx}>Drills</Box>
@@ -368,15 +355,15 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
           <Box sx={rowSx}>
             <Box sx={labelSx}>Review Words</Box>
             <Box sx={contentSx}>
-              {[0, 1, 2].map((index) => (
-                <Box key={index}>
-                  {index + 1}.{' '}
-                  <Placeholder
-                    tag={`Review concept #${index + 1}`}
-                    value={paddedReview[index]?.name || ''}
-                  />
-                </Box>
-              ))}
+              {paddedReview.some((list) => list?.name)
+                ? paddedReview
+                    .filter((list) => list?.name)
+                    .map((list, index) => (
+                      <Box key={list.id || list.name || index}>
+                        {index + 1}. <Placeholder value={list.name} />
+                      </Box>
+                    ))
+                : '\u00a0'}
             </Box>
           </Box>
         </Box>
@@ -388,9 +375,7 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <Box sx={rowSx}>
               <Box sx={labelSx}>New Concept</Box>
-              <Box sx={contentSx}>
-                <Placeholder tag="The new concept list" value={newConceptList?.name || ''} />
-              </Box>
+              <Box sx={contentSx}>{newConceptList?.name || '\u00a0'}</Box>
             </Box>
             <Box sx={rowSx}>
               <Box sx={labelSx}>Methods</Box>
@@ -457,7 +442,7 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
           </Typography>
           <Box sx={rowSx}>
             <Box sx={labelSx}>SOAP Notes</Box>
-            <Box sx={contentSx}>{reflectionNotes || '[Final SOAP Notes Field] | '}</Box>
+            <Box sx={contentSx}>{reflectionNotes || '\u00a0'}</Box>
           </Box>
         </Box>
       </Paper>

@@ -274,6 +274,70 @@ export function createAppTheme(mode = 'light') {
           },
         },
       },
+      MuiTabs: {
+        styleOverrides: {
+          root: {
+            minHeight: 40,
+            paddingTop: 4,
+            overflow: 'visible',
+            borderBottom: `2px solid ${isDark ? DARK.divider : BRAND.navy}`,
+            '& .MuiTabs-scroller': {
+              overflow: 'visible !important',
+            },
+          },
+          flexContainer: {
+            gap: 4,
+            alignItems: 'flex-end',
+          },
+          list: {
+            gap: 4,
+            alignItems: 'flex-end',
+          },
+          indicator: {
+            display: 'none',
+          },
+        },
+      },
+      MuiTab: {
+        styleOverrides: {
+          root: {
+            minHeight: 36,
+            minWidth: 0,
+            padding: '8px 22px 10px',
+            marginBottom: -2,
+            overflow: 'visible',
+            fontWeight: 700,
+            letterSpacing: '-0.01em',
+            color: isDark ? DARK.muted : BRAND.inkMuted,
+            backgroundColor: isDark ? '#1b2740' : '#d9e2ef',
+            border: `1px solid ${isDark ? DARK.divider : BRAND.navyMid}`,
+            borderBottom: `2px solid ${isDark ? DARK.divider : BRAND.navy}`,
+            borderRadius: 0,
+            clipPath: 'polygon(10px 0, calc(100% - 10px) 0, 100% 100%, 0 100%)',
+            zIndex: 0,
+            opacity: 1,
+            transition: 'background-color 120ms ease, color 120ms ease, z-index 0s',
+            '&.Mui-selected': {
+              color: isDark ? '#ffffff' : BRAND.navy,
+              backgroundColor: isDark ? DARK.paper : '#ffffff',
+              borderColor: isDark ? DARK.divider : BRAND.navy,
+              borderBottomColor: isDark ? DARK.paper : '#ffffff',
+              zIndex: 1,
+              fontWeight: 800,
+            },
+            '&:hover': {
+              color: isDark ? '#ffffff' : BRAND.navy,
+              backgroundColor: isDark ? '#243556' : '#c5d3e8',
+            },
+            '&.Mui-selected:hover': {
+              backgroundColor: isDark ? DARK.paper : '#ffffff',
+            },
+          },
+          iconWrapper: {
+            marginBottom: '0 !important',
+          },
+        },
+      },
       MuiButton: {
         styleOverrides: {
           root: { fontFamily: FONT_FAMILY },

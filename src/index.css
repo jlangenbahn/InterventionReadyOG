@@ -10,3 +10,79 @@ body {
   font-family: "Century Gothic", "Comic Sans MS", Andika, sans-serif;
   letter-spacing: -0.02em;
 }
+
+/* Folder-tab shape for Amplify Authenticator (Sign In / Create Account). */
+.amplify-tabs {
+  overflow: visible;
+}
+
+.amplify-tabs__list {
+  gap: 4px;
+  align-items: flex-end;
+  border-top: none !important;
+  border-bottom: 2px solid #002366 !important;
+}
+
+.amplify-tabs__item {
+  min-height: 36px;
+  padding: 8px 22px 10px !important;
+  margin-bottom: -2px;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em;
+  color: #5c6370 !important;
+  background-color: #d9e2ef !important;
+  border: 1px solid #3d5a99 !important;
+  border-bottom: 2px solid #002366 !important;
+  border-radius: 0 !important;
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 100%, 0 100%);
+  z-index: 0;
+}
+
+.amplify-tabs__item:hover {
+  color: #002366 !important;
+  background-color: #c5d3e8 !important;
+}
+
+.amplify-tabs__item--active,
+.amplify-tabs__item[aria-selected="true"] {
+  color: #002366 !important;
+  background-color: #ffffff !important;
+  border-color: #002366 !important;
+  border-bottom-color: #ffffff !important;
+  font-weight: 800 !important;
+  z-index: 1;
+}
+
+.amplify-tabs__item--active:hover,
+.amplify-tabs__item[aria-selected="true"]:hover {
+  background-color: #ffffff !important;
+}
+
+[data-amplify-color-mode="dark"] .amplify-tabs__list {
+  border-bottom-color: #2a3a55 !important;
+}
+
+[data-amplify-color-mode="dark"] .amplify-tabs__item {
+  color: #a8b0bc !important;
+  background-color: #1b2740 !important;
+  border-color: #2a3a55 !important;
+  border-bottom-color: #2a3a55 !important;
+}
+
+[data-amplify-color-mode="dark"] .amplify-tabs__item:hover {
+  color: #ffffff !important;
+  background-color: #243556 !important;
+}
+
+[data-amplify-color-mode="dark"] .amplify-tabs__item--active,
+[data-amplify-color-mode="dark"] .amplify-tabs__item[aria-selected="true"] {
+  color: #ffffff !important;
+  background-color: #152036 !important;
+  border-color: #2a3a55 !important;
+  border-bottom-color: #152036 !important;
+}
+
+[data-amplify-color-mode="dark"] .amplify-tabs__item--active:hover,
+[data-amplify-color-mode="dark"] .amplify-tabs__item[aria-selected="true"]:hover {
+  background-color: #152036 !important;
+}
