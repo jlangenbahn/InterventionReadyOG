@@ -115,7 +115,8 @@ const chipSx = {
 }
 
 function Placeholder({ tag, value }) {
-  if (value) {
+  const hasValue = value != null && String(value).trim() !== ''
+  if (hasValue) {
     return (
       <Box component="span" sx={{ color: 'inherit', fontFamily: 'inherit', fontWeight: 400 }}>
         {value}

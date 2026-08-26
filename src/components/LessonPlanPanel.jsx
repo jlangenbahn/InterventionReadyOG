@@ -41,6 +41,7 @@ import {
   fetchStudentLessonPlan,
   fetchStudentLessons,
   nextLessonNumber,
+  resolvedLessonNumber,
   parseScopeAndSequence,
   formatLessonDisplayName,
   defaultLessonPlanName,
@@ -332,6 +333,8 @@ export default function LessonPlanPanel({
 }) {
   const printRef = useRef(null)
   const lastGeneratedNameRef = useRef('')
+  const studentIdRef = useRef(student?.id)
+  studentIdRef.current = student?.id
   const [loading, setLoading] = useState(false)
   const [payload, setPayload] = useState(null)
   const [listSlots, setListSlots] = useState(EMPTY_LIST_SLOTS)
@@ -381,15 +384,18 @@ export default function LessonPlanPanel({
       setPayload(null)
       return
     }
+    const requestStudentId = student.id
     setLoading(true)
     try {
-      const data = await fetchStudentLessonPlan(student.id)
+      const data = await fetchStudentLessonPlan(requestStudentId)
+      if (studentIdRef.current !== requestStudentId) return
       setPayload(data)
       setError('')
     } catch (err) {
+      if (studentIdRef.current !== requestStudentId) return
       setError(err instanceof Error ? err.message : 'Failed to load lesson plan')
     } finally {
-      setLoading(false)
+      if (studentIdRef.current === requestStudentId) setLoading(false)
     }
   }, [student?.id, setError])
 
@@ -398,16 +404,19 @@ export default function LessonPlanPanel({
       setSavedLessons([])
       return []
     }
+    const requestStudentId = student.id
     setLoadingLessons(true)
     try {
-      const lessons = await fetchStudentLessons(student.id)
+      const lessons = await fetchStudentLessons(requestStudentId)
+      if (studentIdRef.current !== requestStudentId) return []
       setSavedLessons(lessons)
       return lessons
     } catch (err) {
+      if (studentIdRef.current !== requestStudentId) return []
       setError(err instanceof Error ? err.message : 'Failed to load saved lesson plans')
       return []
     } finally {
-      setLoadingLessons(false)
+      if (studentIdRef.current === requestStudentId) setLoadingLessons(false)
     }
   }, [student?.id, setError])
 
@@ -441,6 +450,8 @@ export default function LessonPlanPanel({
   }, [showGlobalLessons, loadGlobalTemplates])
 
   useEffect(() => {
+    setPayload(null)
+    setSavedLessons([])
     setListSlots({ ...EMPTY_LIST_SLOTS })
     setSentenceSlots({ ...EMPTY_SENTENCE_SLOTS })
     setPassageSlots({ ...EMPTY_PASSAGE_SLOTS })
@@ -594,9 +605,15 @@ export default function LessonPlanPanel({
     return passages.filter((passage) => allowed.has(passage.focusConceptId))
   }, [passages, focusConceptIds])
 
+  const studentLessons = useMemo(
+    () =>
+      (savedLessons ?? []).filter((lesson) => !lesson.studentID || lesson.studentID === student?.id),
+    [savedLessons, student?.id],
+  )
+
   const savedLessonRows = useMemo(
     () =>
-      [...savedLessons]
+      [...studentLessons]
         .sort((a, b) => {
           const byDate = String(b.date ?? '').localeCompare(String(a.date ?? ''))
           if (byDate) return byDate
@@ -622,7 +639,7 @@ export default function LessonPlanPanel({
             scoreLabel,
           }
         }),
-    [savedLessons],
+    [studentLessons],
   )
 
   const lessonSelectionModel = useMemo(
@@ -650,7 +667,7 @@ export default function LessonPlanPanel({
             aria-label={`Edit ${params.row.name || 'lesson'}`}
             onClick={(event) => {
               event.stopPropagation()
-              const lesson = savedLessons.find((item) => item.id === params.id)
+              const lesson = studentLessons.find((item) => item.id === params.id)
               if (lesson) {
                 applyLesson(lesson)
                 setLessonMode(LESSON_MODE_CREATE)
@@ -664,7 +681,7 @@ export default function LessonPlanPanel({
             aria-label={`Share ${params.row.name || 'lesson'} with other students`}
             onClick={(event) => {
               event.stopPropagation()
-              const lesson = savedLessons.find((item) => item.id === params.id)
+              const lesson = studentLessons.find((item) => item.id === params.id)
               if (lesson) setShareLesson(lesson)
             }}
           >
@@ -675,7 +692,7 @@ export default function LessonPlanPanel({
             aria-label={`Publish ${params.row.name || 'lesson'} as a public template`}
             onClick={(event) => {
               event.stopPropagation()
-              const lesson = savedLessons.find((item) => item.id === params.id)
+              const lesson = studentLessons.find((item) => item.id === params.id)
               if (lesson) setPublishLesson(lesson)
             }}
           >
@@ -694,7 +711,7 @@ export default function LessonPlanPanel({
         </Stack>
       ),
     }),
-    [savedLessons],
+    [studentLessons],
   )
 
   const viewColumns = useMemo(
@@ -817,7 +834,11 @@ export default function LessonPlanPanel({
   const sentenceIds = idsFromSlots(sentenceSlots, SENTENCE_SLOT_KEYS)
   const passageIds = idsFromSlots(passageSlots, PASSAGE_SLOT_KEYS)
 
-  const lessonNumber = loadedLesson?.lessonNumber ?? nextLessonNumber(savedLessons)
+  const lessonNumber = loadedLesson
+    ? resolvedLessonNumber(loadedLesson, studentLessons)
+    : lessonMode === LESSON_MODE_CREATE
+      ? nextLessonNumber(studentLessons)
+      : ''
   const dateLabel = formatLessonDate(lessonDate)
   const generatedLessonName = defaultLessonPlanName(
     lessonNumber,
@@ -1035,6 +1056,7 @@ export default function LessonPlanPanel({
   }
 
   function applyLesson(lesson, { previewOnly = false } = {}) {
+    if (lesson?.studentID && student?.id && lesson.studentID !== student.id) return
     setPreviewLoading(true)
     const data = getLessonPlan(lesson)
     const nextListSlots = {
@@ -1111,18 +1133,21 @@ export default function LessonPlanPanel({
       || data?.snapshots?.lists?.newConcept?.name
       || conceptById.get(inferredNewConceptId)?.concept
       || ''
-    lastGeneratedNameRef.current = defaultLessonPlanName(lesson?.lessonNumber, loadedConcept)
+    lastGeneratedNameRef.current = defaultLessonPlanName(
+      resolvedLessonNumber(lesson, studentLessons),
+      loadedConcept,
+    )
     setLessonName(loadedName)
   }
 
   useEffect(() => {
     if (!openLessonId || !student?.id) return
     if (loadedLesson?.id === openLessonId) return
-    const lesson = savedLessons.find((item) => item.id === openLessonId)
+    const lesson = studentLessons.find((item) => item.id === openLessonId)
     if (!lesson) return
     applyLesson(lesson)
     setLessonMode(LESSON_MODE_VIEW)
-  }, [openLessonId, student?.id, savedLessons, loadedLesson?.id])
+  }, [openLessonId, student?.id, studentLessons, loadedLesson?.id])
 
   function handleStartCreate() {
     startNewLesson()
@@ -1594,7 +1619,7 @@ export default function LessonPlanPanel({
                       previewGlobalLesson(params.id)
                       return
                     }
-                    const lesson = savedLessons.find((item) => item.id === params.id)
+                    const lesson = studentLessons.find((item) => item.id === params.id)
                     if (lesson) applyLesson(lesson)
                   }}
                   rowSelectionModel={viewingGlobal ? globalSelectionModel : lessonSelectionModel}
@@ -1665,7 +1690,7 @@ export default function LessonPlanPanel({
           <DataEntryPanel
             student={student}
             lesson={loadedLesson}
-            savedLessons={savedLessons}
+            savedLessons={studentLessons}
             setError={setError}
             onLessonsChanged={loadSavedLessons}
             onLessonUpdated={(next) => {

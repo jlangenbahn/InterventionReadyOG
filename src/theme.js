@@ -161,8 +161,8 @@ export const amplifyTheme = {
     colors: {
       brand: {
         primary: {
-          10: { value: BRAND.grayBg },
-          20: { value: '#d6e4fa' },
+          10: { value: { light: BRAND.grayBg, dark: '#1b2740' } },
+          20: { value: { light: '#d6e4fa', dark: '#243556' } },
           40: { value: BRAND.glow },
           60: { value: BRAND.sky },
           80: { value: BRAND.navy },
@@ -171,12 +171,12 @@ export const amplifyTheme = {
         },
       },
       background: {
-        primary: { value: BRAND.grayBg },
-        secondary: { value: BRAND.grayPaper },
+        primary: { value: { light: BRAND.grayBg, dark: '#0c1220' } },
+        secondary: { value: { light: BRAND.grayPaper, dark: '#152036' } },
       },
       font: {
-        primary: { value: BRAND.ink },
-        secondary: { value: BRAND.inkMuted },
+        primary: { value: { light: BRAND.ink, dark: '#e8eaed' } },
+        secondary: { value: { light: BRAND.inkMuted, dark: '#a8b0bc' } },
       },
     },
     fonts: {
@@ -188,104 +188,126 @@ export const amplifyTheme = {
   },
 }
 
-export const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: {
-      main: BRAND.navy,
-      light: BRAND.navyMid,
-      dark: BRAND.navyDark,
-      contrastText: '#ffffff',
+const DARK = {
+  bg: '#0c1220',
+  paper: '#152036',
+  ink: '#e8eaed',
+  muted: '#a8b0bc',
+  divider: '#2a3a55',
+}
+
+export function createAppTheme(mode = 'light') {
+  const isDark = mode === 'dark'
+  return createTheme({
+    palette: {
+      mode: isDark ? 'dark' : 'light',
+      primary: {
+        main: isDark ? BRAND.sky : BRAND.navy,
+        light: BRAND.navyMid,
+        dark: BRAND.navyDark,
+        contrastText: '#ffffff',
+      },
+      secondary: {
+        main: BRAND.glow,
+        light: isDark ? '#3d5a99' : '#d6e4fa',
+        dark: BRAND.skyDark,
+        contrastText: BRAND.navyDark,
+      },
+      background: {
+        default: isDark ? DARK.bg : BRAND.grayBg,
+        paper: isDark ? DARK.paper : BRAND.grayPaper,
+      },
+      text: {
+        primary: isDark ? DARK.ink : BRAND.ink,
+        secondary: isDark ? DARK.muted : BRAND.inkMuted,
+      },
+      divider: isDark ? DARK.divider : BRAND.gray,
+      grey: {
+        100: isDark ? '#1b2740' : '#f4f5f7',
+        200: isDark ? DARK.paper : BRAND.grayBg,
+        300: isDark ? DARK.divider : BRAND.gray,
+        400: isDark ? DARK.muted : BRAND.grayMid,
+        700: isDark ? DARK.muted : BRAND.inkMuted,
+        900: isDark ? DARK.ink : BRAND.ink,
+      },
     },
-    secondary: {
-      main: BRAND.glow,
-      light: '#d6e4fa',
-      dark: BRAND.skyDark,
-      contrastText: BRAND.navyDark,
+    typography: {
+      fontFamily: FONT_FAMILY,
+      htmlFontSize: 16,
+      fontSize: 13,
+      fontWeightRegular: 400,
+      fontWeightMedium: 600,
+      fontWeightBold: 700,
+      h5: { fontWeight: 700, fontSize: '1.15rem', letterSpacing: '-0.02em', lineHeight: 1.25 },
+      h6: { fontWeight: 700, fontSize: '0.95rem', letterSpacing: '-0.02em', lineHeight: 1.25 },
+      subtitle1: { fontWeight: 650, fontSize: '0.85rem', letterSpacing: '-0.015em', lineHeight: 1.3 },
+      subtitle2: { fontWeight: 650, fontSize: '0.78rem', letterSpacing: '-0.015em', lineHeight: 1.3 },
+      body1: { fontSize: '0.8125rem', letterSpacing: '-0.02em', lineHeight: 1.35 },
+      body2: { fontSize: '0.75rem', letterSpacing: '-0.02em', lineHeight: 1.3 },
+      button: {
+        fontWeight: 650,
+        fontSize: '0.75rem',
+        letterSpacing: '-0.01em',
+        textTransform: 'none',
+      },
+      caption: { fontSize: '0.68rem', letterSpacing: '-0.01em', lineHeight: 1.25 },
+      overline: { fontSize: '0.65rem', letterSpacing: '0.04em', fontWeight: 700 },
     },
-    background: {
-      default: BRAND.grayBg,
-      paper: BRAND.grayPaper,
-    },
-    text: {
-      primary: BRAND.ink,
-      secondary: BRAND.inkMuted,
-    },
-    divider: BRAND.gray,
-    grey: {
-      100: '#f4f5f7',
-      200: BRAND.grayBg,
-      300: BRAND.gray,
-      400: BRAND.grayMid,
-      700: BRAND.inkMuted,
-      900: BRAND.ink,
-    },
-  },
-  typography: {
-    fontFamily: FONT_FAMILY,
-    htmlFontSize: 16,
-    fontSize: 13,
-    fontWeightRegular: 400,
-    fontWeightMedium: 600,
-    fontWeightBold: 700,
-    h5: { fontWeight: 700, fontSize: '1.15rem', letterSpacing: '-0.02em', lineHeight: 1.25 },
-    h6: { fontWeight: 700, fontSize: '0.95rem', letterSpacing: '-0.02em', lineHeight: 1.25 },
-    subtitle1: { fontWeight: 650, fontSize: '0.85rem', letterSpacing: '-0.015em', lineHeight: 1.3 },
-    subtitle2: { fontWeight: 650, fontSize: '0.78rem', letterSpacing: '-0.015em', lineHeight: 1.3 },
-    body1: { fontSize: '0.8125rem', letterSpacing: '-0.02em', lineHeight: 1.35 },
-    body2: { fontSize: '0.75rem', letterSpacing: '-0.02em', lineHeight: 1.3 },
-    button: {
-      fontWeight: 650,
-      fontSize: '0.75rem',
-      letterSpacing: '-0.01em',
-      textTransform: 'none',
-    },
-    caption: { fontSize: '0.68rem', letterSpacing: '-0.01em', lineHeight: 1.25 },
-    overline: { fontSize: '0.65rem', letterSpacing: '0.04em', fontWeight: 700 },
-  },
-  shape: { borderRadius: 10 },
-  components: {
-    MuiCssBaseline: {
-      styleOverrides: {
-        body: {
-          fontFamily: FONT_FAMILY,
-          letterSpacing: '-0.02em',
-          backgroundColor: BRAND.grayBg,
-          color: BRAND.ink,
+    shape: { borderRadius: 10 },
+    components: {
+      MuiCssBaseline: {
+        styleOverrides: {
+          html: { colorScheme: isDark ? 'dark' : 'light' },
+          body: {
+            fontFamily: FONT_FAMILY,
+            letterSpacing: '-0.02em',
+            backgroundColor: isDark ? DARK.bg : BRAND.grayBg,
+            color: isDark ? DARK.ink : BRAND.ink,
+          },
+        },
+      },
+      MuiAppBar: {
+        styleOverrides: {
+          root: {
+            backgroundColor: BRAND.navy,
+            color: '#ffffff',
+          },
+        },
+      },
+      MuiButton: {
+        styleOverrides: {
+          root: { fontFamily: FONT_FAMILY },
+        },
+      },
+      MuiTypography: {
+        styleOverrides: {
+          root: { fontFamily: FONT_FAMILY },
+        },
+      },
+      MuiInputBase: {
+        styleOverrides: {
+          root: { fontFamily: FONT_FAMILY, fontSize: '0.8125rem' },
+        },
+      },
+      MuiDataGrid: {
+        styleOverrides: {
+          root: {
+            fontFamily: FONT_FAMILY,
+            fontSize: '0.75rem',
+            letterSpacing: '-0.02em',
+          },
+          columnHeaderTitle: {
+            fontFamily: FONT_FAMILY,
+            fontWeight: 700,
+            letterSpacing: '-0.015em',
+          },
+          cell: {
+            fontFamily: FONT_FAMILY,
+          },
         },
       },
     },
-    MuiButton: {
-      styleOverrides: {
-        root: { fontFamily: FONT_FAMILY },
-      },
-    },
-    MuiTypography: {
-      styleOverrides: {
-        root: { fontFamily: FONT_FAMILY },
-      },
-    },
-    MuiInputBase: {
-      styleOverrides: {
-        root: { fontFamily: FONT_FAMILY, fontSize: '0.8125rem' },
-      },
-    },
-    MuiDataGrid: {
-      styleOverrides: {
-        root: {
-          fontFamily: FONT_FAMILY,
-          fontSize: '0.75rem',
-          letterSpacing: '-0.02em',
-        },
-        columnHeaderTitle: {
-          fontFamily: FONT_FAMILY,
-          fontWeight: 700,
-          letterSpacing: '-0.015em',
-        },
-        cell: {
-          fontFamily: FONT_FAMILY,
-        },
-      },
-    },
-  },
-})
+  })
+}
+
+export const theme = createAppTheme('light')

@@ -447,12 +447,38 @@ export function studentDisplayName(student) {
   return [student?.firstName, student?.lastName].filter(Boolean).join(' ') || 'Unnamed student'
 }
 
+export function asLessonNumber(value) {
+  if (value == null || value === '') return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
 export function nextLessonNumber(lessons) {
   const numbers = asArray(lessons)
-    .map((lesson) => Number(lesson?.lessonNumber))
-    .filter((n) => Number.isFinite(n))
+    .map((lesson) => asLessonNumber(lesson?.lessonNumber))
+    .filter((n) => n != null)
   if (!numbers.length) return asArray(lessons).length + 1
   return Math.max(...numbers) + 1
+}
+
+/** Stored number for a saved lesson; never the next-new-lesson value. */
+export function resolvedLessonNumber(lesson, lessons = []) {
+  const stored = asLessonNumber(lesson?.lessonNumber)
+  if (stored != null) return stored
+  if (!lesson?.id) return nextLessonNumber(lessons)
+  const ordered = asArray(lessons)
+    .filter((item) => item?.id)
+    .sort((a, b) => {
+      const byNumber =
+        (asLessonNumber(a.lessonNumber) ?? Number.POSITIVE_INFINITY)
+        - (asLessonNumber(b.lessonNumber) ?? Number.POSITIVE_INFINITY)
+      if (byNumber) return byNumber
+      const byDate = String(a.date ?? '').localeCompare(String(b.date ?? ''))
+      if (byDate) return byDate
+      return String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? ''))
+    })
+  const index = ordered.findIndex((item) => item.id === lesson.id)
+  return index >= 0 ? index + 1 : nextLessonNumber(lessons)
 }
 
 export const SCORE_UNSCORED = 'unscored'

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, createContext } from 'react'
 import { Authenticator, ThemeProvider as AmplifyThemeProvider } from '@aws-amplify/ui-react'
 import {
   Alert,
@@ -45,6 +45,8 @@ import EditIcon from '@mui/icons-material/Edit'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import LockIcon from '@mui/icons-material/Lock'
+import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined'
+import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
 import Groups3Icon from '@mui/icons-material/Groups3'
@@ -61,7 +63,7 @@ import { client } from './lib/amplifyClient'
 import { deleteInstructorGroup, fetchInstructorGroups, saveInstructorGroup } from './lib/groups'
 import { deleteStudentCascade, updateStudent } from './lib/crudRecords'
 import { downloadCsvTable, downloadXlsxTable, sanitizeFileStem } from './lib/exportTable'
-import { amplifyTheme, masteryRowSx, theme } from './theme'
+import { amplifyTheme, BRAND, createAppTheme, masteryRowSx } from './theme'
 import readyOgLogo from './assets/readyog-logo.png'
 
 const DRAWER_WIDTH = 300
@@ -71,6 +73,38 @@ const TAB_SCOPE = 1
 const TAB_CONTENT = 2
 const TAB_DATA = 3
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
+const COLOR_MODE_KEY = 'readyog-color-mode'
+
+const ColorModeContext = createContext({
+  mode: 'light',
+  toggleColorMode: () => {},
+})
+
+function readStoredColorMode() {
+  try {
+    const stored = window.localStorage.getItem(COLOR_MODE_KEY)
+    if (stored === 'dark' || stored === 'light') return stored
+  } catch {
+    // Private mode or blocked storage.
+  }
+  return 'light'
+}
+
+function ColorModeToggle({ color = 'inherit' }) {
+  const { mode, toggleColorMode } = useContext(ColorModeContext)
+  const dark = mode === 'dark'
+  return (
+    <Tooltip title={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
+      <IconButton
+        color={color}
+        onClick={toggleColorMode}
+        aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+      >
+        {dark ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}
+      </IconButton>
+    </Tooltip>
+  )
+}
 
 
 const scopeColumnDefs = (locked) => [
@@ -894,7 +928,7 @@ function NavSectionHeader({
         py: 1,
         display: 'flex',
         alignItems: 'center',
-        bgcolor: selected ? 'rgba(168, 198, 250, 0.32)' : 'transparent',
+        bgcolor: selected ? 'action.selected' : 'transparent',
       }}
     >
       <IconButton
@@ -1353,8 +1387,8 @@ function AppShell({ user, signOut }) {
           zIndex: (t) => t.zIndex.drawer + 1,
           borderBottom: '3px solid',
           borderColor: 'secondary.main',
-          bgcolor: 'primary.main',
-          color: 'primary.contrastText',
+          bgcolor: BRAND.navy,
+          color: '#ffffff',
         }}
       >
         <Toolbar sx={{ gap: 2 }}>
@@ -1395,6 +1429,7 @@ function AppShell({ user, signOut }) {
           <Button startIcon={<LogoutIcon />} onClick={signOut} color="inherit">
             Sign out
           </Button>
+          <ColorModeToggle />
         </Toolbar>
       </AppBar>
 
@@ -1808,14 +1843,47 @@ function AppShell({ user, signOut }) {
 }
 
 export default function App() {
+  const [mode, setMode] = useState(readStoredColorMode)
+  const colorMode = useMemo(
+    () => ({
+      mode,
+      toggleColorMode: () => {
+        setMode((current) => {
+          const next = current === 'dark' ? 'light' : 'dark'
+          try {
+            window.localStorage.setItem(COLOR_MODE_KEY, next)
+          } catch {
+            // Private mode or blocked storage.
+          }
+          return next
+        })
+      },
+    }),
+    [mode],
+  )
+  const muiTheme = useMemo(() => createAppTheme(mode), [mode])
+
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <AmplifyThemeProvider theme={amplifyTheme}>
-        <Authenticator loginMechanisms={['email']}>
-          {({ signOut, user }) => <AppShell user={user} signOut={signOut} />}
-        </Authenticator>
-      </AmplifyThemeProvider>
-    </ThemeProvider>
+    <ColorModeContext.Provider value={colorMode}>
+      <ThemeProvider theme={muiTheme}>
+        <CssBaseline enableColorScheme />
+        <AmplifyThemeProvider theme={amplifyTheme} colorMode={mode}>
+          <Authenticator
+            loginMechanisms={['email']}
+            components={{
+              Header() {
+                return (
+                  <Box sx={{ position: 'fixed', top: 8, right: 8, zIndex: 1300 }}>
+                    <ColorModeToggle color="primary" />
+                  </Box>
+                )
+              },
+            }}
+          >
+            {({ signOut, user }) => <AppShell user={user} signOut={signOut} />}
+          </Authenticator>
+        </AmplifyThemeProvider>
+      </ThemeProvider>
+    </ColorModeContext.Provider>
   )
 }
