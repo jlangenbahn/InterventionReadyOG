@@ -264,6 +264,56 @@ export function eventsForDay(items, day) {
   })
 }
 
+/** Timed calendar items in the Monday–Friday work week containing `weekStart`. */
+export function eventsForWorkWeek(items, weekStart) {
+  const start = startOfWorkWeek(weekStart)
+  const end = addDays(start, 5)
+  return (items ?? [])
+    .filter((item) => {
+      const at = parseScheduleDate(item?.startAt)
+      return at && at >= start && at < end
+    })
+    .sort((a, b) => {
+      const byStart = String(a.startAt ?? '').localeCompare(String(b.startAt ?? ''))
+      if (byStart) return byStart
+      return String(a.id ?? '').localeCompare(String(b.id ?? ''))
+    })
+}
+
+/**
+ * Flatten calendar items into one entry per student, in chronological order.
+ * Group lessons expand to each attendee so every student plan can be previewed.
+ */
+export function expandScheduledLessonEntries(items, studentsById, groupsById) {
+  const entries = []
+  for (const item of items ?? []) {
+    const attendees = item?.attendees?.length
+      ? item.attendees
+      : item?.studentID
+        ? [{ studentId: item.studentID, lessonId: item.lessonID }]
+        : []
+    const groupName = item?.groupID
+      ? groupsById?.get?.(item.groupID)?.name || 'Group'
+      : null
+    attendees.forEach((attendee, index) => {
+      const studentId = attendee?.studentId
+      if (!studentId) return
+      entries.push({
+        key: `${item.id}:${studentId}:${index}`,
+        eventId: item.id,
+        studentId,
+        lessonId: attendee.lessonId || null,
+        student: studentsById?.get?.(studentId) ?? null,
+        startAt: item.startAt,
+        endAt: item.endAt,
+        title: item.title || '',
+        groupName,
+      })
+    })
+  }
+  return entries
+}
+
 /**
  * Pack overlapping timed events into columns, Outlook-style.
  * Returns { col, colCount } per event id.

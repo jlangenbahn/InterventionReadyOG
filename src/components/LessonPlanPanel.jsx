@@ -68,60 +68,9 @@ import {
 import PublishLessonTemplateDialog from './PublishLessonTemplateDialog'
 import HelpTip from './HelpTip'
 import { BRAND, globalLessonGridSx } from '../theme'
+import { LESSON_PLAN_PRINT_PAGE_STYLE } from '../lib/lessonPlanPrint'
 
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
-
-const PRINT_PAGE_STYLE = `
-  @page { size: 8.5in 11in; margin: 0.5in; }
-  html, body {
-    background: transparent !important;
-    margin: 0;
-    padding: 0;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .lesson-plan-print-root {
-    box-shadow: none !important;
-    padding: 0 !important;
-    max-width: 100% !important;
-    background: transparent !important;
-  }
-  .lesson-plan-page {
-    box-shadow: none !important;
-    padding: 0 !important;
-    max-width: 100% !important;
-    border-radius: 0 !important;
-  }
-  .lesson-plan-page-2,
-  .lesson-plan-page-3,
-  .lesson-plan-page-4 {
-    break-before: page;
-    page-break-before: always;
-  }
-  .lesson-plan-reader-page {
-    background: #ffffff !important;
-    color: #333333 !important;
-    font-family: "Century Gothic", "Comic Sans MS", Andika, sans-serif !important;
-    font-size: 24px !important;
-    font-weight: 400 !important;
-    font-style: normal !important;
-    line-height: 1.6 !important;
-    letter-spacing: 0.04em !important;
-    text-align: left !important;
-    text-transform: none !important;
-    text-decoration: none !important;
-  }
-  .lesson-plan-page:not(.lesson-plan-reader-page) {
-    font-family: "Century Gothic", "Comic Sans MS", Andika, sans-serif !important;
-    font-size: 11px !important;
-    letter-spacing: -0.02em !important;
-    line-height: 1.25 !important;
-    color: #1a2332 !important;
-  }
-  .lesson-plan-screen-only {
-    display: none !important;
-  }
-`
 
 const EMPTY_LIST_SLOTS = {
   newConcept: null,
@@ -376,7 +325,7 @@ export default function LessonPlanPanel({
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: `Lesson Plan – ${studentDisplayName(student)}`,
-    pageStyle: PRINT_PAGE_STYLE,
+    pageStyle: LESSON_PLAN_PRINT_PAGE_STYLE,
   })
 
   const load = useCallback(async () => {

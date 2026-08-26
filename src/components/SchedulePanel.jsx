@@ -29,9 +29,11 @@ import EditIcon from '@mui/icons-material/Edit'
 import GroupsIcon from '@mui/icons-material/Groups'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import PersonIcon from '@mui/icons-material/Person'
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import SaveIcon from '@mui/icons-material/Save'
 import TodayIcon from '@mui/icons-material/Today'
 import ConfirmDeleteDialog from './ConfirmDeleteDialog'
+import WeekLessonPlansPreview from './WeekLessonPlansPreview'
 import {
   fetchLessonsForStudents,
   fetchStudentLessons,
@@ -46,6 +48,8 @@ import {
   ensureGroupLessonAttendees,
   eventScheduleColor,
   eventsForDay,
+  eventsForWorkWeek,
+  expandScheduledLessonEntries,
   fetchScheduledLessons,
   formatClock,
   formatDayName,
@@ -69,6 +73,7 @@ import {
 import { BRAND } from '../theme'
 
 const DETAIL_WIDTH = 400
+const WEEK_PREVIEW_WIDTH = 880
 const SLOT_MINUTES = 30
 const SLOT_PX = 44
 const GUTTER_PX = 64
@@ -177,6 +182,7 @@ export default function SchedulePanel({
   setError,
   onOpenStudent,
   createNonce = 0,
+  instructor = '',
 }) {
   const [view, setView] = useState('workWeek')
   const [anchor, setAnchor] = useState(() => new Date())
@@ -190,6 +196,9 @@ export default function SchedulePanel({
   const [loadingLessons, setLoadingLessons] = useState(false)
   const [itemToDelete, setItemToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [weekPreviewOpen, setWeekPreviewOpen] = useState(false)
+  const [weekPreviewLoading, setWeekPreviewLoading] = useState(false)
+  const [weekEntries, setWeekEntries] = useState([])
 
   const selectedItem = useMemo(
     () => items.find((item) => item.id === selectedId) ?? null,
@@ -226,6 +235,7 @@ export default function SchedulePanel({
 
   const beginCreate = useCallback(
     (slotStart) => {
+      setWeekPreviewOpen(false)
       setSelectedId(null)
       setEditing(true)
       setDraft(emptyDraft(students, groups, slotStart))
@@ -235,6 +245,7 @@ export default function SchedulePanel({
 
   useEffect(() => {
     if (!createNonce) return
+    setWeekPreviewOpen(false)
     setSelectedId(null)
     setEditing(true)
     setDraft(emptyDraft(students, groups))
@@ -243,12 +254,14 @@ export default function SchedulePanel({
 
   const selectItem = useCallback((item) => {
     if (!item?.id) return
+    setWeekPreviewOpen(false)
     setSelectedId(item.id)
     setEditing(false)
     setDraft(itemToDraft(item))
   }, [])
 
   const closeDetail = useCallback(() => {
+    setWeekPreviewOpen(false)
     setSelectedId(null)
     setDraft(null)
     setEditing(false)
@@ -262,6 +275,55 @@ export default function SchedulePanel({
     () => new Map(groups.map((group) => [group.id, group])),
     [groups],
   )
+
+  const openWeekPreview = useCallback(() => {
+    setView('workWeek')
+    setEditing(false)
+    setWeekPreviewLoading(true)
+    setWeekPreviewOpen(true)
+  }, [])
+
+  useEffect(() => {
+    if (!weekPreviewOpen) {
+      setWeekEntries([])
+      setWeekPreviewLoading(false)
+      return undefined
+    }
+    let cancelled = false
+    setWeekPreviewLoading(true)
+    const weekItems = eventsForWorkWeek(items, weekStart)
+    const entries = expandScheduledLessonEntries(weekItems, studentsById, groupsById)
+    const studentIds = [...new Set(entries.map((entry) => entry.studentId).filter(Boolean))]
+    if (!studentIds.length) {
+      setWeekEntries(entries)
+      setWeekPreviewLoading(false)
+      return undefined
+    }
+    setWeekPreviewLoading(true)
+    fetchLessonsForStudents(studentIds)
+      .then((lessons) => {
+        if (cancelled) return
+        const byId = new Map((lessons ?? []).map((lesson) => [lesson.id, lesson]))
+        setWeekEntries(
+          entries.map((entry) => ({
+            ...entry,
+            lesson: entry.lessonId ? byId.get(entry.lessonId) ?? null : null,
+          })),
+        )
+        setError('')
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setWeekEntries(entries)
+        setError(err instanceof Error ? err.message : 'Failed to load this week’s lesson plans')
+      })
+      .finally(() => {
+        if (!cancelled) setWeekPreviewLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [weekPreviewOpen, items, weekStart, studentsById, groupsById, setError])
 
   const selectedGroup = groupsById.get(draft?.groupID) ?? null
   const lessonStudentIds = useMemo(() => {
@@ -813,6 +875,18 @@ export default function SchedulePanel({
   }
 
   function renderDetail() {
+    if (weekPreviewOpen) {
+      return (
+        <WeekLessonPlansPreview
+          weekLabel={formatWeekRange(weekStart)}
+          entries={weekEntries}
+          loading={weekPreviewLoading}
+          instructor={instructor}
+          onClose={closeDetail}
+        />
+      )
+    }
+
     if (!draft) {
       return (
         <Stack spacing={2} sx={{ p: 2 }}>
@@ -891,6 +965,17 @@ export default function SchedulePanel({
               Month
             </ToggleButton>
           </ToggleButtonGroup>
+        <Tooltip title="Preview this week’s lesson plans, then save them as a PDF">
+          <span>
+            <Button
+              variant={weekPreviewOpen ? 'contained' : 'outlined'}
+              startIcon={<PictureAsPdfIcon />}
+              onClick={openWeekPreview}
+            >
+              This week’s plans
+            </Button>
+          </span>
+        </Tooltip>
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => beginCreate()}>
             New lesson
           </Button>
@@ -1154,13 +1239,13 @@ export default function SchedulePanel({
 
       <Box
         sx={{
-          width: draft ? DETAIL_WIDTH : 0,
+          width: weekPreviewOpen ? WEEK_PREVIEW_WIDTH : draft ? DETAIL_WIDTH : 0,
           flexShrink: 0,
           overflow: 'hidden',
           transition: (theme) =>
             theme.transitions.create('width', {
               easing: theme.transitions.easing.sharp,
-              duration: draft
+              duration: weekPreviewOpen || draft
                 ? theme.transitions.duration.enteringScreen
                 : theme.transitions.duration.leavingScreen,
             }),
@@ -1170,7 +1255,7 @@ export default function SchedulePanel({
         <Paper
           elevation={0}
           sx={{
-            width: DETAIL_WIDTH,
+            width: weekPreviewOpen ? WEEK_PREVIEW_WIDTH : DETAIL_WIDTH,
             height: '100%',
             flexShrink: 0,
             borderLeft: '1px solid',
@@ -1189,10 +1274,10 @@ export default function SchedulePanel({
               borderColor: 'divider',
             }}
           >
-            <Tooltip title="Hide details">
+            <Tooltip title="Hide panel">
               <IconButton
                 size="small"
-                aria-label="Hide lesson details"
+                aria-label="Hide panel"
                 onClick={closeDetail}
                 sx={{ mt: 1.25, mx: 0.25 }}
               >
@@ -1201,7 +1286,7 @@ export default function SchedulePanel({
             </Tooltip>
           </Box>
           <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            {draft ? renderDetail() : null}
+            {weekPreviewOpen || draft ? renderDetail() : null}
           </Box>
         </Paper>
       </Box>

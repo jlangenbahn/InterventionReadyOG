@@ -1619,6 +1619,7 @@ function AppShell({ user, signOut }) {
             groups={groups}
             setError={setError}
             createNonce={scheduleCreateNonce}
+            instructor={user?.signInDetails?.loginId ?? user?.username ?? ''}
             onOpenStudent={(studentId, lessonId) => {
               requestNavigation(() => {
                 setViewingSchedule(false)
