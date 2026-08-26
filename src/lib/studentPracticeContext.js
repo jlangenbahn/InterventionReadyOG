@@ -1,3 +1,6 @@
+/**
+ * Build a compact practice-history string so Andrea can prefer familiar words.
+ */
 import {
   SCORE_CORRECT,
   SCORE_INCORRECT,

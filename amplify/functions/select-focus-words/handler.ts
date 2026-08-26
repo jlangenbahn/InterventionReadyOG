@@ -1,3 +1,6 @@
+/**
+ * Bedrock Converse handler: pick a small themed practice word set.
+ */
 import {
   BedrockRuntimeClient,
   ConverseCommand,

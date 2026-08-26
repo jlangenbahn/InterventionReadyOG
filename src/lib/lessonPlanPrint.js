@@ -1,3 +1,6 @@
+/**
+ * Print CSS and props used to render LessonPlanTemplate for PDF/print.
+ */
 import { formatLessonDisplayName } from './fetchStudentLessonPlan'
 import { getLessonPlan } from './lessonPlanDocument'
 

@@ -1,3 +1,6 @@
+/**
+ * Create/update/delete helpers for students, lists, sentences, passages, and lessons.
+ */
 import { client } from './fetchStudentLessonPlan'
 import { serializeTagResult } from './tagMultiWordText'
 import { removeStudentFromSchedule } from './schedule'

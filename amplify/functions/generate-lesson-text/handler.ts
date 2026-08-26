@@ -1,3 +1,6 @@
+/**
+ * Bedrock Converse handler: write one sentence or passage for a student.
+ */
 import {
   BedrockRuntimeClient,
   ConverseCommand,

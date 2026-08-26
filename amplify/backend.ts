@@ -1,3 +1,6 @@
+/**
+ * Amplify Gen 2 backend entry: auth, data, and Bedrock-backed Lambdas.
+ */
 import { defineBackend } from '@aws-amplify/backend';
 import { Effect, PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { auth } from './auth/resource';
@@ -5,9 +8,6 @@ import { data } from './data/resource';
 import { generateLessonTextFn } from './functions/generate-lesson-text/resource';
 import { selectFocusWordsFn } from './functions/select-focus-words/resource';
 
-/**
- * @see https://docs.amplify.aws/react/build-a-backend/ to add storage, functions, and more
- */
 const backend = defineBackend({
   auth,
   data,
@@ -18,6 +18,7 @@ const backend = defineBackend({
 const HAIKU_45_MODEL = 'anthropic.claude-haiku-4-5-20251001-v1:0';
 const account = backend.data.stack.account;
 
+// Ask Andrea Lambdas call Claude Haiku via Bedrock Converse (cross-region + global profiles).
 function grantHaikuConverse(lambda: { addToRolePolicy: (statement: PolicyStatement) => void }) {
   lambda.addToRolePolicy(
     new PolicyStatement({

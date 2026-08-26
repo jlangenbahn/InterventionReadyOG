@@ -1,3 +1,6 @@
+/**
+ * Lambda resource for Ask Andrea focus-word selection.
+ */
 import { defineFunction } from '@aws-amplify/backend';
 
 export const selectFocusWordsFn = defineFunction({

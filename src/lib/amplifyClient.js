@@ -1,3 +1,6 @@
+/**
+ * Lazy Amplify Data client (user-pool auth). Import this instead of generateClient() in UI code.
+ */
 import '../configureAmplify.js'
 import { generateClient } from 'aws-amplify/data'
 

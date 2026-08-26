@@ -1,3 +1,6 @@
+/**
+ * Lambda resource for Ask Andrea sentence/passage generation.
+ */
 import { defineFunction } from '@aws-amplify/backend';
 
 export const generateLessonTextFn = defineFunction({

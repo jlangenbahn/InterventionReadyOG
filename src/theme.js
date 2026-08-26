@@ -1,3 +1,6 @@
+/**
+ * MUI theme, Amplify Authenticator theme, and lesson-grid color tokens.
+ */
 import { createTheme } from '@mui/material'
 
 /** Single-story geometric stack used on student lesson pages 2–4. */

@@ -1,4 +1,9 @@
+/**
+ * Student lesson-plan data layer: lists, lessons, sentences, passages, and copies.
+ * Most UI panels import from here rather than calling Amplify models directly.
+ */
 import { client } from './amplifyClient'
+import { studentDisplayName } from './studentDisplay'
 import {
   canonicalToPlan,
   getLessonPlan,
@@ -8,6 +13,7 @@ import {
 } from './lessonPlanDocument'
 
 export { client }
+export { studentDisplayName }
 export { getLessonPlan, getLessonScores, parseLessonData } from './lessonPlanDocument'
 
 const STUDENT_CORE_SELECTION = [
@@ -441,10 +447,6 @@ export function resolveListWords(list, wordLookup) {
   const wordIds = Array.isArray(data.wordIds) ? data.wordIds : []
   if (!wordIds.length || !wordLookup) return []
   return wordIds.map((id) => wordLookup.get(id)).filter(Boolean)
-}
-
-export function studentDisplayName(student) {
-  return [student?.firstName, student?.lastName].filter(Boolean).join(' ') || 'Unnamed student'
 }
 
 export function asLessonNumber(value) {

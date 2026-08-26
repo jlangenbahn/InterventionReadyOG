@@ -1,3 +1,6 @@
+/**
+ * Strip headings/labels from generated lesson text before save or print.
+ */
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

@@ -1,3 +1,6 @@
+/**
+ * Calendar math and ScheduledLesson CRUD for the instructor schedule.
+ */
 import { client } from './amplifyClient'
 import { copyLessonToStudents, fetchStudentLessons } from './fetchStudentLessonPlan'
 import { BRAND } from '../theme'

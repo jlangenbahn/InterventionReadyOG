@@ -1,3 +1,6 @@
+/**
+ * Client wrapper for the generate-lesson-text Lambda (Ask Andrea sentences/passages).
+ */
 import { client } from './amplifyClient'
 import { sanitizeGeneratedLessonText } from './sanitizeLessonText'
 import { buildStudentWordContext, loadStudentPracticeHistory } from './studentPracticeContext'

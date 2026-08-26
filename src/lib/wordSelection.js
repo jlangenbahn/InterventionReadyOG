@@ -1,3 +1,6 @@
+/**
+ * DataGrid selection helpers for picking practice words (include/exclude + random).
+ */
 export const FOCUS_WORD_COUNT = 10
 
 export function emptyWordSelection() {

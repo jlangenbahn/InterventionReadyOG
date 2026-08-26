@@ -1,3 +1,4 @@
+# Amplify Hosting build spec (Vite frontend + Gen 2 backend).
 version: 1
 backend:
   phases:

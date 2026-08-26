@@ -1,3 +1,6 @@
+/**
+ * Cognito user pool with email sign-in.
+ */
 import { defineAuth } from '@aws-amplify/backend';
 
 /**

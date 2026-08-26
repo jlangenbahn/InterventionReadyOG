@@ -1,3 +1,6 @@
+/**
+ * AppSync/DynamoDB schema ported from ReadyOG Gen 1.
+ */
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { generateLessonTextFn } from '../functions/generate-lesson-text/resource';
 import { selectFocusWordsFn } from '../functions/select-focus-words/resource';

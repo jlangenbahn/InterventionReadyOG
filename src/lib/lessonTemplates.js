@@ -1,3 +1,6 @@
+/**
+ * Publish, list, apply, and delete reusable lesson templates (My vs Global).
+ */
 import { client, fetchStudentLessons, nextLessonNumber, saveStudentLesson } from './fetchStudentLessonPlan'
 import {
   canonicalToPlan,

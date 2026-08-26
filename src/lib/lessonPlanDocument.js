@@ -1,3 +1,6 @@
+/**
+ * Canonical lesson-plan JSON shape (slots, snapshots, scores) and parse/serialize helpers.
+ */
 const LIST_SLOT_KEYS = ['newConcept', 'review1', 'review2', 'review3']
 const SENTENCE_SLOT_KEYS = ['sentence1', 'sentence2', 'sentence3', 'sentence4', 'sentence5', 'sentence6']
 const PASSAGE_SLOT_KEYS = ['passage1', 'passage2']

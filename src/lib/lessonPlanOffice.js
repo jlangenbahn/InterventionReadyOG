@@ -1,3 +1,6 @@
+/**
+ * Build a .docx (and Google Docs-friendly zip) from a week of lesson plans.
+ */
 import { downloadBlob, sanitizeFileStem, zipStore } from './exportTable'
 import { studentDisplayName } from './fetchStudentLessonPlan'
 import { sanitizeLessonBody } from './sanitizeLessonText'

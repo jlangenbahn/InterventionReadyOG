@@ -1,3 +1,6 @@
+/**
+ * Instructor groups: fetch, save, and delete Group + GroupStudent join rows.
+ */
 import { client } from './fetchStudentLessonPlan'
 import { deleteScheduledLessonsForGroup } from './schedule'
 

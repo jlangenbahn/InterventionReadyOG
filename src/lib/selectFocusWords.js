@@ -1,3 +1,6 @@
+/**
+ * Client wrapper for the select-focus-words Lambda (Ask Andrea word sets).
+ */
 import { client } from './amplifyClient'
 import { FOCUS_WORD_COUNT } from './wordSelection'
 import { studentDisplayName } from './fetchStudentLessonPlan'
