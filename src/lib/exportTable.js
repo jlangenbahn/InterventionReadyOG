@@ -90,7 +90,7 @@ function concat(parts) {
   return out
 }
 
-function zipStore(files) {
+export function zipStore(files) {
   const encoder = new TextEncoder()
   const locals = []
   const centrals = []

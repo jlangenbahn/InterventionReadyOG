@@ -913,6 +913,7 @@ export default function SchedulePanel({
     <Box
       sx={{
         display: 'flex',
+        flexDirection: 'column',
         height: '100%',
         minHeight: 0,
         flex: 1,
@@ -923,15 +924,14 @@ export default function SchedulePanel({
         bgcolor: 'background.paper',
       }}
     >
-      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <Stack
-          direction="row"
-          spacing={1}
-          alignItems="center"
-          flexWrap="wrap"
-          useFlexGap
-          sx={{ px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}
-        >
+      <Stack
+        direction="row"
+        spacing={1}
+        alignItems="center"
+        flexWrap="wrap"
+        useFlexGap
+        sx={{ px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}
+      >
           <Typography variant="h6" sx={{ mr: 1 }}>
             Schedule
           </Typography>
@@ -965,7 +965,7 @@ export default function SchedulePanel({
               Month
             </ToggleButton>
           </ToggleButtonGroup>
-        <Tooltip title="Preview this week’s lesson plans, then save them as a PDF">
+        <Tooltip title="Preview this week’s lesson plans, then download PDF, Word, or Google Docs">
           <span>
             <Button
               variant={weekPreviewOpen ? 'contained' : 'outlined'}
@@ -981,6 +981,8 @@ export default function SchedulePanel({
           </Button>
         </Stack>
 
+      <Box sx={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex' }}>
+      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {!scheduleModelReady() ? (
           <AlertLike>
             The schedule backend is still deploying. You can explore the calendar now; creating
@@ -1240,6 +1242,7 @@ export default function SchedulePanel({
       <Box
         sx={{
           width: weekPreviewOpen ? WEEK_PREVIEW_WIDTH : draft ? DETAIL_WIDTH : 0,
+          maxWidth: weekPreviewOpen ? 'min(880px, 58%)' : draft ? DETAIL_WIDTH : 0,
           flexShrink: 0,
           overflow: 'hidden',
           transition: (theme) =>
@@ -1255,7 +1258,8 @@ export default function SchedulePanel({
         <Paper
           elevation={0}
           sx={{
-            width: weekPreviewOpen ? WEEK_PREVIEW_WIDTH : DETAIL_WIDTH,
+            width: weekPreviewOpen ? '100%' : DETAIL_WIDTH,
+            minWidth: weekPreviewOpen ? 0 : DETAIL_WIDTH,
             height: '100%',
             flexShrink: 0,
             borderLeft: '1px solid',
@@ -1289,6 +1293,7 @@ export default function SchedulePanel({
             {weekPreviewOpen || draft ? renderDetail() : null}
           </Box>
         </Paper>
+      </Box>
       </Box>
 
       <ConfirmDeleteDialog

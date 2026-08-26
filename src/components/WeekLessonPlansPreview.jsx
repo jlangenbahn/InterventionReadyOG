@@ -12,7 +12,9 @@ import {
   Typography,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
+import DescriptionIcon from '@mui/icons-material/Description'
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
+import ArticleIcon from '@mui/icons-material/Article'
 import LessonPlanTemplate from './LessonPlanTemplate'
 import { studentDisplayName } from '../lib/fetchStudentLessonPlan'
 import { sanitizeFileStem } from '../lib/exportTable'
@@ -21,6 +23,10 @@ import {
   lessonPlanTemplateProps,
   LESSON_PLAN_PRINT_PAGE_STYLE,
 } from '../lib/lessonPlanPrint'
+import {
+  downloadWeekLessonPlansDocx,
+  downloadWeekLessonPlansForGoogleDocs,
+} from '../lib/lessonPlanOffice'
 import { formatTimeRange, parseScheduleDate } from '../lib/schedule'
 
 function formatEntryWhen(start, end) {
@@ -72,14 +78,55 @@ export default function WeekLessonPlansPreview({
         <Typography variant="body2" color="text.secondary">
           Plans are listed in calendar order. Group lessons include each student’s plan.
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<PictureAsPdfIcon />}
-          onClick={handlePrint}
-          disabled={loading || !printableEntries.length}
-        >
-          Download as PDF
-        </Button>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Button
+            variant="contained"
+            startIcon={<PictureAsPdfIcon />}
+            onClick={handlePrint}
+            disabled={loading || !printableEntries.length}
+          >
+            Download as PDF
+          </Button>
+          <Tooltip title="Download an editable Word document">
+            <span>
+              <Button
+                variant="outlined"
+                startIcon={<DescriptionIcon />}
+                onClick={() =>
+                  downloadWeekLessonPlansDocx({
+                    weekLabel,
+                    entries: printableEntries,
+                    instructor,
+                  })
+                }
+                disabled={loading || !printableEntries.length}
+              >
+                Microsoft Word
+              </Button>
+            </span>
+          </Tooltip>
+          <Tooltip title="Download a Word file, then upload it in Google Docs (File → Open)">
+            <span>
+              <Button
+                variant="outlined"
+                startIcon={<ArticleIcon />}
+                onClick={() =>
+                  downloadWeekLessonPlansForGoogleDocs({
+                    weekLabel,
+                    entries: printableEntries,
+                    instructor,
+                  })
+                }
+                disabled={loading || !printableEntries.length}
+              >
+                Google Docs
+              </Button>
+            </span>
+          </Tooltip>
+        </Stack>
+        <Typography variant="caption" color="text.secondary">
+          Word and Google Docs download an editable .docx. In Google Docs, choose File → Open → Upload.
+        </Typography>
       </Stack>
       <Divider />
       <Box sx={{ flex: 1, overflow: 'auto', p: 1.5, bgcolor: 'background.default' }}>
