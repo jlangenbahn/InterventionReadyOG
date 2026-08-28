@@ -180,12 +180,52 @@ export const amplifyTheme = {
       font: {
         primary: { value: { light: BRAND.ink, dark: '#e8eaed' } },
         secondary: { value: { light: BRAND.inkMuted, dark: '#a8b0bc' } },
+        interactive: { value: { light: BRAND.navy, dark: BRAND.sky } },
+      },
+      border: {
+        primary: { value: { light: BRAND.gray, dark: '#2a3a55' } },
+        focus: { value: BRAND.navy },
       },
     },
     fonts: {
       default: {
         variable: { value: FONT_FAMILY },
         static: { value: FONT_FAMILY },
+      },
+    },
+    radii: {
+      small: { value: '10px' },
+      medium: { value: '10px' },
+      large: { value: '12px' },
+    },
+    components: {
+      authenticator: {
+        router: {
+          boxShadow: { value: 'none' },
+          borderWidth: { value: '1px' },
+          backgroundColor: { value: { light: BRAND.grayPaper, dark: '#152036' } },
+        },
+      },
+      button: {
+        fontWeight: { value: '650' },
+        primary: {
+          backgroundColor: { value: BRAND.navy },
+          color: { value: '#ffffff' },
+          _hover: { backgroundColor: { value: BRAND.navyDark } },
+          _focus: { backgroundColor: { value: BRAND.navyDark } },
+          _active: { backgroundColor: { value: BRAND.navyDark } },
+        },
+        link: {
+          color: { value: { light: BRAND.navy, dark: BRAND.sky } },
+        },
+      },
+      fieldcontrol: {
+        borderColor: { value: { light: BRAND.gray, dark: '#2a3a55' } },
+        color: { value: { light: BRAND.ink, dark: '#e8eaed' } },
+        _focus: {
+          borderColor: { value: BRAND.navy },
+          boxShadow: { value: `0 0 0 2px ${BRAND.glow}` },
+        },
       },
     },
   },

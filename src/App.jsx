@@ -4,9 +4,10 @@
  */
 import { useMemo, useState } from 'react'
 import { Authenticator, ThemeProvider as AmplifyThemeProvider } from '@aws-amplify/ui-react'
-import { Box, CssBaseline, ThemeProvider } from '@mui/material'
+import { CssBaseline, ThemeProvider } from '@mui/material'
 import AppShell from './components/app/AppShell'
-import { COLOR_MODE_KEY, ColorModeContext, ColorModeToggle, readStoredColorMode } from './components/app/colorMode'
+import AuthenticatorHeader from './components/app/AuthenticatorHeader'
+import { COLOR_MODE_KEY, ColorModeContext, readStoredColorMode } from './components/app/colorMode'
 import { amplifyTheme, createAppTheme } from './theme'
 
 export default function App() {
@@ -38,13 +39,7 @@ export default function App() {
           <Authenticator
             loginMechanisms={['email']}
             components={{
-              Header() {
-                return (
-                  <Box sx={{ position: 'fixed', top: 8, right: 8, zIndex: 1300 }}>
-                    <ColorModeToggle color="primary" />
-                  </Box>
-                )
-              },
+              Header: AuthenticatorHeader,
             }}
           >
             {({ signOut, user }) => <AppShell user={user} signOut={signOut} />}

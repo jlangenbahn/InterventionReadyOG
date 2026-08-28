@@ -86,3 +86,86 @@ body {
 [data-amplify-color-mode="dark"] .amplify-tabs__item[aria-selected="true"]:hover {
   background-color: #152036 !important;
 }
+
+/* Sign-in card, fields, and buttons — match MUI paper / navy buttons. */
+[data-amplify-authenticator] {
+  min-height: calc(100vh - 80px);
+  padding: 24px 16px 40px;
+}
+
+[data-amplify-router] {
+  background-color: #ffffff;
+  border: 1px solid #c0c0c0;
+  border-radius: 10px;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.amplify-button {
+  font-family: "Century Gothic", "Comic Sans MS", Andika, sans-serif !important;
+  font-weight: 650 !important;
+  letter-spacing: -0.01em !important;
+  text-transform: none !important;
+  border-radius: 10px !important;
+}
+
+.amplify-button--primary {
+  background-color: #002366 !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+.amplify-button--primary:hover,
+.amplify-button--primary:focus {
+  background-color: #001845 !important;
+}
+
+.amplify-button--link {
+  color: #002366 !important;
+}
+
+.amplify-label,
+.amplify-heading,
+.amplify-text {
+  font-family: "Century Gothic", "Comic Sans MS", Andika, sans-serif !important;
+}
+
+.amplify-input,
+.amplify-field-group__control,
+.amplify-passwordfield input {
+  font-family: "Century Gothic", "Comic Sans MS", Andika, sans-serif !important;
+  font-size: 0.8125rem !important;
+  border-radius: 10px !important;
+  border-color: #c0c0c0 !important;
+}
+
+.amplify-input:focus,
+.amplify-field-group__control:focus-within,
+.amplify-passwordfield input:focus {
+  border-color: #002366 !important;
+  box-shadow: 0 0 0 2px #a8c6fa !important;
+}
+
+.amplify-field-group__outer-end .amplify-button {
+  border-radius: 0 10px 10px 0 !important;
+}
+
+[data-amplify-color-mode="dark"] [data-amplify-router] {
+  background-color: #152036;
+  border-color: #2a3a55;
+}
+
+[data-amplify-color-mode="dark"] .amplify-button--primary {
+  background-color: #002366 !important;
+}
+
+[data-amplify-color-mode="dark"] .amplify-button--link {
+  color: #7ba3e0 !important;
+}
+
+[data-amplify-color-mode="dark"] .amplify-input,
+[data-amplify-color-mode="dark"] .amplify-field-group__control,
+[data-amplify-color-mode="dark"] .amplify-passwordfield input {
+  border-color: #2a3a55 !important;
+  color: #e8eaed !important;
+}

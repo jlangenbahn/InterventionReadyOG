@@ -737,17 +737,17 @@ export default function AppShell({ user, signOut }) {
                 })}
               </List>
             )}
-            </Collapse>
+          </Collapse>
+          <Divider />
+          <NavSectionHeader
+            title="Resources"
+            selected={viewingResources}
+            onSelect={handleSelectResources}
+            icon={
+              <VideoLibraryIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+            }
+          />
         </Box>
-        <Divider />
-        <NavSectionHeader
-          title="Resources"
-          selected={viewingResources}
-          onSelect={handleSelectResources}
-          icon={
-            <VideoLibraryIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-          }
-        />
       </Drawer>
 
       <Box component="main" sx={{
