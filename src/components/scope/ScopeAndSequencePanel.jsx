@@ -1,5 +1,6 @@
 /**
  * Student Scope and Sequence grid.
+ * Concept Inventory controls what is in scope; Mastery tracks status.
  * Edits stay local until Save. Unlock to change in-scope, sequence, and mastery.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -17,16 +18,22 @@ import {
   DialogContentText,
   DialogTitle,
   FormControl,
+  FormControlLabel,
   InputLabel,
   MenuItem,
   Paper,
   Select,
   Stack,
+  Switch,
+  Tab,
+  Tabs,
   Tooltip,
   Typography,
 } from '@mui/material'
 import { DataGridPro, GridToolbar, useGridApiRef } from '@mui/x-data-grid-pro'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
+import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined'
 import LockIcon from '@mui/icons-material/Lock'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SaveIcon from '@mui/icons-material/Save'
@@ -44,74 +51,24 @@ import {
 import { studentDisplayName } from '../../lib/studentDisplay'
 import { masteryRowSx } from '../../theme'
 
-function scopeColumnDefs(locked) {
-  return [
-    {
-      field: 'inScope',
-      headerName: 'In scope',
-      width: 110,
-      sortable: true,
-      filterable: true,
-      editable: false,
-      disableColumnMenu: true,
-      valueFormatter: (value) => (value === true ? 'Yes' : 'No'),
-      // Display only — toggle is handled by DataGrid onCellClick (one click).
-      renderCell: (params) => (
-        <Checkbox
-          size="small"
-          checked={params.row.inScope === true}
-          disabled={locked}
-          tabIndex={-1}
-          disableRipple
-          sx={{ pointerEvents: 'none' }}
-          inputProps={{ 'aria-label': `In scope for ${params.row.concept || 'concept'}` }}
-        />
-      ),
-      sortComparator: (a, b) => Number(Boolean(b)) - Number(Boolean(a)),
-    },
-    {
-      field: 'sequence',
-      headerName: 'Sequence',
-      type: 'number',
-      width: 110,
-      editable: !locked,
-      align: 'left',
-      headerAlign: 'left',
-      sortComparator: (a, b) => {
-        if (a == null && b == null) return 0
-        if (a == null) return 1
-        if (b == null) return -1
-        return Number(a) - Number(b)
-      },
-    },
-    { field: 'concept', headerName: 'Concept', flex: 1.2, minWidth: 180 },
-    {
-      field: 'masteryStatus',
-      headerName: 'Mastery status',
-      type: 'singleSelect',
-      width: 150,
-      editable: !locked,
-      valueOptions: MASTERY_STATUSES,
-    },
-    {
-      field: 'level',
-      headerName: 'Level',
-      width: 90,
-      sortComparator: (a, b) => {
-        const left = Number(a)
-        const right = Number(b)
-        const leftNum = Number.isFinite(left) ? left : Number.POSITIVE_INFINITY
-        const rightNum = Number.isFinite(right) ? right : Number.POSITIVE_INFINITY
-        return leftNum - rightNum
-      },
-    },
-    { field: 'category', headerName: 'Category', flex: 1, minWidth: 160 },
-    { field: 'subcategory', headerName: 'Subcategory', flex: 1, minWidth: 160 },
-  ]
+const SCOPE_TAB_INVENTORY = 0
+const SCOPE_TAB_MASTERY = 1
+
+function catalogColumn(field, headerName, extra = {}) {
+  return { field, headerName, ...extra }
 }
 
-function emptyScopeSelection() {
-  return { type: 'include', ids: new Set() }
+function levelSortComparator(a, b) {
+  const left = Number(a)
+  const right = Number(b)
+  const leftNum = Number.isFinite(left) ? left : Number.POSITIVE_INFINITY
+  const rightNum = Number.isFinite(right) ? right : Number.POSITIVE_INFINITY
+  return leftNum - rightNum
+}
+
+function visibleRowsFromGrid(apiRef, rows) {
+  const sorted = apiRef.current?.getSortedRows?.()
+  return Array.isArray(sorted) && sorted.length ? sorted : rows
 }
 
 function ScopeToolbarGroup({ label, children }) {
@@ -141,6 +98,111 @@ function ScopeToolbarGroup({ label, children }) {
   )
 }
 
+function inventoryColumnDefs({ locked, headerChecked, headerIndeterminate, onHeaderToggle }) {
+  return [
+    {
+      field: 'inScope',
+      headerName: 'In scope',
+      width: 128,
+      sortable: true,
+      filterable: true,
+      editable: false,
+      disableColumnMenu: true,
+      valueFormatter: (value) => (value === true ? 'Yes' : 'No'),
+      renderHeader: () => (
+        <Stack direction="row" spacing={0.25} alignItems="center">
+          <Checkbox
+            size="small"
+            checked={headerChecked}
+            indeterminate={headerIndeterminate}
+            disabled={locked}
+            onClick={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onChange={onHeaderToggle}
+            inputProps={{ 'aria-label': 'Mark visible concepts in scope' }}
+          />
+          <Box component="span">In scope</Box>
+        </Stack>
+      ),
+      renderCell: (params) => (
+        <Checkbox
+          size="small"
+          checked={params.row.inScope === true}
+          disabled={locked}
+          tabIndex={-1}
+          disableRipple
+          sx={{ pointerEvents: 'none' }}
+          inputProps={{ 'aria-label': `In scope for ${params.row.concept || 'concept'}` }}
+        />
+      ),
+      sortComparator: (a, b) => Number(Boolean(b)) - Number(Boolean(a)),
+    },
+    {
+      field: 'sequence',
+      headerName: 'Sequence',
+      type: 'number',
+      width: 110,
+      editable: !locked,
+      align: 'left',
+      headerAlign: 'left',
+      sortComparator: (a, b) => {
+        if (a == null && b == null) return 0
+        if (a == null) return 1
+        if (b == null) return -1
+        return Number(a) - Number(b)
+      },
+    },
+    catalogColumn('concept', 'Concept', { flex: 1.2, minWidth: 180 }),
+    catalogColumn('level', 'Level', { width: 90, sortComparator: levelSortComparator }),
+    catalogColumn('category', 'Category', { flex: 1, minWidth: 160 }),
+    catalogColumn('subcategory', 'Subcategory', { flex: 1, minWidth: 160 }),
+  ]
+}
+
+function masteryColumnDefs(locked) {
+  return [
+    {
+      field: 'masteryStatus',
+      headerName: 'Mastery status',
+      type: 'singleSelect',
+      width: 160,
+      editable: !locked,
+      valueOptions: MASTERY_STATUSES,
+    },
+    catalogColumn('concept', 'Concept', { flex: 1.2, minWidth: 180 }),
+    {
+      field: 'inScope',
+      headerName: 'In scope',
+      width: 110,
+      sortable: true,
+      filterable: true,
+      editable: false,
+      valueFormatter: (value) => (value === true ? 'Yes' : 'No'),
+      renderCell: (params) => (
+        <Chip
+          size="small"
+          variant={params.row.inScope ? 'filled' : 'outlined'}
+          color={params.row.inScope ? 'primary' : 'default'}
+          label={params.row.inScope ? 'Yes' : 'No'}
+        />
+      ),
+      sortComparator: (a, b) => Number(Boolean(b)) - Number(Boolean(a)),
+    },
+    {
+      field: 'sequence',
+      headerName: 'Sequence',
+      type: 'number',
+      width: 110,
+      editable: false,
+      align: 'left',
+      headerAlign: 'left',
+    },
+    catalogColumn('level', 'Level', { width: 90, sortComparator: levelSortComparator }),
+    catalogColumn('category', 'Category', { flex: 1, minWidth: 160 }),
+    catalogColumn('subcategory', 'Subcategory', { flex: 1, minWidth: 160 }),
+  ]
+}
+
 export default function ScopeAndSequencePanel({
   student,
   concepts,
@@ -153,11 +215,13 @@ export default function ScopeAndSequencePanel({
 }) {
   const [saving, setSaving] = useState(false)
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
-  // Local draft while editing — nothing hits the DB until Save.
   const [draftInventory, setDraftInventory] = useState(null)
-  const [scopeSelection, setScopeSelection] = useState(emptyScopeSelection)
   const [levelPreset, setLevelPreset] = useState('')
+  const [subTab, setSubTab] = useState(SCOPE_TAB_INVENTORY)
+  const [masteryInScopeOnly, setMasteryInScopeOnly] = useState(true)
+  const [visibleTick, setVisibleTick] = useState(0)
   const gridApiRef = useGridApiRef()
+  const lastInScopeIndexRef = useRef(-1)
 
   const persistedInventory = useMemo(() => {
     if (!student || !concepts.length) return []
@@ -170,6 +234,11 @@ export default function ScopeAndSequencePanel({
     () => inventoryToRows(concepts, activeInventory),
     [concepts, activeInventory],
   )
+
+  const gridRows = useMemo(() => {
+    if (subTab !== SCOPE_TAB_MASTERY || !masteryInScopeOnly) return rows
+    return rows.filter((row) => row.inScope === true)
+  }, [rows, subTab, masteryInScopeOnly])
 
   const draftRef = useRef(null)
 
@@ -197,7 +266,6 @@ export default function ScopeAndSequencePanel({
           scopeAndSequence: serializeScopeAndSequence(nextInventory),
         })
         if (errors?.length) throw new Error(errors.map((e) => e.message).join(', '))
-        // Always keep the inventory we just wrote — update responses sometimes omit AWSJSON.
         onScopeUpdated({
           ...student,
           ...(data ?? {}),
@@ -254,50 +322,50 @@ export default function ScopeAndSequencePanel({
     if (locked) {
       draftRef.current = null
       setDraftInventory(null)
-      setScopeSelection(emptyScopeSelection())
       setLevelPreset('')
+      lastInScopeIndexRef.current = -1
     }
   }, [locked])
 
   useEffect(() => {
     draftRef.current = null
     setDraftInventory(null)
-    setScopeSelection(emptyScopeSelection())
     setLevelPreset('')
+    lastInScopeIndexRef.current = -1
+    setSubTab(SCOPE_TAB_INVENTORY)
   }, [student?.id])
 
-  const toggleInScopeForRow = useCallback(
-    (row, nextValue) => {
-      if (locked || !row?.conceptId) return
+  const bumpVisible = useCallback(() => {
+    lastInScopeIndexRef.current = -1
+    setVisibleTick((tick) => tick + 1)
+  }, [])
+
+  const visibleInventoryRows = useMemo(() => {
+    void visibleTick
+    if (subTab !== SCOPE_TAB_INVENTORY) return gridRows
+    return visibleRowsFromGrid(gridApiRef, gridRows)
+  }, [visibleTick, subTab, gridRows, gridApiRef])
+
+  const visibleInScopeCount = visibleInventoryRows.filter((row) => row.inScope === true).length
+  const headerChecked = visibleInventoryRows.length > 0 && visibleInScopeCount === visibleInventoryRows.length
+  const headerIndeterminate = visibleInScopeCount > 0 && visibleInScopeCount < visibleInventoryRows.length
+
+  const applyInScopeToIds = useCallback(
+    (ids, inScope) => {
+      if (locked || !ids.size) return
       setDraft((base) =>
-        base.map((entry) =>
-          entry.conceptId === row.conceptId
-            ? { ...entry, inScope: nextValue === true }
-            : entry,
-        ),
+        base.map((entry) => (ids.has(entry.conceptId) ? { ...entry, inScope } : entry)),
       )
     },
     [locked, setDraft],
   )
 
-  const selectedScopeRows = useMemo(() => {
-    const ids = scopeSelection?.ids ?? new Set()
-    const type = scopeSelection?.type ?? 'include'
-    if (!ids.size) return []
-    if (type === 'exclude') return rows.filter((row) => !ids.has(row.conceptId))
-    return rows.filter((row) => ids.has(row.conceptId))
-  }, [rows, scopeSelection])
-
-  const applyInScopeToSelected = useCallback(
+  const applyInScopeToVisible = useCallback(
     (inScope) => {
-      if (locked || !selectedScopeRows.length) return
-      const ids = new Set(selectedScopeRows.map((row) => row.conceptId).filter(Boolean))
-      if (!ids.size) return
-      setDraft((base) =>
-        base.map((entry) => (ids.has(entry.conceptId) ? { ...entry, inScope } : entry)),
-      )
+      const ids = new Set(visibleInventoryRows.map((row) => row.conceptId).filter(Boolean))
+      applyInScopeToIds(ids, inScope)
     },
-    [locked, selectedScopeRows, setDraft],
+    [visibleInventoryRows, applyInScopeToIds],
   )
 
   const applyInScopeToAll = useCallback(
@@ -307,6 +375,23 @@ export default function ScopeAndSequencePanel({
       setDraft((base) => base.map((entry) => ({ ...entry, inScope })))
     },
     [locked, setDraft],
+  )
+
+  const toggleInScopeRange = useCallback(
+    (row, nextValue, shiftKey) => {
+      if (locked || !row?.conceptId) return
+      const visible = visibleRowsFromGrid(gridApiRef, gridRows)
+      const clickedIndex = visible.findIndex((item) => item.conceptId === row.conceptId)
+      let targetIds = new Set([row.conceptId])
+      if (shiftKey && lastInScopeIndexRef.current >= 0 && clickedIndex >= 0) {
+        const start = Math.min(lastInScopeIndexRef.current, clickedIndex)
+        const end = Math.max(lastInScopeIndexRef.current, clickedIndex)
+        targetIds = new Set(visible.slice(start, end + 1).map((item) => item.conceptId))
+      }
+      lastInScopeIndexRef.current = clickedIndex
+      applyInScopeToIds(targetIds, nextValue === true)
+    },
+    [locked, gridApiRef, gridRows, applyInScopeToIds],
   )
 
   const scopeLevels = useMemo(() => {
@@ -325,16 +410,29 @@ export default function ScopeAndSequencePanel({
     })
   }, [concepts])
 
-  const columns = useMemo(() => scopeColumnDefs(locked), [locked])
+  const columns = useMemo(
+    () =>
+      subTab === SCOPE_TAB_MASTERY
+        ? masteryColumnDefs(locked)
+        : inventoryColumnDefs({
+            locked,
+            headerChecked,
+            headerIndeterminate,
+            onHeaderToggle: () => applyInScopeToVisible(!headerChecked),
+          }),
+    [subTab, locked, headerChecked, headerIndeterminate, applyInScopeToVisible],
+  )
 
   const collectExportRows = useCallback(() => {
-    const sorted = gridApiRef.current?.getSortedRows?.()
-    return Array.isArray(sorted) && sorted.length ? sorted : rows
-  }, [gridApiRef, rows])
+    return visibleRowsFromGrid(gridApiRef, gridRows)
+  }, [gridApiRef, gridRows])
 
   const exportFileStem = useMemo(
-    () => sanitizeFileStem(`Scope and Sequence - ${studentDisplayName(student)}`),
-    [student],
+    () =>
+      sanitizeFileStem(
+        `${subTab === SCOPE_TAB_MASTERY ? 'Mastery' : 'Concept Inventory'} - ${studentDisplayName(student)}`,
+      ),
+    [student, subTab],
   )
 
   const exportScopeTable = useCallback(
@@ -349,7 +447,6 @@ export default function ScopeAndSequencePanel({
     [collectExportRows, columns, exportFileStem],
   )
 
-  // Backfill only missing concept IDs. Never run while editing (would clobber draft/saves).
   useEffect(() => {
     if (!student?.id || loadingCatalog || !concepts.length || !locked) return
     const existing = parseScopeAndSequence(student.scopeAndSequence)
@@ -451,6 +548,8 @@ export default function ScopeAndSequencePanel({
     )
   }
 
+  const inventoryTab = subTab === SCOPE_TAB_INVENTORY
+
   return (
     <Paper
       sx={{
@@ -507,6 +606,22 @@ export default function ScopeAndSequencePanel({
           )}
         </Stack>
 
+        <Tabs
+          value={subTab}
+          onChange={(_event, value) => {
+            lastInScopeIndexRef.current = -1
+            setSubTab(value)
+          }}
+          variant="fullWidth"
+        >
+          <Tab
+            icon={<Inventory2OutlinedIcon />}
+            iconPosition="start"
+            label="Concept Inventory"
+          />
+          <Tab icon={<InsightsOutlinedIcon />} iconPosition="start" label="Mastery" />
+        </Tabs>
+
         <Stack
           direction="row"
           spacing={2.5}
@@ -515,106 +630,128 @@ export default function ScopeAndSequencePanel({
           useFlexGap
         >
           <ScopeToolbarGroup label="Download">
-            <ButtonGroup variant="outlined" color="inherit" disabled={!rows.length} size="small">
+            <ButtonGroup variant="outlined" color="inherit" disabled={!gridRows.length} size="small">
               <Button startIcon={<FileDownloadIcon />} onClick={() => exportScopeTable('csv')}>
                 CSV
               </Button>
               <Button onClick={() => exportScopeTable('xlsx')}>XLSX</Button>
             </ButtonGroup>
           </ScopeToolbarGroup>
-          <ScopeToolbarGroup label="In scope">
-            <ButtonGroup variant="outlined" color="inherit" disabled={locked || saving} size="small">
+          {inventoryTab ? (
+            <>
+              <ScopeToolbarGroup label="In scope">
+                <ButtonGroup variant="outlined" color="inherit" disabled={locked || saving} size="small">
+                  <Button
+                    onClick={() => applyInScopeToVisible(true)}
+                    disabled={locked || saving || !visibleInventoryRows.length}
+                  >
+                    Visible in
+                  </Button>
+                  <Button
+                    onClick={() => applyInScopeToVisible(false)}
+                    disabled={locked || saving || !visibleInventoryRows.length}
+                  >
+                    Visible out
+                  </Button>
+                  <Button onClick={() => applyInScopeToAll(true)} disabled={locked || saving || !rows.length}>
+                    All in
+                  </Button>
+                  <Button onClick={() => applyInScopeToAll(false)} disabled={locked || saving || !rows.length}>
+                    All out
+                  </Button>
+                </ButtonGroup>
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={`${visibleInScopeCount} of ${visibleInventoryRows.length} shown`}
+                />
+              </ScopeToolbarGroup>
+              {scopeLevels.length ? (
+                <ScopeToolbarGroup label="Level">
+                  <FormControl size="small" sx={{ minWidth: 110 }} disabled={locked || saving}>
+                    <InputLabel id="scope-level-preset">Level</InputLabel>
+                    <Select
+                      labelId="scope-level-preset"
+                      label="Level"
+                      value={levelPreset}
+                      onChange={(event) => applyLevelPreset(event.target.value)}
+                    >
+                      <MenuItem value="">
+                        <em>Choose…</em>
+                      </MenuItem>
+                      {scopeLevels.map((level) => (
+                        <MenuItem key={level} value={level}>
+                          Level {level}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </ScopeToolbarGroup>
+              ) : null}
+            </>
+          ) : (
+            <ScopeToolbarGroup label="Mastery">
+              <FormControlLabel
+                sx={{ mr: 0, ml: 0 }}
+                control={
+                  <Switch
+                    size="small"
+                    checked={masteryInScopeOnly}
+                    onChange={(event) => setMasteryInScopeOnly(event.target.checked)}
+                  />
+                }
+                label="In scope only"
+              />
               <Button
-                onClick={() => applyInScopeToSelected(true)}
-                disabled={locked || saving || !selectedScopeRows.length}
+                size="small"
+                variant="outlined"
+                color="inherit"
+                startIcon={<RestartAltIcon />}
+                disabled={locked || saving}
+                onClick={() => setResetConfirmOpen(true)}
               >
-                Selected in
+                Reset to unknown
               </Button>
-              <Button
-                onClick={() => applyInScopeToSelected(false)}
-                disabled={locked || saving || !selectedScopeRows.length}
-              >
-                Selected out
-              </Button>
-              <Button onClick={() => applyInScopeToAll(true)} disabled={locked || saving || !rows.length}>
-                All in
-              </Button>
-              <Button onClick={() => applyInScopeToAll(false)} disabled={locked || saving || !rows.length}>
-                All out
-              </Button>
-            </ButtonGroup>
-            <Chip size="small" variant="outlined" label={`${selectedScopeRows.length} selected`} />
-          </ScopeToolbarGroup>
-          {scopeLevels.length ? (
-            <ScopeToolbarGroup label="Level">
-              <FormControl size="small" sx={{ minWidth: 110 }} disabled={locked || saving}>
-                <InputLabel id="scope-level-preset">Level</InputLabel>
-                <Select
-                  labelId="scope-level-preset"
-                  label="Level"
-                  value={levelPreset}
-                  onChange={(event) => applyLevelPreset(event.target.value)}
-                >
-                  <MenuItem value="">
-                    <em>Choose…</em>
-                  </MenuItem>
-                  {scopeLevels.map((level) => (
-                    <MenuItem key={level} value={level}>
-                      Level {level}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
             </ScopeToolbarGroup>
-          ) : null}
-          <ScopeToolbarGroup label="Mastery">
-            <Button
-              size="small"
-              variant="outlined"
-              color="inherit"
-              startIcon={<RestartAltIcon />}
-              disabled={locked || saving}
-              onClick={() => setResetConfirmOpen(true)}
-            >
-              Reset to unknown
-            </Button>
-          </ScopeToolbarGroup>
+          )}
         </Stack>
       </Stack>
 
       {locked ? (
         <Alert severity="warning" icon={<LockIcon />} sx={{ mb: 1.5 }}>
-          Editing is locked. Unlock to change In scope, Sequence, Mastery status, or bulk scope
-          actions. Changes are saved only when you click Save.
+          Editing is locked. Unlock to change {inventoryTab ? 'In scope and Sequence' : 'Mastery status'}.
+          Changes are saved only when you click Save.
+        </Alert>
+      ) : inventoryTab ? (
+        <Alert severity="info" icon={<SaveIcon />} sx={{ mb: 1.5 }}>
+          The In scope column is the bulk control: click to toggle, shift-click to fill a range, or use
+          the header checkbox / Visible in-out for every concept currently shown. Filters apply. All in
+          / All out and Level change the whole catalog. Save before leaving this tab or switching
+          students.
         </Alert>
       ) : (
         <Alert severity="info" icon={<SaveIcon />} sx={{ mb: 1.5 }}>
-          Editing mode: changes stay on this page until you click Save. Click In scope once to
-          toggle, select rows and use Selected in / Selected out, or use All in / All out. A level
-          marks only that level in scope. Save before leaving this tab or switching students.
+          Set mastery on this tab. In scope is shown for context and is edited on Concept Inventory.
+          Save before leaving this tab or switching students.
         </Alert>
       )}
 
       <Box sx={{ flex: 1, width: '100%' }}>
         <DataGridPro
-          key={student.id}
+          key={`${student.id}-${subTab}`}
           apiRef={gridApiRef}
-          rows={rows}
+          rows={gridRows}
           columns={columns}
           getRowId={(row) => row.conceptId}
           getRowClassName={(params) => {
+            if (inventoryTab) return ''
             const status = MASTERY_STATUSES.includes(params.row.masteryStatus)
               ? params.row.masteryStatus
               : 'unknown'
             return `mastery-row-${status}`
           }}
           disableRowSelectionOnClick
-          checkboxSelection={!locked}
-          disableRowSelectionExcludeModel
           hideFooterSelectedRowCount
-          isRowSelectable={() => !locked}
-          rowSelectionModel={scopeSelection}
-          onRowSelectionModelChange={(model) => setScopeSelection(model)}
           pagination
           sortingMode="client"
           filterMode="client"
@@ -622,19 +759,30 @@ export default function ScopeAndSequencePanel({
           initialState={{
             pagination: { paginationModel: { pageSize: 50 } },
             sorting: {
-              sortModel: [
-                { field: 'inScope', sort: 'asc' },
-                { field: 'sequence', sort: 'asc' },
-                { field: 'level', sort: 'asc' },
-              ],
+              sortModel: inventoryTab
+                ? [
+                    { field: 'inScope', sort: 'asc' },
+                    { field: 'sequence', sort: 'asc' },
+                    { field: 'level', sort: 'asc' },
+                  ]
+                : [
+                    { field: 'masteryStatus', sort: 'asc' },
+                    { field: 'sequence', sort: 'asc' },
+                    { field: 'concept', sort: 'asc' },
+                  ],
             },
           }}
-          isCellEditable={(params) => !locked && params.field !== 'inScope'}
+          isCellEditable={(params) =>
+            !locked && params.field !== 'inScope' && (inventoryTab || params.field === 'masteryStatus')
+          }
+          onFilterModelChange={bumpVisible}
+          onSortModelChange={bumpVisible}
+          onPaginationModelChange={bumpVisible}
           onCellClick={(params, event) => {
-            if (params.field !== 'inScope') return
+            if (!inventoryTab || params.field !== 'inScope') return
             event.defaultMuiPrevented = true
             if (locked) return
-            void toggleInScopeForRow(params.row, !params.row.inScope)
+            toggleInScopeRange(params.row, !params.row.inScope, event.shiftKey)
           }}
           onCellDoubleClick={(params, event) => {
             if (params.field === 'inScope') {
@@ -663,9 +811,9 @@ export default function ScopeAndSequencePanel({
           density="compact"
           sx={{
             '& .MuiDataGrid-cell[data-field="inScope"]': {
-              px: 0,
+              px: inventoryTab ? 0 : 1,
             },
-            ...masteryRowSx,
+            ...(inventoryTab ? null : masteryRowSx),
           }}
         />
       </Box>

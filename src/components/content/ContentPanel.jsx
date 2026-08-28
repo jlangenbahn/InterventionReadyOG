@@ -21,25 +21,25 @@ const CONTENT_TAB_CONCEPTS = 3
 const TAB_COPY = {
   [CONTENT_TAB_LISTS]: {
     kind: 'lists',
-    title: (name) => `${name}’s word lists`,
+    title: 'Word lists',
     body: (name) =>
       `Word lists saved for ${name} only. Other students’ lists are not shown.`,
   },
   [CONTENT_TAB_SENTENCES]: {
     kind: 'sentences',
-    title: (name) => `${name}’s sentences`,
+    title: 'Sentences',
     body: (name) =>
       `Sentences saved for ${name} only. This is not a shared sentence bank.`,
   },
   [CONTENT_TAB_PASSAGES]: {
     kind: 'passages',
-    title: (name) => `${name}’s passages`,
+    title: 'Passages',
     body: (name) =>
       `Passages saved for ${name} only. Other students’ passages stay on their pages.`,
   },
   [CONTENT_TAB_CONCEPTS]: {
     kind: 'catalog',
-    title: () => 'Shared concept catalog',
+    title: 'Shared catalog',
     body: () =>
       'The word-concept catalog is shared across students. Lists, sentences, and passages on the other tabs belong to the selected student only.',
   },
@@ -70,7 +70,7 @@ export default function ContentPanel({
           ) : (
             <Chip size="small" variant="outlined" label="Shared catalog" />
           )}
-          <Typography variant="subtitle1">{copy.title(name)}</Typography>
+          <Typography variant="subtitle1">{copy.title}</Typography>
         </Stack>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
           {copy.body(name)}
@@ -82,10 +82,10 @@ export default function ContentPanel({
         variant="fullWidth"
         sx={{ mb: 2 }}
       >
-        <Tab icon={<FormatListBulletedIcon />} iconPosition="start" label={`${name}’s lists`} />
-        <Tab icon={<ShortTextIcon />} iconPosition="start" label={`${name}’s sentences`} />
-        <Tab icon={<MenuBookIcon />} iconPosition="start" label={`${name}’s passages`} />
-        <Tab icon={<CategoryIcon />} iconPosition="start" label="Shared catalog" />
+        <Tab icon={<FormatListBulletedIcon />} iconPosition="start" label="Lists" />
+        <Tab icon={<ShortTextIcon />} iconPosition="start" label="Sentences" />
+        <Tab icon={<MenuBookIcon />} iconPosition="start" label="Passages" />
+        <Tab icon={<CategoryIcon />} iconPosition="start" label="Shared" />
       </Tabs>
       {subTab === CONTENT_TAB_SENTENCES ? (
         <MultiWordPanel

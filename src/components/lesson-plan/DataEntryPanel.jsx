@@ -78,10 +78,13 @@ function scoreButtonSx(state) {
     }
   }
   return {
-    bgcolor: '#fff',
+    bgcolor: (theme) => (theme.palette.mode === 'dark' ? theme.palette.grey[100] : '#fff'),
     color: 'text.primary',
     borderColor: 'divider',
-    '&:hover': { bgcolor: 'action.hover' },
+    '&:hover': {
+      bgcolor: (theme) =>
+        theme.palette.mode === 'dark' ? theme.palette.grey[200] : theme.palette.action.hover,
+    },
   }
 }
 
@@ -387,7 +390,15 @@ export default function DataEntryPanel({
           <Typography variant="caption" color="text.secondary">
             Click a word to cycle Not scored → Correct → Incorrect.
           </Typography>
-          <Chip size="small" variant="outlined" label="Not scored" />
+          <Chip
+            size="small"
+            variant="outlined"
+            label="Not scored"
+            sx={{
+              bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.100' : '#fff'),
+              color: 'text.primary',
+            }}
+          />
           <Chip size="small" sx={{ bgcolor: '#2e7d32', color: '#fff' }} label="Correct" />
           <Chip size="small" sx={{ bgcolor: '#c62828', color: '#fff' }} label="Incorrect" />
         </Stack>
