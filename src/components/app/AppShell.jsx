@@ -37,12 +37,14 @@ import EditIcon from '@mui/icons-material/Edit'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
 import Groups3Icon from '@mui/icons-material/Groups3'
+import VideoLibraryIcon from '@mui/icons-material/VideoLibrary'
 import LessonPlanPanel from '../lesson-plan/LessonPlanPanel'
 import DataPanel from '../data/DataPanel'
 import ContentPanel from '../content/ContentPanel'
 import GroupPanel from '../groups/GroupPanel'
 import SchedulePanel from '../schedule/SchedulePanel'
 import ScopeAndSequencePanel from '../scope/ScopeAndSequencePanel'
+import ResourcesPanel from '../resources/ResourcesPanel'
 import ConfirmDeleteDialog from '../shared/ConfirmDeleteDialog'
 import NavSectionHeader from './NavSectionHeader'
 import { ColorModeToggle } from './colorMode'
@@ -121,6 +123,7 @@ export default function AppShell({ user, signOut }) {
   const [scopeLocked, setScopeLocked] = useState(true)
   const [navBlock, setNavBlock] = useState(null)
   const [viewingSchedule, setViewingSchedule] = useState(true)
+  const [viewingResources, setViewingResources] = useState(false)
   const [studentsNavOpen, setStudentsNavOpen] = useState(true)
   const [groupsNavOpen, setGroupsNavOpen] = useState(true)
   const [scheduleCreateNonce, setScheduleCreateNonce] = useState(0)
@@ -270,24 +273,36 @@ export default function AppShell({ user, signOut }) {
   }
 
   function handleSelectStudent(studentId) {
-    if (studentId === selectedStudentId && !creatingGroup && !selectedGroupId && !viewingSchedule) return
+    if (
+      studentId === selectedStudentId &&
+      !creatingGroup &&
+      !selectedGroupId &&
+      !viewingSchedule &&
+      !viewingResources
+    ) {
+      return
+    }
     requestNavigation(() => {
       setSelectedStudentId(studentId)
       setSelectedGroupId(null)
       setCreatingGroup(false)
       setViewingSchedule(false)
+      setViewingResources(false)
       setOpenLessonId(null)
       setScopeLocked(true)
     })
   }
 
   function handleSelectGroup(groupId) {
-    if (groupId === selectedGroupId && !creatingGroup && !viewingSchedule) return
+    if (groupId === selectedGroupId && !creatingGroup && !viewingSchedule && !viewingResources) {
+      return
+    }
     requestNavigation(() => {
       setSelectedGroupId(groupId)
       setSelectedStudentId(null)
       setCreatingGroup(false)
       setViewingSchedule(false)
+      setViewingResources(false)
       setScopeLocked(true)
     })
   }
@@ -298,6 +313,7 @@ export default function AppShell({ user, signOut }) {
       setSelectedGroupId(null)
       setSelectedStudentId(null)
       setViewingSchedule(false)
+      setViewingResources(false)
       setScopeLocked(true)
     })
   }
@@ -306,6 +322,7 @@ export default function AppShell({ user, signOut }) {
     if (viewingSchedule) return
     requestNavigation(() => {
       setViewingSchedule(true)
+      setViewingResources(false)
       setSelectedStudentId(null)
       setSelectedGroupId(null)
       setCreatingGroup(false)
@@ -316,11 +333,24 @@ export default function AppShell({ user, signOut }) {
   function handleStartCreateScheduledLesson() {
     requestNavigation(() => {
       setViewingSchedule(true)
+      setViewingResources(false)
       setSelectedStudentId(null)
       setSelectedGroupId(null)
       setCreatingGroup(false)
       setScopeLocked(true)
       setScheduleCreateNonce((current) => current + 1)
+    })
+  }
+
+  function handleSelectResources() {
+    if (viewingResources) return
+    requestNavigation(() => {
+      setViewingResources(true)
+      setViewingSchedule(false)
+      setSelectedStudentId(null)
+      setSelectedGroupId(null)
+      setCreatingGroup(false)
+      setScopeLocked(true)
     })
   }
 
@@ -448,6 +478,7 @@ export default function AppShell({ user, signOut }) {
           setSelectedGroupId(null)
           setCreatingGroup(false)
           setViewingSchedule(false)
+          setViewingResources(false)
           setScopeLocked(true)
         }
       }
@@ -624,6 +655,7 @@ export default function AppShell({ user, signOut }) {
                           !creatingGroup &&
                           !selectedGroupId &&
                           !viewingSchedule &&
+                          !viewingResources &&
                           student.id === selectedStudentId
                         }
                         onClick={() => handleSelectStudent(student.id)}
@@ -686,7 +718,12 @@ export default function AppShell({ user, signOut }) {
                       }
                     >
                       <ListItemButton
-                        selected={!creatingGroup && !viewingSchedule && group.id === selectedGroupId}
+                        selected={
+                          !creatingGroup &&
+                          !viewingSchedule &&
+                          !viewingResources &&
+                          group.id === selectedGroupId
+                        }
                         onClick={() => handleSelectGroup(group.id)}
                       >
                         <Groups3Icon fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
@@ -700,8 +737,17 @@ export default function AppShell({ user, signOut }) {
                 })}
               </List>
             )}
-          </Collapse>
+            </Collapse>
         </Box>
+        <Divider />
+        <NavSectionHeader
+          title="Resources"
+          selected={viewingResources}
+          onSelect={handleSelectResources}
+          icon={
+            <VideoLibraryIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+          }
+        />
       </Drawer>
 
       <Box component="main" sx={{
@@ -720,12 +766,18 @@ export default function AppShell({ user, signOut }) {
           </Paper>
         ) : null}
 
-        {!selectedStudent && !creatingGroup && !selectedGroup && !viewingSchedule ? (
+        {!selectedStudent &&
+        !creatingGroup &&
+        !selectedGroup &&
+        !viewingSchedule &&
+        !viewingResources ? (
           <Paper sx={{ p: 3 }}>
             <Typography color="text.secondary">
-              Select a student, choose a group, open Schedule, or click + to create one.
+              Select a student, choose a group, open Schedule or Resources, or click + to create one.
             </Typography>
           </Paper>
+        ) : viewingResources ? (
+          <ResourcesPanel />
         ) : viewingSchedule ? (
           <SchedulePanel
             students={students}
@@ -736,6 +788,7 @@ export default function AppShell({ user, signOut }) {
             onOpenStudent={(studentId, lessonId) => {
               requestNavigation(() => {
                 setViewingSchedule(false)
+                setViewingResources(false)
                 setSelectedStudentId(studentId)
                 setOpenLessonId(lessonId || null)
                 setSelectedGroupId(null)

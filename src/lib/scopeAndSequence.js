@@ -8,6 +8,12 @@ export { parseScopeAndSequence }
 
 export const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
+export function nextMasteryStatus(current) {
+  const index = MASTERY_STATUSES.indexOf(current)
+  const from = index < 0 ? 0 : index
+  return MASTERY_STATUSES[(from + 1) % MASTERY_STATUSES.length]
+}
+
 export function normalizeSequence(value) {
   if (value === null || value === undefined || value === '') return null
   const n = Number(value)

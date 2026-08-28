@@ -1,6 +1,7 @@
 /**
  * Student Scope and Sequence grid.
- * Concept Inventory controls what is in scope; Mastery tracks status.
+ * Mastery is the default tab and focuses on in-scope concepts; click a status to cycle it.
+ * Concept Inventory controls what is in scope and the teaching sequence.
  * Edits stay local until Save. Unlock to change in-scope, sequence, and mastery.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -44,15 +45,16 @@ import {
   buildScopeAndSequence,
   buildScopeExportTable,
   inventoryToRows,
+  nextMasteryStatus,
   normalizeSequence,
   parseScopeAndSequence,
   serializeScopeAndSequence,
 } from '../../lib/scopeAndSequence'
 import { studentDisplayName } from '../../lib/studentDisplay'
-import { masteryRowSx } from '../../theme'
+import { MASTERY_ROW_COLORS, masteryRowSx } from '../../theme'
 
-const SCOPE_TAB_INVENTORY = 0
-const SCOPE_TAB_MASTERY = 1
+const SCOPE_TAB_MASTERY = 0
+const SCOPE_TAB_INVENTORY = 1
 
 function catalogColumn(field, headerName, extra = {}) {
   return { field, headerName, ...extra }
@@ -159,18 +161,47 @@ function inventoryColumnDefs({ locked, headerChecked, headerIndeterminate, onHea
   ]
 }
 
-function masteryColumnDefs(locked) {
-  return [
+function MasteryStatusChip({ status }) {
+  const colors = MASTERY_ROW_COLORS[status] ?? MASTERY_ROW_COLORS.unknown
+  return (
+    <Chip
+      size="small"
+      label={status}
+      sx={{
+        pointerEvents: 'none',
+        textTransform: 'capitalize',
+        fontWeight: 700,
+        bgcolor: colors.bg,
+        color: colors.color,
+        border: '1px solid',
+        borderColor: status === 'unknown' ? 'divider' : colors.color,
+      }}
+    />
+  )
+}
+
+function masteryColumnDefs({ hideInScope }) {
+  const columns = [
     {
       field: 'masteryStatus',
-      headerName: 'Mastery status',
-      type: 'singleSelect',
-      width: 160,
-      editable: !locked,
+      headerName: 'Mastery',
+      width: 150,
+      sortable: true,
+      filterable: true,
+      editable: false,
+      disableColumnMenu: true,
       valueOptions: MASTERY_STATUSES,
+      renderCell: (params) => {
+        const status = MASTERY_STATUSES.includes(params.row.masteryStatus)
+          ? params.row.masteryStatus
+          : 'unknown'
+        return <MasteryStatusChip status={status} />
+      },
     },
     catalogColumn('concept', 'Concept', { flex: 1.2, minWidth: 180 }),
-    {
+  ]
+  if (!hideInScope) {
+    columns.push({
       field: 'inScope',
       headerName: 'In scope',
       width: 110,
@@ -187,7 +218,9 @@ function masteryColumnDefs(locked) {
         />
       ),
       sortComparator: (a, b) => Number(Boolean(b)) - Number(Boolean(a)),
-    },
+    })
+  }
+  columns.push(
     {
       field: 'sequence',
       headerName: 'Sequence',
@@ -200,7 +233,8 @@ function masteryColumnDefs(locked) {
     catalogColumn('level', 'Level', { width: 90, sortComparator: levelSortComparator }),
     catalogColumn('category', 'Category', { flex: 1, minWidth: 160 }),
     catalogColumn('subcategory', 'Subcategory', { flex: 1, minWidth: 160 }),
-  ]
+  )
+  return columns
 }
 
 export default function ScopeAndSequencePanel({
@@ -217,11 +251,12 @@ export default function ScopeAndSequencePanel({
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
   const [draftInventory, setDraftInventory] = useState(null)
   const [levelPreset, setLevelPreset] = useState('')
-  const [subTab, setSubTab] = useState(SCOPE_TAB_INVENTORY)
+  const [subTab, setSubTab] = useState(SCOPE_TAB_MASTERY)
   const [masteryInScopeOnly, setMasteryInScopeOnly] = useState(true)
   const [visibleTick, setVisibleTick] = useState(0)
   const gridApiRef = useGridApiRef()
   const lastInScopeIndexRef = useRef(-1)
+  const lastMasteryIndexRef = useRef(-1)
 
   const persistedInventory = useMemo(() => {
     if (!student || !concepts.length) return []
@@ -324,6 +359,7 @@ export default function ScopeAndSequencePanel({
       setDraftInventory(null)
       setLevelPreset('')
       lastInScopeIndexRef.current = -1
+      lastMasteryIndexRef.current = -1
     }
   }, [locked])
 
@@ -332,11 +368,13 @@ export default function ScopeAndSequencePanel({
     setDraftInventory(null)
     setLevelPreset('')
     lastInScopeIndexRef.current = -1
-    setSubTab(SCOPE_TAB_INVENTORY)
+    lastMasteryIndexRef.current = -1
+    setSubTab(SCOPE_TAB_MASTERY)
   }, [student?.id])
 
   const bumpVisible = useCallback(() => {
     lastInScopeIndexRef.current = -1
+    lastMasteryIndexRef.current = -1
     setVisibleTick((tick) => tick + 1)
   }, [])
 
@@ -394,6 +432,43 @@ export default function ScopeAndSequencePanel({
     [locked, gridApiRef, gridRows, applyInScopeToIds],
   )
 
+  const applyMasteryToIds = useCallback(
+    (ids, masteryStatus) => {
+      if (locked || !ids.size || !MASTERY_STATUSES.includes(masteryStatus)) return
+      setDraft((base) =>
+        base.map((entry) => (ids.has(entry.conceptId) ? { ...entry, masteryStatus } : entry)),
+      )
+    },
+    [locked, setDraft],
+  )
+
+  const applyMasteryToVisible = useCallback(
+    (masteryStatus) => {
+      const visible = visibleRowsFromGrid(gridApiRef, gridRows)
+      const ids = new Set(visible.map((row) => row.conceptId).filter(Boolean))
+      applyMasteryToIds(ids, masteryStatus)
+    },
+    [gridApiRef, gridRows, applyMasteryToIds],
+  )
+
+  const cycleMasteryRange = useCallback(
+    (row, shiftKey) => {
+      if (locked || !row?.conceptId) return
+      const visible = visibleRowsFromGrid(gridApiRef, gridRows)
+      const clickedIndex = visible.findIndex((item) => item.conceptId === row.conceptId)
+      const nextStatus = nextMasteryStatus(row.masteryStatus)
+      let targetIds = new Set([row.conceptId])
+      if (shiftKey && lastMasteryIndexRef.current >= 0 && clickedIndex >= 0) {
+        const start = Math.min(lastMasteryIndexRef.current, clickedIndex)
+        const end = Math.max(lastMasteryIndexRef.current, clickedIndex)
+        targetIds = new Set(visible.slice(start, end + 1).map((item) => item.conceptId))
+      }
+      lastMasteryIndexRef.current = clickedIndex
+      applyMasteryToIds(targetIds, nextStatus)
+    },
+    [locked, gridApiRef, gridRows, applyMasteryToIds],
+  )
+
   const scopeLevels = useMemo(() => {
     const levels = new Set()
     for (const concept of concepts ?? []) {
@@ -413,14 +488,14 @@ export default function ScopeAndSequencePanel({
   const columns = useMemo(
     () =>
       subTab === SCOPE_TAB_MASTERY
-        ? masteryColumnDefs(locked)
+        ? masteryColumnDefs({ hideInScope: masteryInScopeOnly })
         : inventoryColumnDefs({
             locked,
             headerChecked,
             headerIndeterminate,
             onHeaderToggle: () => applyInScopeToVisible(!headerChecked),
           }),
-    [subTab, locked, headerChecked, headerIndeterminate, applyInScopeToVisible],
+    [subTab, locked, headerChecked, headerIndeterminate, applyInScopeToVisible, masteryInScopeOnly],
   )
 
   const collectExportRows = useCallback(() => {
@@ -610,16 +685,17 @@ export default function ScopeAndSequencePanel({
           value={subTab}
           onChange={(_event, value) => {
             lastInScopeIndexRef.current = -1
+            lastMasteryIndexRef.current = -1
             setSubTab(value)
           }}
           variant="fullWidth"
         >
+          <Tab icon={<InsightsOutlinedIcon />} iconPosition="start" label="Mastery" />
           <Tab
             icon={<Inventory2OutlinedIcon />}
             iconPosition="start"
             label="Concept Inventory"
           />
-          <Tab icon={<InsightsOutlinedIcon />} iconPosition="start" label="Mastery" />
         </Tabs>
 
         <Stack
@@ -702,6 +778,29 @@ export default function ScopeAndSequencePanel({
                 }
                 label="In scope only"
               />
+              <FormControl size="small" sx={{ minWidth: 150 }} disabled={locked || saving || !gridRows.length}>
+                <InputLabel id="mastery-set-visible">Set shown to</InputLabel>
+                <Select
+                  labelId="mastery-set-visible"
+                  label="Set shown to"
+                  value=""
+                  onChange={(event) => applyMasteryToVisible(event.target.value)}
+                >
+                  <MenuItem value="">
+                    <em>Choose…</em>
+                  </MenuItem>
+                  {MASTERY_STATUSES.map((status) => (
+                    <MenuItem key={status} value={status} sx={{ textTransform: 'capitalize' }}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`${gridRows.length} shown`}
+              />
               <Button
                 size="small"
                 variant="outlined"
@@ -719,7 +818,7 @@ export default function ScopeAndSequencePanel({
 
       {locked ? (
         <Alert severity="warning" icon={<LockIcon />} sx={{ mb: 1.5 }}>
-          Editing is locked. Unlock to change {inventoryTab ? 'In scope and Sequence' : 'Mastery status'}.
+          Editing is locked. Unlock to change {inventoryTab ? 'In scope and Sequence' : 'Mastery'}.
           Changes are saved only when you click Save.
         </Alert>
       ) : inventoryTab ? (
@@ -731,8 +830,9 @@ export default function ScopeAndSequencePanel({
         </Alert>
       ) : (
         <Alert severity="info" icon={<SaveIcon />} sx={{ mb: 1.5 }}>
-          Set mastery on this tab. In scope is shown for context and is edited on Concept Inventory.
-          Save before leaving this tab or switching students.
+          Click a Mastery chip to cycle unknown → new → review → mastered. Shift-click to fill a
+          range of the rows currently shown. This tab stays on in-scope concepts unless you turn
+          that filter off. Inventory is where you decide what is in scope. Save before leaving.
         </Alert>
       )}
 
@@ -773,19 +873,26 @@ export default function ScopeAndSequencePanel({
             },
           }}
           isCellEditable={(params) =>
-            !locked && params.field !== 'inScope' && (inventoryTab || params.field === 'masteryStatus')
+            !locked && inventoryTab && params.field === 'sequence'
           }
           onFilterModelChange={bumpVisible}
           onSortModelChange={bumpVisible}
           onPaginationModelChange={bumpVisible}
           onCellClick={(params, event) => {
-            if (!inventoryTab || params.field !== 'inScope') return
-            event.defaultMuiPrevented = true
-            if (locked) return
-            toggleInScopeRange(params.row, !params.row.inScope, event.shiftKey)
+            if (inventoryTab && params.field === 'inScope') {
+              event.defaultMuiPrevented = true
+              if (locked) return
+              toggleInScopeRange(params.row, !params.row.inScope, event.shiftKey)
+              return
+            }
+            if (!inventoryTab && params.field === 'masteryStatus') {
+              event.defaultMuiPrevented = true
+              if (locked) return
+              cycleMasteryRange(params.row, event.shiftKey)
+            }
           }}
           onCellDoubleClick={(params, event) => {
-            if (params.field === 'inScope') {
+            if (params.field === 'inScope' || params.field === 'masteryStatus') {
               event.defaultMuiPrevented = true
               event.preventDefault()
               event.stopPropagation()
@@ -812,6 +919,10 @@ export default function ScopeAndSequencePanel({
           sx={{
             '& .MuiDataGrid-cell[data-field="inScope"]': {
               px: inventoryTab ? 0 : 1,
+              cursor: inventoryTab && !locked ? 'pointer' : 'default',
+            },
+            '& .MuiDataGrid-cell[data-field="masteryStatus"]': {
+              cursor: !inventoryTab && !locked ? 'pointer' : 'default',
             },
             ...(inventoryTab ? null : masteryRowSx),
           }}
