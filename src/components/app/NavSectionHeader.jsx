@@ -1,5 +1,5 @@
 /**
- * Left-nav section header (Schedule, Students, Groups).
+ * Left-nav section header (Home, Schedule, Students, Groups).
  * Expand/collapse, select, and optional "+" add action.
  */
 import { Box, IconButton, Typography } from '@mui/material'

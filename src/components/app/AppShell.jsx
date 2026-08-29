@@ -1,5 +1,5 @@
 /**
- * Signed-in instructor shell: left nav, student/group CRUD, and main tabs.
+ * Signed-in instructor shell: Home splash, left nav, student/group CRUD, and main tabs.
  * Unsaved Scope and Sequence (and dirty lesson plans) block navigation until saved.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -34,6 +34,7 @@ import {
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
+import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
 import Groups3Icon from '@mui/icons-material/Groups3'
@@ -42,6 +43,7 @@ import LessonPlanPanel from '../lesson-plan/LessonPlanPanel'
 import DataPanel from '../data/DataPanel'
 import ContentPanel from '../content/ContentPanel'
 import GroupPanel from '../groups/GroupPanel'
+import HomePanel from '../home/HomePanel'
 import SchedulePanel from '../schedule/SchedulePanel'
 import ScopeAndSequencePanel from '../scope/ScopeAndSequencePanel'
 import ResourcesPanel from '../resources/ResourcesPanel'
@@ -122,7 +124,8 @@ export default function AppShell({ user, signOut }) {
   const [deletingStudent, setDeletingStudent] = useState(false)
   const [scopeLocked, setScopeLocked] = useState(true)
   const [navBlock, setNavBlock] = useState(null)
-  const [viewingSchedule, setViewingSchedule] = useState(true)
+  const [viewingHome, setViewingHome] = useState(true)
+  const [viewingSchedule, setViewingSchedule] = useState(false)
   const [viewingResources, setViewingResources] = useState(false)
   const [studentsNavOpen, setStudentsNavOpen] = useState(true)
   const [groupsNavOpen, setGroupsNavOpen] = useState(true)
@@ -277,6 +280,7 @@ export default function AppShell({ user, signOut }) {
       studentId === selectedStudentId &&
       !creatingGroup &&
       !selectedGroupId &&
+      !viewingHome &&
       !viewingSchedule &&
       !viewingResources
     ) {
@@ -286,6 +290,7 @@ export default function AppShell({ user, signOut }) {
       setSelectedStudentId(studentId)
       setSelectedGroupId(null)
       setCreatingGroup(false)
+      setViewingHome(false)
       setViewingSchedule(false)
       setViewingResources(false)
       setOpenLessonId(null)
@@ -294,13 +299,20 @@ export default function AppShell({ user, signOut }) {
   }
 
   function handleSelectGroup(groupId) {
-    if (groupId === selectedGroupId && !creatingGroup && !viewingSchedule && !viewingResources) {
+    if (
+      groupId === selectedGroupId &&
+      !creatingGroup &&
+      !viewingHome &&
+      !viewingSchedule &&
+      !viewingResources
+    ) {
       return
     }
     requestNavigation(() => {
       setSelectedGroupId(groupId)
       setSelectedStudentId(null)
       setCreatingGroup(false)
+      setViewingHome(false)
       setViewingSchedule(false)
       setViewingResources(false)
       setScopeLocked(true)
@@ -312,8 +324,23 @@ export default function AppShell({ user, signOut }) {
       setCreatingGroup(true)
       setSelectedGroupId(null)
       setSelectedStudentId(null)
+      setViewingHome(false)
       setViewingSchedule(false)
       setViewingResources(false)
+      setScopeLocked(true)
+    })
+  }
+
+  function handleSelectHome() {
+    if (viewingHome) return
+    requestNavigation(() => {
+      setViewingHome(true)
+      setViewingSchedule(false)
+      setViewingResources(false)
+      setSelectedStudentId(null)
+      setSelectedGroupId(null)
+      setCreatingGroup(false)
+      setOpenLessonId(null)
       setScopeLocked(true)
     })
   }
@@ -322,6 +349,7 @@ export default function AppShell({ user, signOut }) {
     if (viewingSchedule) return
     requestNavigation(() => {
       setViewingSchedule(true)
+      setViewingHome(false)
       setViewingResources(false)
       setSelectedStudentId(null)
       setSelectedGroupId(null)
@@ -333,6 +361,7 @@ export default function AppShell({ user, signOut }) {
   function handleStartCreateScheduledLesson() {
     requestNavigation(() => {
       setViewingSchedule(true)
+      setViewingHome(false)
       setViewingResources(false)
       setSelectedStudentId(null)
       setSelectedGroupId(null)
@@ -346,6 +375,7 @@ export default function AppShell({ user, signOut }) {
     if (viewingResources) return
     requestNavigation(() => {
       setViewingResources(true)
+      setViewingHome(false)
       setViewingSchedule(false)
       setSelectedStudentId(null)
       setSelectedGroupId(null)
@@ -477,6 +507,7 @@ export default function AppShell({ user, signOut }) {
           setSelectedStudentId(data.id)
           setSelectedGroupId(null)
           setCreatingGroup(false)
+          setViewingHome(false)
           setViewingSchedule(false)
           setViewingResources(false)
           setScopeLocked(true)
@@ -507,10 +538,12 @@ export default function AppShell({ user, signOut }) {
       const remaining = students.filter((item) => item.id !== student.id)
       setStudents(remaining)
       if (selectedStudentId === student.id) {
-        setSelectedStudentId(remaining[0]?.id ?? null)
+        const nextStudent = remaining[0] ?? null
+        setSelectedStudentId(nextStudent?.id ?? null)
         setSelectedGroupId(null)
         setCreatingGroup(false)
         setScopeLocked(true)
+        if (!nextStudent) setViewingHome(true)
       }
       setStudentToDelete(null)
       setError('')
@@ -536,7 +569,26 @@ export default function AppShell({ user, signOut }) {
         }}
       >
         <Toolbar sx={{ gap: 2 }}>
-          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Stack
+            component="button"
+            type="button"
+            aria-label="Go to Home"
+            direction="row"
+            alignItems="center"
+            spacing={1.5}
+            onClick={handleSelectHome}
+            sx={{
+              flexGrow: 1,
+              minWidth: 0,
+              cursor: 'pointer',
+              bgcolor: 'transparent',
+              border: 0,
+              p: 0,
+              color: 'inherit',
+              font: 'inherit',
+              textAlign: 'left',
+            }}
+          >
             <Box
               component="img"
               src={readyOgLogo}
@@ -594,6 +646,15 @@ export default function AppShell({ user, signOut }) {
       >
         <Toolbar />
         <Box sx={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
+          <NavSectionHeader
+            title="Home"
+            selected={viewingHome}
+            onSelect={handleSelectHome}
+            icon={
+              <HomeOutlinedIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+            }
+          />
+          <Divider />
           <NavSectionHeader
             title="Schedule"
             selected={viewingSchedule}
@@ -654,6 +715,7 @@ export default function AppShell({ user, signOut }) {
                         selected={
                           !creatingGroup &&
                           !selectedGroupId &&
+                          !viewingHome &&
                           !viewingSchedule &&
                           !viewingResources &&
                           student.id === selectedStudentId
@@ -720,6 +782,7 @@ export default function AppShell({ user, signOut }) {
                       <ListItemButton
                         selected={
                           !creatingGroup &&
+                          !viewingHome &&
                           !viewingSchedule &&
                           !viewingResources &&
                           group.id === selectedGroupId
@@ -766,16 +829,18 @@ export default function AppShell({ user, signOut }) {
           </Paper>
         ) : null}
 
-        {!selectedStudent &&
-        !creatingGroup &&
-        !selectedGroup &&
-        !viewingSchedule &&
-        !viewingResources ? (
-          <Paper sx={{ p: 3 }}>
-            <Typography color="text.secondary">
-              Select a student, choose a group, open Schedule or Resources, or click + to create one.
-            </Typography>
-          </Paper>
+        {viewingHome ||
+        (!selectedStudent &&
+          !creatingGroup &&
+          !selectedGroup &&
+          !viewingSchedule &&
+          !viewingResources) ? (
+          <HomePanel
+            instructor={user?.signInDetails?.loginId ?? user?.username ?? ''}
+            onAddStudent={openCreateStudent}
+            onOpenSchedule={handleSelectSchedule}
+            onOpenResources={handleSelectResources}
+          />
         ) : viewingResources ? (
           <ResourcesPanel />
         ) : viewingSchedule ? (
@@ -787,6 +852,7 @@ export default function AppShell({ user, signOut }) {
             instructor={user?.signInDetails?.loginId ?? user?.username ?? ''}
             onOpenStudent={(studentId, lessonId) => {
               requestNavigation(() => {
+                setViewingHome(false)
                 setViewingSchedule(false)
                 setViewingResources(false)
                 setSelectedStudentId(studentId)
