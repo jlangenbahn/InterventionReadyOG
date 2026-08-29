@@ -70,7 +70,7 @@ import {
 } from '../../lib/lessonTemplates'
 import PublishLessonTemplateDialog from './PublishLessonTemplateDialog'
 import HelpTip from '../shared/HelpTip'
-import { BRAND, globalLessonGridSx } from '../../theme'
+import { BRAND, globalLessonGridSx, gradeBandFromPercent, gradeRowSx } from '../../theme'
 import { LESSON_PLAN_PRINT_PAGE_STYLE } from '../../lib/lessonPlanPrint'
 
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
@@ -256,11 +256,7 @@ const SAVED_LESSON_COLUMNS = [
   },
   { field: 'name', headerName: 'Lesson', flex: 1.2, minWidth: 120 },
   { field: 'newConcept', headerName: 'New concept', flex: 1, minWidth: 110 },
-]
-
-const GRADE_LESSON_COLUMNS = [
-  ...SAVED_LESSON_COLUMNS,
-  { field: 'scoreLabel', headerName: 'Score', width: 88, minWidth: 88 },
+  { field: 'scoreLabel', headerName: 'Score', width: 108, minWidth: 108 },
 ]
 
 const LESSON_MODE_VIEW = 0
@@ -579,7 +575,8 @@ export default function LessonPlanPanel({
             || ''
           const customName = data?.name || lesson.name || ''
           const materials = buildLessonScoreMaterials(lesson)
-          const scoreLabel = formatScoreTally(tallyScores(materials.allKeys, getLessonScores(lesson)))
+          const tally = tallyScores(materials.allKeys, getLessonScores(lesson))
+          const scorePercent = tally.scored ? Math.round((tally.accuracy ?? 0) * 100) : null
           return {
             id: lesson.id,
             lessonNumber: lesson.lessonNumber ?? '',
@@ -588,7 +585,9 @@ export default function LessonPlanPanel({
             lessonDateLabel: formatLessonDate(lesson.date) || '—',
             newConcept: newConcept || '—',
             name: formatLessonDisplayName(customName, newConcept, lesson.lessonNumber) || '—',
-            scoreLabel,
+            scoreLabel: formatScoreTally(tally),
+            scorePercent,
+            gradeBand: gradeBandFromPercent(scorePercent),
           }
         }),
     [studentLessons],
@@ -668,11 +667,6 @@ export default function LessonPlanPanel({
 
   const viewColumns = useMemo(
     () => [...SAVED_LESSON_COLUMNS, lessonActionColumn],
-    [lessonActionColumn],
-  )
-
-  const gradeColumns = useMemo(
-    () => [...GRADE_LESSON_COLUMNS, lessonActionColumn],
     [lessonActionColumn],
   )
 
@@ -1553,13 +1547,7 @@ export default function LessonPlanPanel({
                 <DataGridPro
                   key={viewingGlobal ? 'global' : 'student'}
                   rows={viewingGlobal ? globalLessonRows : savedLessonRows}
-                  columns={
-                    lessonMode === LESSON_MODE_GRADE
-                      ? gradeColumns
-                      : showGlobalLessons
-                        ? globalColumns
-                        : viewColumns
-                  }
+                  columns={viewingGlobal ? globalColumns : viewColumns}
                   getRowId={(row) => row.id}
                   onRowClick={(params) => {
                     if (viewingGlobal) {
@@ -1572,7 +1560,11 @@ export default function LessonPlanPanel({
                   rowSelectionModel={viewingGlobal ? globalSelectionModel : lessonSelectionModel}
                   getRowClassName={(params) => {
                     const selectedId = viewingGlobal ? selectedTemplateId : loadedLesson?.id
-                    return params.id === selectedId ? 'Mui-selected' : ''
+                    const selected = params.id === selectedId ? 'Mui-selected' : ''
+                    const grade = !viewingGlobal && params.row.gradeBand
+                      ? `grade-row-${params.row.gradeBand}`
+                      : ''
+                    return [grade, selected].filter(Boolean).join(' ')
                   }}
                   loading={viewingGlobal ? loadingTemplates : loadingLessons}
                   pagination
@@ -1596,7 +1588,7 @@ export default function LessonPlanPanel({
                     border: 0,
                     bgcolor: 'transparent',
                     '& .MuiDataGrid-overlayWrapper': { bgcolor: 'transparent' },
-                    ...(viewingGlobal ? globalLessonGridSx : null),
+                    ...(viewingGlobal ? globalLessonGridSx : gradeRowSx),
                   }}
                   localeText={{
                     noRowsLabel:

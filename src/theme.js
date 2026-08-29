@@ -70,6 +70,65 @@ export const masteryRowSx = Object.fromEntries(
   ]),
 )
 
+/** Soft row tints for scored lesson plans. Ungraded rows stay uncolored. */
+export const GRADE_ROW_COLORS = {
+  high: {
+    bg: '#dceee1',
+    hover: '#cde5d4',
+    selected: '#b9dcc4',
+    selectedHover: '#a8d0b5',
+    color: '#1a4a32',
+  },
+  mid: {
+    bg: '#f3ebcc',
+    hover: '#ece1b4',
+    selected: '#e3d49a',
+    selectedHover: '#d9c986',
+    color: '#5a4710',
+  },
+  low: {
+    bg: '#f1dfdf',
+    hover: '#e8cece',
+    selected: '#dcbbbb',
+    selectedHover: '#d0aaaa',
+    color: '#6a2626',
+  },
+}
+
+export function gradeBandFromPercent(percent) {
+  if (percent == null || Number.isNaN(Number(percent))) return null
+  if (percent >= 90) return 'high'
+  if (percent >= 70) return 'mid'
+  return 'low'
+}
+
+export const gradeRowSx = Object.fromEntries(
+  Object.entries(GRADE_ROW_COLORS).flatMap(([band, { bg, hover, selected, selectedHover, color }]) => [
+    [
+      `& .grade-row-${band}`,
+      {
+        bgcolor: bg,
+        color,
+        '& .MuiDataGrid-cell': { color, bgcolor: 'transparent' },
+        '& .MuiIconButton-root': { color },
+        '& .MuiDataGrid-cell--pinnedLeft, & .MuiDataGrid-cell--pinnedRight, & .MuiDataGrid-cell--pinnedLeft--last, & .MuiDataGrid-cell--pinnedRight--first': {
+          bgcolor: 'inherit !important',
+          backgroundImage: 'none',
+        },
+      },
+    ],
+    [`& .grade-row-${band}:hover`, { bgcolor: hover }],
+    [
+      `& .grade-row-${band}.Mui-selected`,
+      {
+        bgcolor: `${selected} !important`,
+        '&:hover': { bgcolor: `${selectedHover} !important` },
+        '& .MuiDataGrid-cell': { bgcolor: 'transparent !important' },
+      },
+    ],
+  ]),
+)
+
 export const BAR_COLORS = [
   BRAND.navy,
   BRAND.navyMid,
