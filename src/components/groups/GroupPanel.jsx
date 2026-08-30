@@ -3,6 +3,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -183,10 +184,19 @@ export default function GroupPanel({
     [lessons, studentsById],
   )
 
+  const rosterCount = rows.length
+  const canCreateGroup = rosterCount >= 2
+  const BEST_PRACTICE =
+    'Best Practice: Build your lesson plan for one specific student, then use the group feature to assign that same plan to everyone else in the group.'
+
   function handleSave() {
     const trimmed = name.trim()
     if (!trimmed) {
       setError('Give the group a name.')
+      return
+    }
+    if (selectedIds.length < 2) {
+      setError('A group needs at least two students.')
       return
     }
     onSave?.({
@@ -194,6 +204,21 @@ export default function GroupPanel({
       name: trimmed,
       studentIds: selectedIds,
     })
+  }
+
+  if (isNew && !canCreateGroup) {
+    return (
+      <Paper sx={{ p: 3, maxWidth: 640 }}>
+        <Stack spacing={1.5}>
+          <Typography variant="h6">Groups need at least two students</Typography>
+          <Typography variant="body1" color="text.secondary">
+            Add at least two students before creating a group. The Add Group button stays unavailable
+            until your roster has two or more students.
+          </Typography>
+          <Alert severity="info">{BEST_PRACTICE}</Alert>
+        </Stack>
+      </Paper>
+    )
   }
 
   return (
@@ -211,8 +236,11 @@ export default function GroupPanel({
           <Chip size="small" variant="outlined" label={`${selectedIds.length} students`} />
           {saving ? <CircularProgress size={16} /> : null}
         </Stack>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {BEST_PRACTICE}
+        </Alert>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Choose who belongs in this group. Assigned lesson plans for these students appear on the right.
+          Choose at least two students. Assigned lesson plans for these students appear on the right.
         </Typography>
         <TextField
           label="Group name"
@@ -249,7 +277,7 @@ export default function GroupPanel({
             variant="contained"
             startIcon={<SaveIcon />}
             onClick={handleSave}
-            disabled={saving || !name.trim()}
+            disabled={saving || !name.trim() || selectedIds.length < 2}
           >
             {isNew ? 'Save group' : 'Update group'}
           </Button>

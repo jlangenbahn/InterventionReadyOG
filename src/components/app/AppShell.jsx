@@ -319,6 +319,8 @@ export default function AppShell({ user, signOut }) {
     })
   }
 
+  const canCreateGroup = students.length >= 2
+
   function handleStartCreateGroup() {
     requestNavigation(() => {
       setCreatingGroup(true)
@@ -329,6 +331,18 @@ export default function AppShell({ user, signOut }) {
       setViewingResources(false)
       setScopeLocked(true)
     })
+  }
+
+  function handleSelectGroupsSection() {
+    if (creatingGroup) return
+    if (selectedGroupId && !viewingHome && !viewingSchedule && !viewingResources && !selectedStudentId) {
+      return
+    }
+    if (selectedGroupId) {
+      handleSelectGroup(selectedGroupId)
+      return
+    }
+    handleStartCreateGroup()
   }
 
   function handleSelectHome() {
@@ -739,8 +753,12 @@ export default function AppShell({ user, signOut }) {
             title="Groups"
             expanded={groupsNavOpen}
             onToggleExpand={() => setGroupsNavOpen((open) => !open)}
+            onSelect={handleSelectGroupsSection}
             onAdd={handleStartCreateGroup}
             addLabel="Add group"
+            addDisabled={!canCreateGroup}
+            addDisabledReason="Add at least two students before creating a group."
+            selected={creatingGroup || Boolean(selectedGroupId && !viewingHome && !viewingSchedule && !viewingResources)}
             icon={<Groups3Icon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />}
           />
           <Divider />
@@ -752,7 +770,9 @@ export default function AppShell({ user, signOut }) {
             ) : groups.length === 0 ? (
               <Box sx={{ p: 2 }}>
                 <Typography variant="body2" color="text.secondary">
-                  No groups yet. Click + to bundle students.
+                  {canCreateGroup
+                    ? 'No groups yet. Click + to bundle students.'
+                    : 'Add at least two students before creating a group.'}
                 </Typography>
               </Box>
             ) : (

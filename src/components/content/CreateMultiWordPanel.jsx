@@ -9,9 +9,6 @@ import {
   Button,
   Chip,
   CircularProgress,
-  List,
-  ListItemButton,
-  ListItemText,
   Paper,
   Stack,
   TextField,
@@ -30,44 +27,11 @@ import {
   tagMultiWordText,
 } from '../../lib/tagMultiWordText'
 import { updatePassage, updateSentence } from '../../lib/crudRecords'
-import { resolveListWords } from '../../lib/fetchStudentLessonPlan'
-import { generateLessonText } from '../../lib/generateLessonText'
+import { generateLessonText, wordsFromConceptBank } from '../../lib/generateLessonText'
 import { sanitizeGeneratedLessonText } from '../../lib/sanitizeLessonText'
 
-function buildWordLookup(wordsByConceptId) {
-  const lookup = new Map()
-  if (!wordsByConceptId) return lookup
-  for (const rows of wordsByConceptId.values()) {
-    for (const row of rows ?? []) {
-      const word = typeof row?.word === 'string' ? row.word : ''
-      if (!word) continue
-      if (row.wordId) lookup.set(row.wordId, word)
-      if (row.id) lookup.set(row.id, word)
-    }
-  }
-  return lookup
-}
-
-function uniqueWords(words) {
-  const seen = new Set()
-  const result = []
-  for (const raw of words ?? []) {
-    const word = String(raw ?? '').trim()
-    if (!word) continue
-    const key = word.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    result.push(word)
-  }
-  return result
-}
-
-function listSourceWords(list, wordLookup) {
-  const nested = Array.isArray(list?.words) ? list.words : []
-  if (nested.length && nested.every((item) => typeof item === 'string')) {
-    return uniqueWords(nested)
-  }
-  return uniqueWords(resolveListWords(list, wordLookup))
+function conceptButtonLabel(concept) {
+  return concept?.concept || concept?.name || 'Untitled concept'
 }
 
 export default function CreateMultiWordPanel({
@@ -84,6 +48,7 @@ export default function CreateMultiWordPanel({
   editItem = null,
   lockKind = false,
   preferredFocusConcept = null,
+  lessonConcepts = [],
   lists = [],
 }) {
   const [kindState, setKindState] = useState(editItem?.kind || 'sentence')
@@ -95,9 +60,9 @@ export default function CreateMultiWordPanel({
   const [title, setTitle] = useState(editItem?.title || '')
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [generatingConceptId, setGeneratingConceptId] = useState(null)
   const [generateError, setGenerateError] = useState('')
   const [notice, setNotice] = useState('')
-  const [selectedListId, setSelectedListId] = useState(null)
   const [focusConceptId, setFocusConceptId] = useState(
     editItem?.focusConceptId ?? preferredFocusId ?? null,
   )
@@ -121,7 +86,6 @@ export default function CreateMultiWordPanel({
     setFocusTouched(Boolean(editItem.focusConceptId))
     setNotice('')
     setGenerateError('')
-    setSelectedListId(null)
   }, [
     editItem?.id,
     editItem?.kind,
@@ -136,45 +100,39 @@ export default function CreateMultiWordPanel({
     () => buildWordCatalogIndex(concepts, wordsByConceptId),
     [concepts, wordsByConceptId],
   )
-  const wordLookup = useMemo(() => buildWordLookup(wordsByConceptId), [wordsByConceptId])
-  const sourceListConceptId = preferredFocusId || focusConceptId
-  const sourceLists = useMemo(
-    () =>
-      (lists ?? [])
-        .filter((list) => list?.id)
-        .filter((list) => !sourceListConceptId || list.conceptID === sourceListConceptId)
-        .map((list) => ({
-          id: list.id,
-          name: list.name || 'Untitled list',
-          conceptID: list.conceptID || null,
-          words: listSourceWords(list, wordLookup),
-        }))
-        .filter((list) => list.words.length > 0),
-    [lists, wordLookup, sourceListConceptId],
-  )
-  const selectedSourceList = sourceLists.find((list) => list.id === selectedListId) ?? null
-
-  useEffect(() => {
-    if (!sourceLists.length) {
-      if (selectedListId) setSelectedListId(null)
-      return
+  const conceptButtons = useMemo(() => {
+    const seen = new Set()
+    const rows = []
+    function push(concept, role) {
+      if (!concept?.id || seen.has(concept.id)) return
+      seen.add(concept.id)
+      rows.push({
+        id: concept.id,
+        concept: conceptButtonLabel(concept),
+        role: role || concept.role || 'review',
+      })
     }
-    if (selectedListId && sourceLists.some((list) => list.id === selectedListId)) return
-    setSelectedListId(sourceLists[0].id)
-  }, [sourceLists, selectedListId])
+    for (const item of lessonConcepts ?? []) push(item, item.role)
+    if (preferredFocusConcept) {
+      push(preferredFocusConcept, preferredFocusConcept.role || 'new')
+    }
+    return rows
+  }, [lessonConcepts, preferredFocusConcept])
 
   const tagged = useMemo(() => tagMultiWordText(text, catalogIndex), [text, catalogIndex])
 
   const focusOptions = useMemo(() => {
     const rows = [...(tagged.conceptRows ?? [])]
-    if (preferredFocusId && !rows.some((row) => row.id === preferredFocusId)) {
-      rows.unshift({
-        id: preferredFocusId,
-        name: preferredFocusName || 'Selected concept',
-      })
+    function prepend(id, name) {
+      if (!id || rows.some((row) => row.id === id)) return
+      rows.unshift({ id, name: name || 'Selected concept' })
     }
+    for (const item of [...conceptButtons].reverse()) {
+      prepend(item.id, item.concept)
+    }
+    if (preferredFocusId) prepend(preferredFocusId, preferredFocusName)
     return rows
-  }, [tagged.conceptRows, preferredFocusId, preferredFocusName])
+  }, [tagged.conceptRows, preferredFocusId, preferredFocusName, conceptButtons])
   const focusValue = focusOptions.find((row) => row.id === focusConceptId) ?? null
 
   useEffect(() => {
@@ -207,32 +165,46 @@ export default function CreateMultiWordPanel({
     else setKindState(value)
   }
 
-  function handleSelectList(list) {
-    if (!list?.id) return
-    setSelectedListId(list.id)
-    if (!preferredFocusId && list.conceptID) {
-      setFocusTouched(true)
-      setFocusConceptId(list.conceptID)
+  function bankForConcept(concept) {
+    return {
+      role: concept?.role === 'new' ? 'new' : 'review',
+      conceptName: conceptButtonLabel(concept),
+      words: wordsFromConceptBank(wordsByConceptId, concept?.id),
     }
   }
 
-  async function handleGenerate() {
-    if (!selectedSourceList?.words?.length) {
-      setGenerateError('Select a word list to generate from.')
+  async function handleGenerate(concept) {
+    if (!concept?.id) return
+    const focusBank = bankForConcept(concept)
+    if (!focusBank.words.length) {
+      setGenerateError(`No catalog words for ${focusBank.conceptName} yet.`)
       return
     }
+    const banks =
+      kind === 'passage'
+        ? [
+            focusBank,
+            ...conceptButtons
+              .filter((item) => item.id !== concept.id)
+              .map((item) => bankForConcept(item))
+              .filter((bank) => bank.words.length),
+          ]
+        : [focusBank]
     setGenerating(true)
+    setGeneratingConceptId(concept.id)
     setGenerateError('')
+    setFocusTouched(true)
+    setFocusConceptId(concept.id)
     try {
-      const conceptName = preferredFocusName || focusValue?.name || 'this concept'
+      const conceptName = conceptButtonLabel(concept)
       const focusConcept =
-        concepts.find((item) => item.id === (preferredFocusId || focusConceptId)) ||
+        concepts.find((item) => item.id === concept.id) ||
         preferredFocusConcept ||
         null
       const draft = await generateLessonText({
         kind,
         conceptName,
-        words: selectedSourceList.words,
+        wordBanks: banks,
         student,
         concept: focusConcept,
         concepts,
@@ -255,6 +227,7 @@ export default function CreateMultiWordPanel({
       setError(message)
     } finally {
       setGenerating(false)
+      setGeneratingConceptId(null)
     }
   }
 
@@ -425,78 +398,53 @@ export default function CreateMultiWordPanel({
               <Stack direction="row" spacing={1} alignItems="center">
                 <AutoAwesomeIcon color="secondary" />
                 <Typography variant="subtitle2">Ask Andrea</Typography>
-                <HelpTip title="Andrea is our AI helper." />
+                <HelpTip title="Andrea is our AI helper. She writes from the full catalog word bank for each concept, not from a saved 10-word list." />
               </Stack>
               <Stack direction="row" spacing={0.5} alignItems="center">
                 <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                  {sourceListConceptId
-                    ? 'Word lists for this concept'
-                    : 'Word lists'}
+                  {kind === 'passage'
+                    ? 'Generate a passage from lesson concepts'
+                    : 'Generate a sentence from a lesson concept'}
                 </Typography>
                 <HelpTip
-                  title={`Pick a word list for this concept, then generate a simple ${kind === 'passage' ? 'passage' : 'sentence'} into the editor. You can edit it before saving.`}
+                  title={
+                    kind === 'passage'
+                      ? 'Click a concept to generate. Passages pull from the new-concept word bank and every review-concept word bank together, then even out the mix. Andrea samples from those banks instead of using every word.'
+                      : 'Click a concept to generate a sentence from that concept’s full word bank.'
+                  }
                 />
               </Stack>
-              {sourceLists.length ? (
-                <List
-                  dense
-                  disablePadding
-                  sx={{
-                    maxHeight: 168,
-                    overflow: 'auto',
-                    bgcolor: 'background.paper',
-                    border: 1,
-                    borderColor: 'divider',
-                    borderRadius: 1,
-                  }}
-                >
-                  {sourceLists.map((list) => (
-                    <ListItemButton
-                      key={list.id}
-                      selected={list.id === selectedListId}
-                      onClick={() => handleSelectList(list)}
-                    >
-                      <ListItemText
-                        primary={list.name}
-                        secondary={`${list.words.length} word${list.words.length === 1 ? '' : 's'}`}
-                        primaryTypographyProps={{ variant: 'body2', noWrap: true }}
-                        secondaryTypographyProps={{ variant: 'caption' }}
-                      />
-                    </ListItemButton>
-                  ))}
-                </List>
+              {conceptButtons.length ? (
+                <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                  {conceptButtons.map((concept) => {
+                    const wordCount = wordsFromConceptBank(wordsByConceptId, concept.id).length
+                    return (
+                      <AskAndreaButton
+                        key={concept.id}
+                        size="small"
+                        variant={concept.role === 'new' ? 'contained' : 'outlined'}
+                        loading={generating && generatingConceptId === concept.id}
+                        disabled={saving || generating || loadingCatalog || wordCount === 0}
+                        tooltip={
+                          wordCount
+                            ? kind === 'passage'
+                              ? `Write a passage using the full ${concept.concept} bank plus the other lesson concept banks.`
+                              : `Write a sentence using the full ${concept.concept} word bank (${wordCount} words).`
+                            : `No catalog words for ${concept.concept} yet.`
+                        }
+                        onClick={() => void handleGenerate(concept)}
+                      >
+                        {`${concept.concept} · ${concept.role}`}
+                      </AskAndreaButton>
+                    )
+                  })}
+                </Stack>
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  {sourceListConceptId
-                    ? 'No word lists for this concept yet. Create a list first, then come back to generate.'
-                    : 'No word lists yet. Create a list first, then come back to generate.'}
+                  Choose a new concept and review concepts in the lesson, or mark concepts as New or
+                  Review in Scope and Sequence, then come back to generate.
                 </Typography>
               )}
-              {selectedSourceList ? (
-                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-                  {selectedSourceList.words.slice(0, 12).map((word) => (
-                    <Chip key={word} size="small" label={word} variant="outlined" />
-                  ))}
-                  {selectedSourceList.words.length > 12 ? (
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      label={`+${selectedSourceList.words.length - 12} more`}
-                    />
-                  ) : null}
-                </Stack>
-              ) : null}
-              <AskAndreaButton
-                size="medium"
-                loading={generating}
-                disabled={saving || !selectedSourceList}
-                tooltip={
-                  selectedSourceList
-                    ? `Andrea writes a ${kind} for this student from “${selectedSourceList.name}”, using familiar words and concepts plus the target list.`
-                    : 'Andrea is our AI helper. Select a word list first.'
-                }
-                onClick={() => void handleGenerate()}
-              />
               {generateError ? (
                 <Alert severity="error" onClose={() => setGenerateError('')}>
                   {generateError}

@@ -17,8 +17,9 @@ import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import { createWordList } from '../../lib/crudRecords'
 import { studentDisplayName } from '../../lib/fetchStudentLessonPlan'
-import { emptyWordSelection, wordRowId } from '../../lib/wordSelection'
+import { deselectWord, emptyWordSelection, wordRowId } from '../../lib/wordSelection'
 import HelpTip from '../shared/HelpTip'
+import SelectedWordsPanel from './SelectedWordsPanel'
 import WordSelectionActions from './WordSelectionActions'
 
 const WORD_COLUMNS = [
@@ -93,7 +94,7 @@ export default function CreateWordListModal({
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} fullWidth maxWidth="md" scroll="paper">
+    <Dialog open={open} onClose={handleClose} fullWidth maxWidth="lg" scroll="paper">
       <DialogTitle>
         <Stack direction="row" spacing={0.5} alignItems="center">
           <Box component="span">Create {conceptName} list</Box>
@@ -117,29 +118,43 @@ export default function CreateWordListModal({
           />
           {creating ? <CircularProgress size={16} /> : null}
         </Stack>
-        <Box sx={{ height: 360, width: '100%' }}>
-          <DataGridPro
-            key={concept?.id || 'none'}
-            rows={words}
-            columns={WORD_COLUMNS}
-            getRowId={wordRowId}
-            checkboxSelection
-            disableRowSelectionExcludeModel
-            disableRowSelectionOnClick
-            hideFooterSelectedRowCount
-            rowSelectionModel={wordSelection}
-            onRowSelectionModelChange={(model) => setWordSelection(model)}
-            pagination
-            pageSizeOptions={[25, 50, 100]}
-            initialState={{
-              pagination: { paginationModel: { pageSize: 50 } },
-            }}
-            slots={{ toolbar: GridToolbar }}
-            slotProps={{ toolbar: { showQuickFilter: true } }}
-            density="compact"
-            localeText={{
-              noRowsLabel: `No words tagged with ${conceptName} yet.`,
-            }}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 3fr) minmax(200px, 1fr)' },
+            gap: 1.5,
+            alignItems: 'stretch',
+          }}
+        >
+          <Box sx={{ height: { xs: 320, md: 420 }, minWidth: 0 }}>
+            <DataGridPro
+              key={concept?.id || 'none'}
+              rows={words}
+              columns={WORD_COLUMNS}
+              getRowId={wordRowId}
+              checkboxSelection
+              disableRowSelectionExcludeModel
+              disableRowSelectionOnClick
+              hideFooterSelectedRowCount
+              rowSelectionModel={wordSelection}
+              onRowSelectionModelChange={(model) => setWordSelection(model)}
+              pagination
+              pageSizeOptions={[25, 50, 100]}
+              initialState={{
+                pagination: { paginationModel: { pageSize: 50 } },
+              }}
+              slots={{ toolbar: GridToolbar }}
+              slotProps={{ toolbar: { showQuickFilter: true } }}
+              density="compact"
+              localeText={{
+                noRowsLabel: `No words tagged with ${conceptName} yet.`,
+              }}
+            />
+          </Box>
+          <SelectedWordsPanel
+            words={selectedWordRows}
+            onRemove={(row) => setWordSelection((prev) => deselectWord(prev, row))}
+            emptyLabel="No words selected yet. Use Random 10, Ask Andrea, or check rows on the left."
           />
         </Box>
         <TextField

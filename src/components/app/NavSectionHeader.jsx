@@ -2,7 +2,7 @@
  * Left-nav section header (Home, Schedule, Students, Groups).
  * Expand/collapse, select, and optional "+" add action.
  */
-import { Box, IconButton, Typography } from '@mui/material'
+import { Box, IconButton, Tooltip, Typography } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 
@@ -12,6 +12,8 @@ export default function NavSectionHeader({
   onToggleExpand,
   onAdd,
   addLabel,
+  addDisabled = false,
+  addDisabledReason = '',
   selected = false,
   onSelect,
   icon = null,
@@ -62,9 +64,19 @@ export default function NavSectionHeader({
         </Typography>
       </Box>
       {onAdd ? (
-        <IconButton color="primary" size="small" aria-label={addLabel} onClick={onAdd}>
-          <AddIcon />
-        </IconButton>
+        <Tooltip title={addDisabled ? addDisabledReason || addLabel : addLabel}>
+          <span>
+            <IconButton
+              color="primary"
+              size="small"
+              aria-label={addLabel}
+              onClick={onAdd}
+              disabled={addDisabled}
+            >
+              <AddIcon />
+            </IconButton>
+          </span>
+        </Tooltip>
       ) : null}
     </Box>
   )

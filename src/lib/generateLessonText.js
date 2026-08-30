@@ -19,6 +19,21 @@ function uniqueWords(words) {
   return result
 }
 
+export function wordsFromConceptBank(wordsByConceptId, conceptId) {
+  if (!conceptId) return []
+  return uniqueWords(wordsByConceptId?.get?.(conceptId) ?? [])
+}
+
+export function buildWordBanks(banks) {
+  return (banks ?? [])
+    .map((bank) => ({
+      role: bank?.role === 'new' ? 'new' : 'review',
+      conceptName: String(bank?.conceptName || bank?.concept || 'this concept').trim() || 'this concept',
+      words: uniqueWords(bank?.words),
+    }))
+    .filter((bank) => bank.words.length)
+}
+
 function unwrapGeneratedText(data) {
   if (typeof data === 'string') return data.trim()
   if (data && typeof data.text === 'string') return data.text.trim()
@@ -60,18 +75,18 @@ function compactGenerationContext(context) {
       recentLists: context.wordHistory?.recentLists,
       recentTexts: context.wordHistory?.recentTexts,
     },
-    targetWords: context.candidates,
   })
 }
 
 /**
- * Ask Bedrock for a simple sentence or passage built from a concept word list,
+ * Ask Bedrock for a simple sentence or passage built from full concept word banks,
  * tailored with this student's practice history when available.
  */
 export async function generateLessonText({
   kind,
   conceptName,
   words,
+  wordBanks,
   student,
   concept,
   concepts = [],
@@ -85,10 +100,14 @@ export async function generateLessonText({
     )
   }
 
-  const unique = uniqueWords(words)
+  const banks = buildWordBanks(wordBanks)
+  const unique = banks.length ? uniqueWords(banks.flatMap((bank) => bank.words)) : uniqueWords(words)
   if (!unique.length) {
-    throw new Error('Select a word list with at least one word.')
+    throw new Error('Choose a concept that has words in the catalog.')
   }
+
+  const wordsPayload = banks.length ? JSON.stringify({ banks }) : unique.join(', ')
+  const contextSample = unique.slice(0, 40)
 
   let studentContext = ''
   if (student?.id) {
@@ -102,7 +121,7 @@ export async function generateLessonText({
           student,
           concept,
           concepts,
-          words: unique,
+          words: contextSample,
           lists,
           lessons,
           wordsByConceptId,
@@ -120,7 +139,7 @@ export async function generateLessonText({
     const result = await generate({
       kind: kindLabel,
       conceptName: String(conceptName || 'this concept').trim() || 'this concept',
-      words: unique.join(', '),
+      words: wordsPayload,
       studentContext: studentContext || undefined,
     })
     data = result?.data
@@ -141,7 +160,7 @@ export async function generateLessonText({
 
   const text = unwrapGeneratedText(data)
   if (!text) {
-    throw new Error('The AI did not return any text. Try another list or try again.')
+    throw new Error('The AI did not return any text. Try another concept or try again.')
   }
   return sanitizeGeneratedLessonText(text, { conceptName }).text
 }

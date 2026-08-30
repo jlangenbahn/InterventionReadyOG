@@ -6,9 +6,6 @@ import { Box, Paper, Typography } from '@mui/material'
 import { sanitizeLessonBody } from '../../lib/sanitizeLessonText'
 import { BRAND, FONT_FAMILY, studentTypeSx } from '../../theme'
 
-const WHAT_SPELLS = ['/a/ cat', '/e/ pet', '/i/ itch', '/o/ octopus', '/u/ up', '/ck/ luck', '/sk/ mask', '/ft/ gift']
-const SIMULTANEOUS_ORAL = ['task', 'shaft', 'pluck']
-
 const readerPaperSx = {
   bgcolor: '#ffffff',
   width: '100%',
@@ -97,24 +94,6 @@ const contentSx = {
   fontSize: '11px',
   fontFamily: FONT_FAMILY,
   letterSpacing: '-0.02em',
-}
-
-const chipSx = {
-  display: 'inline-block',
-  bgcolor: BRAND.grayBg,
-  px: '6px',
-  py: '2px',
-  borderRadius: '4px',
-  mr: '4px',
-  mb: '4px',
-  fontSize: '10px',
-  fontFamily: FONT_FAMILY,
-  letterSpacing: '-0.02em',
-  border: `1px solid ${BRAND.gray}`,
-  '@media print': {
-    border: `1px solid ${BRAND.gray}`,
-    bgcolor: 'transparent',
-  },
 }
 
 function Placeholder({ value }) {
@@ -224,20 +203,21 @@ function ReaderPassages({ passages = [] }) {
   )
 }
 
-function ExhibitPage({ pageNumber, label, reader = false, children }) {
+function ExhibitPage({ pageNumber, label, reader = false, placeholder = false, children }) {
   const pageSx = reader ? readerPaperSx : paperSx
   return (
     <Paper
       elevation={0}
-      className={`lesson-plan-page lesson-plan-page-${pageNumber}${reader ? ' lesson-plan-reader-page' : ''}`}
+      className={`lesson-plan-page lesson-plan-page-${pageNumber}${reader ? ' lesson-plan-reader-page' : ''}${placeholder ? ' lesson-plan-page-placeholder' : ''}`}
       sx={{
         ...pageSx,
         mb: 2,
         '@media print': {
           ...pageSx['@media print'],
           mb: 0,
-          breakBefore: 'page',
-          pageBreakBefore: 'always',
+          display: placeholder ? 'none' : undefined,
+          breakBefore: placeholder ? 'auto' : 'page',
+          pageBreakBefore: placeholder ? 'auto' : 'always',
         },
       }}
     >
@@ -298,6 +278,9 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
   const paddedPassages = [0, 1].map((index) => passages[index] ?? (index === 0 ? passage : null) ?? null)
   const filledSentences = (sentences ?? []).filter((item) => Boolean(sentenceText(item)))
   const filledPassages = paddedPassages.filter((item) => Boolean(passageText(item)))
+  const reviewPlaceholder = !paddedReview.some((list) => listWordLabels(list).length)
+  const newConceptPlaceholder = listWordLabels(newConceptList).length === 0
+  const passagePlaceholder = filledPassages.length === 0
 
   return (
     <Box ref={ref} className="lesson-plan-print-root">
@@ -393,23 +376,11 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
           </Typography>
           <Box sx={rowSx}>
             <Box sx={labelSx}>What Spells?</Box>
-            <Box sx={contentSx}>
-              {WHAT_SPELLS.map((item) => (
-                <Box key={item} component="span" sx={chipSx}>
-                  {item}
-                </Box>
-              ))}
-            </Box>
+            <Box sx={contentSx}>{'\u00a0'}</Box>
           </Box>
           <Box sx={rowSx}>
-            <Box sx={labelSx}>Simultaneous Oral</Box>
-            <Box sx={contentSx}>
-              {SIMULTANEOUS_ORAL.map((item) => (
-                <Box key={item} component="span" sx={chipSx}>
-                  {item}
-                </Box>
-              ))}
-            </Box>
+            <Box sx={labelSx}>Simultaneous Oral Spelling</Box>
+            <Box sx={contentSx}>{'\u00a0'}</Box>
           </Box>
           <Box sx={rowSx}>
             <Box sx={labelSx}>Dictation</Box>
@@ -450,15 +421,15 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
         </Box>
       </Paper>
 
-      <ExhibitPage pageNumber={2} label="Review concepts" reader>
+      <ExhibitPage pageNumber={2} label="Review concepts" reader placeholder={reviewPlaceholder}>
         <ReaderWordColumns lists={paddedReview} />
       </ExhibitPage>
 
-      <ExhibitPage pageNumber={3} label="New concept" reader>
+      <ExhibitPage pageNumber={3} label="New concept" reader placeholder={newConceptPlaceholder}>
         <ReaderWordList list={newConceptList} />
       </ExhibitPage>
 
-      <ExhibitPage pageNumber={4} label="Passage" reader>
+      <ExhibitPage pageNumber={4} label="Passage" reader placeholder={passagePlaceholder}>
         <ReaderPassages passages={filledPassages} />
       </ExhibitPage>
     </Box>

@@ -37,6 +37,7 @@ import {
 import { deletePassage, deleteSentence } from '../../lib/crudRecords'
 import { buildWordCatalogIndex, tagMultiWordText } from '../../lib/tagMultiWordText'
 import { MASTERY_ROW_COLORS } from '../../theme'
+import { lessonConceptsFromScope } from '../../lib/scopeAndSequence'
 
 const MODE_VIEW = 0
 const MODE_CREATE = 1
@@ -258,6 +259,11 @@ export default function MultiWordPanel({
         return a.concept.localeCompare(b.concept)
       })
   }, [concepts, student?.scopeAndSequence])
+
+  const lessonConcepts = useMemo(
+    () => lessonConceptsFromScope(concepts, parseScopeAndSequence(student?.scopeAndSequence)),
+    [concepts, student?.scopeAndSequence],
+  )
 
   const browseItems = useMemo(() => {
     const source = kind === 'passage' ? passages : sentences
@@ -711,6 +717,7 @@ export default function MultiWordPanel({
                 onSaved={(payload) => void handleSaved(payload)}
                 embedded
                 editItem={editItem}
+                lessonConcepts={lessonConcepts}
                 lists={studentLists}
               />
             </>

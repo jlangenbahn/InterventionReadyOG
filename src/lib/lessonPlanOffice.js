@@ -10,9 +10,6 @@ import { formatTimeRange, parseScheduleDate } from './schedule'
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 const GOOGLE_DOCS_OPEN_URL = 'https://docs.google.com/document/u/0/'
 
-const WHAT_SPELLS = ['/a/ cat', '/e/ pet', '/i/ itch', '/o/ octopus', '/u/ up', '/ck/ luck', '/sk/ mask', '/ft/ gift']
-const SIMULTANEOUS_ORAL = ['task', 'shaft', 'pluck']
-
 function escapeXml(value) {
   return String(value ?? '')
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
@@ -139,8 +136,8 @@ function lessonToParagraphs(section) {
     labeledLine('New concept', props.newConceptList?.name || props.newConceptList?.concept),
     paragraph('Methods: VATK, Coding of New Concept, Handwriting'),
     paragraph('Encoding', { style: 'Heading2' }),
-    labeledLine('What spells?', WHAT_SPELLS.join(', ')),
-    labeledLine('Simultaneous oral', SIMULTANEOUS_ORAL.join(', ')),
+    labeledLine('What spells?', ''),
+    labeledLine('Simultaneous Oral Spelling', ''),
     labeledLine(
       'Dictation',
       sentences.map((sentence, index) => `${index + 1}. ${sentenceText(sentence)}`).join('\n'),

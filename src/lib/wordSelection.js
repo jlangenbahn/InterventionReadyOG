@@ -18,6 +18,19 @@ export function includeWordSelection(ids) {
   }
 }
 
+export function deselectWord(selection, row) {
+  const id = wordRowId(row)
+  if (!id) return selection ?? emptyWordSelection()
+  if (selection?.type === 'exclude') {
+    const ids = new Set(selection.ids ?? [])
+    ids.add(id)
+    return { type: 'exclude', ids }
+  }
+  const ids = new Set(selection.ids ?? [])
+  ids.delete(id)
+  return { type: 'include', ids }
+}
+
 export function randomWordSelection(words, count = FOCUS_WORD_COUNT) {
   const ids = (words ?? []).map(wordRowId).filter(Boolean)
   const pool = [...ids]

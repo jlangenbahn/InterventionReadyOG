@@ -51,6 +51,10 @@ export async function saveInstructorGroup({ id, name, studentIds = [] }) {
   }
   const trimmed = String(name ?? '').trim()
   if (!trimmed) throw new Error('Give the group a name.')
+  const uniqueIds = [...new Set((studentIds ?? []).filter(Boolean))]
+  if (uniqueIds.length < 2) {
+    throw new Error('A group needs at least two students.')
+  }
 
   let group = null
   if (id) {
@@ -64,7 +68,6 @@ export async function saveInstructorGroup({ id, name, studentIds = [] }) {
   }
   if (!group?.id) throw new Error('Failed to save group')
 
-  const uniqueIds = [...new Set((studentIds ?? []).filter(Boolean))]
   if (client.models.GroupStudent) {
     const existing = (await listAll(client.models.GroupStudent).catch(() => []))
       .filter((link) => link?.groupId === group.id)

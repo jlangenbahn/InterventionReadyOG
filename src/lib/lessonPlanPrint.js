@@ -29,9 +29,9 @@ export const LESSON_PLAN_PRINT_PAGE_STYLE = `
     max-width: 100% !important;
     border-radius: 0 !important;
   }
-  .lesson-plan-page-2,
-  .lesson-plan-page-3,
-  .lesson-plan-page-4 {
+  .lesson-plan-page-2:not(.lesson-plan-page-placeholder),
+  .lesson-plan-page-3:not(.lesson-plan-page-placeholder),
+  .lesson-plan-page-4:not(.lesson-plan-page-placeholder) {
     break-before: page;
     page-break-before: always;
   }
@@ -56,6 +56,9 @@ export const LESSON_PLAN_PRINT_PAGE_STYLE = `
     color: #1a2332 !important;
   }
   .lesson-plan-screen-only {
+    display: none !important;
+  }
+  .lesson-plan-page-placeholder {
     display: none !important;
   }
 `

@@ -541,6 +541,17 @@ export default function LessonPlanPanel({
     return [...new Set(ids)]
   }, [selectedNewConceptId, selectedReviewConceptIds])
 
+  const lessonConceptsForAndrea = useMemo(() => {
+    const rows = []
+    const newConcept = conceptOptions.find((item) => item.id === selectedNewConceptId)
+    if (newConcept) rows.push({ ...newConcept, role: 'new' })
+    for (const id of selectedReviewConceptIds) {
+      const review = conceptOptions.find((item) => item.id === id)
+      if (review) rows.push({ ...review, role: 'review' })
+    }
+    return rows
+  }, [conceptOptions, selectedNewConceptId, selectedReviewConceptIds])
+
   const lessonSentences = useMemo(() => {
     if (!focusConceptIds.length) return []
     const allowed = new Set(focusConceptIds)
@@ -1773,6 +1784,7 @@ export default function LessonPlanPanel({
           wordsByConceptId={wordsByConceptId}
           loadingCatalog={loadingCatalog}
           focusConcept={multiWordModal.concept}
+          lessonConcepts={lessonConceptsForAndrea}
           lists={lists}
           setError={setError}
           onClose={() => setMultiWordModal(null)}

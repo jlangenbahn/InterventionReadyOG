@@ -57,6 +57,31 @@ export function serializeScopeAndSequence(inventory) {
   return JSON.stringify(inventory)
 }
 
+/** New + review in-scope concepts, ordered like a typical lesson (1 new, then reviews). */
+export function lessonConceptsFromScope(concepts, inventory) {
+  const byId = new Map((inventory ?? []).map((entry) => [entry?.conceptId, entry]))
+  const rows = []
+  for (const concept of concepts ?? []) {
+    if (!concept?.id) continue
+    const entry = byId.get(concept.id)
+    if (!entry?.inScope) continue
+    if (entry.masteryStatus !== 'new' && entry.masteryStatus !== 'review') continue
+    rows.push({
+      ...concept,
+      role: entry.masteryStatus,
+      sequence: Number.isFinite(Number(entry.sequence)) ? Number(entry.sequence) : null,
+    })
+  }
+  rows.sort((a, b) => {
+    if (a.role !== b.role) return a.role === 'new' ? -1 : 1
+    const seqA = a.sequence ?? Number.POSITIVE_INFINITY
+    const seqB = b.sequence ?? Number.POSITIVE_INFINITY
+    if (seqA !== seqB) return seqA - seqB
+    return String(a.concept ?? '').localeCompare(String(b.concept ?? ''))
+  })
+  return rows
+}
+
 export function inventoryToRows(concepts, inventory) {
   const byConceptId = new Map(inventory.map((entry) => [entry.conceptId, entry]))
   return concepts.map((concept) => {
