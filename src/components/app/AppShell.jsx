@@ -1006,7 +1006,22 @@ export default function AppShell({ user, signOut }) {
       <Dialog open={studentDialogOpen} onClose={() => setStudentDialogOpen(false)} fullWidth maxWidth="xs">
         <Box component="form" onSubmit={handleSaveStudent}>
           <DialogTitle>{studentFormMode === 'edit' ? 'Edit student' : 'Add student'}</DialogTitle>
-          <DialogContent sx={{ display: 'grid', gap: 2, pt: 1 }}>
+          <DialogContent
+            sx={{
+              display: 'grid',
+              gap: 2,
+              // MUI zeros padding-top when DialogContent follows DialogTitle, which clips
+              // outlined TextField labels (especially First name, which auto-focuses).
+              pt: '32px !important',
+              overflow: 'visible',
+              '& .MuiInputLabel-root': {
+                overflow: 'visible',
+              },
+              '& .MuiInputLabel-shrink': {
+                transform: 'translate(14px, -14px) scale(0.75)',
+              },
+            }}
+          >
             <TextField
               label="First name"
               value={studentForm.firstName}

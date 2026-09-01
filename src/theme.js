@@ -174,39 +174,61 @@ export const REVIEW_SLOT_COLORS = [
 
 export const globalLessonGridSx = {
   bgcolor: BRAND.goldBg,
+  color: BRAND.navyDark,
   '--DataGrid-containerBackground': BRAND.goldHeader,
   '--DataGrid-pinnedBackground': BRAND.goldBg,
   '--DataGrid-rowBorderColor': BRAND.goldBorder,
   '& .MuiDataGrid-columnHeaders, & .MuiDataGrid-columnHeader': {
     bgcolor: `${BRAND.goldHeader} !important`,
     borderColor: BRAND.goldBorder,
+    color: BRAND.navyDark,
+  },
+  '& .MuiDataGrid-columnHeaderTitle, & .MuiDataGrid-columnHeaderTitleContainer': {
+    color: BRAND.navyDark,
   },
   '& .MuiDataGrid-filler, & .MuiDataGrid-overlayWrapper, & .MuiDataGrid-virtualScroller': {
     bgcolor: 'transparent',
   },
+  '& .MuiDataGrid-overlay': {
+    color: BRAND.navyDark,
+  },
   '& .MuiDataGrid-footerContainer': {
     bgcolor: BRAND.goldBg,
     borderColor: BRAND.goldBorder,
+    color: BRAND.navyDark,
+  },
+  '& .MuiTablePagination-root, & .MuiTablePagination-displayedRows, & .MuiTablePagination-selectLabel, & .MuiTablePagination-select': {
+    color: BRAND.navyDark,
   },
   '& .MuiDataGrid-toolbarContainer': {
     bgcolor: BRAND.goldBg,
+    color: BRAND.navyDark,
+    '& .MuiButton-text, & .MuiTypography-root, & .MuiInputBase-root, & .MuiInputBase-input': {
+      color: BRAND.navyDark,
+    },
+  },
+  '& .MuiDataGrid-iconButtonContainer, & .MuiDataGrid-menuIcon, & .MuiDataGrid-sortIcon, & .MuiIconButton-root, & .MuiSvgIcon-root': {
+    color: BRAND.navyDark,
   },
   '& .MuiDataGrid-row': {
     bgcolor: BRAND.goldBg,
+    color: BRAND.navyDark,
     '&:hover': { bgcolor: BRAND.goldHover },
-    '& .MuiDataGrid-cell': { bgcolor: 'transparent' },
+    '& .MuiDataGrid-cell': { bgcolor: 'transparent', color: BRAND.navyDark },
   },
   '& .MuiDataGrid-row.Mui-selected': {
     bgcolor: `${BRAND.goldSelected} !important`,
     '&:hover': { bgcolor: `${BRAND.goldSelectedHover} !important` },
-    '& .MuiDataGrid-cell': { bgcolor: 'transparent !important' },
+    '& .MuiDataGrid-cell': { bgcolor: 'transparent !important', color: BRAND.navyDark },
   },
   '& .MuiDataGrid-cell': {
     borderColor: BRAND.goldBorder,
+    color: BRAND.navyDark,
   },
   '& .MuiDataGrid-cell--pinnedLeft, & .MuiDataGrid-cell--pinnedRight, & .MuiDataGrid-cell--pinnedLeft--last, & .MuiDataGrid-cell--pinnedRight--first': {
     bgcolor: 'inherit !important',
     backgroundImage: 'none',
+    color: BRAND.navyDark,
   },
 }
 
@@ -452,6 +474,27 @@ export function createAppTheme(mode = 'light') {
       MuiInputBase: {
         styleOverrides: {
           root: { fontFamily: FONT_FAMILY, fontSize: '0.8125rem' },
+        },
+      },
+      MuiInputLabel: {
+        styleOverrides: {
+          root: {
+            overflow: 'visible',
+            '&.MuiInputLabel-outlined.MuiInputLabel-shrink': {
+              overflow: 'visible',
+              transform: 'translate(14px, -14px) scale(0.75)',
+            },
+          },
+        },
+      },
+      MuiDialogContent: {
+        styleOverrides: {
+          root: {
+            // Keep outlined labels (and their top-border notch) fully visible under DialogTitle.
+            '.MuiDialogTitle-root + &': {
+              paddingTop: '32px !important',
+            },
+          },
         },
       },
       MuiDataGrid: {
