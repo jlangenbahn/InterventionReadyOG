@@ -19,6 +19,7 @@ import AddIcon from '@mui/icons-material/Add'
 import SaveIcon from '@mui/icons-material/Save'
 import StepperSelectionGrid from '../shared/StepperSelectionGrid'
 import HelpTip from '../shared/HelpTip'
+import { encodingConceptLabel } from '../../lib/lessonPlanDocument'
 import { MASTERY_ROW_COLORS, REVIEW_SLOT_COLORS, UNREPRESENTED_COLORS } from '../../theme'
 
 const LIST_COLUMNS = [
@@ -132,8 +133,8 @@ function MasteryChip({ status, label, sx, ...chipProps }) {
   return (
     <Chip
       size="small"
-      label={label ?? status}
       {...chipProps}
+      label={label ?? status}
       sx={{
         bgcolor: colors.bg,
         color: colors.color,
@@ -211,7 +212,7 @@ function CreateConceptActions({
 }
 
 function conceptSearchText(option) {
-  return [option?.concept, option?.category, option?.subcategory, option?.level]
+  return [option?.concept, option?.category, option?.subcategory, option?.level, option?.sampleWord]
     .map((value) => String(value ?? '').trim())
     .filter(Boolean)
     .join(' ')
@@ -229,6 +230,7 @@ function ConceptAutocomplete({
   required = false,
   loading = false,
   tagPalette = 'mastery',
+  formatTagLabel,
 }) {
   const disabled = new Set(disabledIds)
   const selectedIds = new Set(
@@ -258,7 +260,9 @@ function ConceptAutocomplete({
       }}
       groupBy={(option) => (option.inScope ? 'In scope' : 'Not in scope')}
       getOptionKey={(option) => option?.id}
-      getOptionLabel={(option) => option?.concept || option?.label || ''}
+      getOptionLabel={(option) =>
+        formatTagLabel ? formatTagLabel(option) : option?.concept || option?.label || ''
+      }
       isOptionEqualToValue={(option, selected) => option?.id === selected?.id}
       filterOptions={(items, state) => {
         const query = String(state.inputValue ?? '').trim().toLowerCase()
@@ -304,14 +308,21 @@ function ConceptAutocomplete({
       renderTags={(selected, getTagProps) =>
         selected.map((option, index) => {
           const { key, ...tagProps } = getTagProps({ index })
+          const full = (options ?? []).find((item) => item?.id === option?.id) || option
+          const tagLabel = formatTagLabel ? formatTagLabel(full) : full.concept
           if (tagPalette === 'reviewSlots') {
             return (
               <Chip
                 key={key}
                 {...tagProps}
                 size="small"
-                label={option.concept}
-                sx={slotChipSx(reviewSlotColors(index))}
+                label={tagLabel}
+                title={tagLabel}
+                sx={{
+                  ...slotChipSx(reviewSlotColors(index)),
+                  height: 'auto',
+                  '& .MuiChip-label': { whiteSpace: 'normal' },
+                }}
               />
             )
           }
@@ -319,8 +330,13 @@ function ConceptAutocomplete({
             <MasteryChip
               key={key}
               {...tagProps}
-              status={option.masteryStatus}
-              label={option.concept}
+              status={full.masteryStatus}
+              label={tagLabel}
+              title={tagLabel}
+              sx={{
+                height: 'auto',
+                '& .MuiChip-label': { whiteSpace: 'normal' },
+              }}
             />
           )
         })
@@ -377,8 +393,12 @@ export default function CreateLessonStepper({
   conceptOptions = [],
   selectedNewConceptId = null,
   selectedReviewConceptIds = [],
+  selectedWhatSpellsConceptIds = [],
+  selectedSosConceptIds = [],
   onSelectedNewConceptChange,
   onSelectedReviewConceptsChange,
+  onSelectedWhatSpellsChange,
+  onSelectedSosChange,
   lessonNotes = '',
   onLessonNotesChange,
   lessonName = '',
@@ -412,6 +432,12 @@ export default function CreateLessonStepper({
   const newConceptListId = newConceptIds[0] ?? null
   const newConceptValue = conceptOptions.find((item) => item.id === selectedNewConceptId) ?? null
   const reviewConceptValues = selectedReviewConceptIds
+    .map((id) => conceptOptions.find((item) => item.id === id))
+    .filter(Boolean)
+  const whatSpellsValues = selectedWhatSpellsConceptIds
+    .map((id) => conceptOptions.find((item) => item.id === id))
+    .filter(Boolean)
+  const sosValues = selectedSosConceptIds
     .map((id) => conceptOptions.find((item) => item.id === id))
     .filter(Boolean)
   const defaultNamePreview = newConceptValue?.concept
@@ -488,6 +514,26 @@ export default function CreateLessonStepper({
                   onChange={(next) => onSelectedNewConceptChange(next?.id ?? null)}
                 />
               </Box>
+              <ConceptAutocomplete
+                label="What Spells"
+                multiple
+                maxCount={8}
+                options={conceptOptions}
+                value={whatSpellsValues}
+                loading={loadingCatalog}
+                onChange={(next) => onSelectedWhatSpellsChange?.((next ?? []).map((item) => item.id))}
+                formatTagLabel={encodingConceptLabel}
+              />
+              <ConceptAutocomplete
+                label="Simultaneous Oral Spelling"
+                multiple
+                maxCount={8}
+                options={conceptOptions}
+                value={sosValues}
+                loading={loadingCatalog}
+                onChange={(next) => onSelectedSosChange?.((next ?? []).map((item) => item.id))}
+                formatTagLabel={encodingConceptLabel}
+              />
               <ConceptAutocomplete
                 label="Review concepts"
                 required

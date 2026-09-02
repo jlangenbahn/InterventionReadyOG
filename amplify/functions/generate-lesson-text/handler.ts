@@ -8,7 +8,7 @@ import {
 
 const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 const SYSTEM_PROMPT =
-  'You write tutoring materials for one specific student. The student is a middle-school reader at about a 4th-grade level. Use the student history when it is provided: prefer familiar words and review/mastered concepts as the surrounding language, and weave in target practice words plus a little new practice. If the focus concept is new, keep almost all non-target words familiar. Keep non-target words very simple. Write coherent, easy-to-follow text. Use provided target words with their exact spelling, including nonsense or decodable practice words. Prefer putting 2 or 3 target words in the same sentence when it still sounds natural. Do not copy previous sentences or passages. Return only the requested sentence or passage. Do not include a title, heading, markdown, hashtag, the concept name, labels, quotes, bullet points, or commentary. Start with the first sentence of the text.';
+  'You write tutoring materials for one specific student. The student is a middle-school reader at about a 4th-grade level. Use the student history when it is provided: prefer familiar words and review/mastered concepts as the surrounding language, and weave in target practice words plus a little new practice. If a focus concept is new, keep almost all non-target words familiar. Keep non-target words very simple. Write coherent, easy-to-follow text. Use provided target words with their exact spelling, including nonsense or decodable practice words. When multiple concept word banks are provided, integrate words from across all of them rather than practicing only one concept. Prefer putting 2 or 3 target words in the same sentence when it still sounds natural. Do not copy previous sentences or passages. Return only the requested sentence or passage. Do not include a title, heading, markdown, hashtag, the concept name, labels, quotes, bullet points, or commentary. Start with the first sentence of the text.';
 
 const client = new BedrockRuntimeClient({
   maxAttempts: 5,
@@ -136,14 +136,16 @@ function passagePrompt(conceptName: string, banks: WordBank[], historyBlock: str
   const bankCount = Math.max(banks.length, 1);
   const share = Math.round(100 / bankCount);
   const banksBlock = formatBanksForPrompt(banks);
-  return `Write a connected decodable passage that practices the focus concept ${conceptName} for this student.
+  const conceptList =
+    banks.map((bank) => bank.conceptName).filter(Boolean).join(', ') || conceptName;
+  return `Write a connected decodable passage that practices these concept(s) for this student: ${conceptList}.
 
 Strict constraints:
 - The passage MUST be at least 100 words. Count and meet this minimum.
 - Do not title the passage, do not use markdown, and do not repeat the concept name. Start with the first sentence.
 - Do NOT use every word provided in the banks. Sample a subset from each bank so the passage stays natural.
 - Evenly distribute practice across the concept banks. There are ${bankCount} concept bank(s); aim for roughly a ${share}% split of target words drawn from each bank.
-- Pull from the NEW concept bank and every REVIEW concept bank in the same passage. Weave them together rather than writing one paragraph per concept.
+- Pull from every provided concept word bank in the same passage. Weave them together rather than writing one paragraph per concept.
 - Prefer putting 2 or 3 target words in the same sentence when it still sounds natural.
 - Error on the side of being too simple.
 
@@ -152,8 +154,13 @@ ${banksBlock}${historyBlock}`;
 }
 
 function sentencePrompt(conceptName: string, banks: WordBank[], historyBlock: string) {
+  const bankCount = Math.max(banks.length, 1);
   const banksBlock = formatBanksForPrompt(banks);
-  return `Write one short simple sentence that practices the concept ${conceptName} for this student. Do not include a title, markdown, or the concept name as a label. Use 2 or 3 target words from this concept's full word bank in that sentence when possible. Do not try to use every word. Target word bank:
+  const conceptList =
+    banks.map((bank) => bank.conceptName).filter(Boolean).join(', ') || conceptName;
+  return `Write one short simple sentence that practices these concept(s) for this student: ${conceptList}. Do not include a title, markdown, or the concept name as a label. Integrate target words from across ALL of the provided concept word banks in the same sentence when it still sounds natural. There are ${bankCount} concept bank(s); draw from each bank rather than using only one. Prefer 2 or 3 target words total when possible. Do not try to use every word.
+
+Concept word banks:
 ${banksBlock}${historyBlock}`;
 }
 

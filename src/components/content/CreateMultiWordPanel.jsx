@@ -14,6 +14,7 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
@@ -60,9 +61,9 @@ export default function CreateMultiWordPanel({
   const [title, setTitle] = useState(editItem?.title || '')
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
-  const [generatingConceptId, setGeneratingConceptId] = useState(null)
   const [generateError, setGenerateError] = useState('')
   const [notice, setNotice] = useState('')
+  const [selectedAndreaIds, setSelectedAndreaIds] = useState(() => new Set())
   const [focusConceptId, setFocusConceptId] = useState(
     editItem?.focusConceptId ?? preferredFocusId ?? null,
   )
@@ -119,6 +120,15 @@ export default function CreateMultiWordPanel({
     return rows
   }, [lessonConcepts, preferredFocusConcept])
 
+  useEffect(() => {
+    const valid = new Set(conceptButtons.map((item) => item.id))
+    setSelectedAndreaIds((prev) => {
+      const next = new Set([...prev].filter((id) => valid.has(id)))
+      if (next.size === prev.size && [...next].every((id) => prev.has(id))) return prev
+      return next
+    })
+  }, [conceptButtons])
+
   const tagged = useMemo(() => tagMultiWordText(text, catalogIndex), [text, catalogIndex])
 
   const focusOptions = useMemo(() => {
@@ -173,32 +183,24 @@ export default function CreateMultiWordPanel({
     }
   }
 
-  async function handleGenerate(concept) {
-    if (!concept?.id) return
-    const focusBank = bankForConcept(concept)
-    if (!focusBank.words.length) {
-      setGenerateError(`No catalog words for ${focusBank.conceptName} yet.`)
+  async function handleGenerate() {
+    const selected = conceptButtons.filter((concept) => selectedAndreaIds.has(concept.id))
+    const banks = selected
+      .map((concept) => bankForConcept(concept))
+      .filter((bank) => bank.words.length)
+    if (!banks.length) {
+      setGenerateError('Select at least one concept that has catalog words.')
       return
     }
-    const banks =
-      kind === 'passage'
-        ? [
-            focusBank,
-            ...conceptButtons
-              .filter((item) => item.id !== concept.id)
-              .map((item) => bankForConcept(item))
-              .filter((bank) => bank.words.length),
-          ]
-        : [focusBank]
+    const focus = selected.find((concept) => concept.role === 'new') || selected[0]
     setGenerating(true)
-    setGeneratingConceptId(concept.id)
     setGenerateError('')
     setFocusTouched(true)
-    setFocusConceptId(concept.id)
+    if (focus?.id) setFocusConceptId(focus.id)
     try {
-      const conceptName = conceptButtonLabel(concept)
+      const conceptName = banks.map((bank) => bank.conceptName).join(', ')
       const focusConcept =
-        concepts.find((item) => item.id === concept.id) ||
+        concepts.find((item) => item.id === focus?.id) ||
         preferredFocusConcept ||
         null
       const draft = await generateLessonText({
@@ -227,7 +229,6 @@ export default function CreateMultiWordPanel({
       setError(message)
     } finally {
       setGenerating(false)
-      setGeneratingConceptId(null)
     }
   }
 
@@ -390,54 +391,129 @@ export default function CreateMultiWordPanel({
             variant="outlined"
             sx={{
               p: 1.5,
-              bgcolor: 'rgba(15, 76, 92, 0.04)',
-              borderColor: 'rgba(15, 76, 92, 0.18)',
+              bgcolor: 'action.hover',
+              borderColor: 'divider',
             }}
           >
             <Stack spacing={1}>
               <Stack direction="row" spacing={1} alignItems="center">
                 <AutoAwesomeIcon color="secondary" />
                 <Typography variant="subtitle2">Ask Andrea</Typography>
-                <HelpTip title="Andrea is our AI helper. She writes from the full catalog word bank for each concept, not from a saved 10-word list." />
+                <HelpTip title="Andrea is our AI helper. She writes from the full catalog word bank for each selected concept, not from a saved 10-word list." />
               </Stack>
-              <Stack direction="row" spacing={0.5} alignItems="center">
+              <Stack direction="row" spacing={0.5} alignItems="flex-start">
                 <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
                   {kind === 'passage'
-                    ? 'Generate a passage from lesson concepts'
-                    : 'Generate a sentence from a lesson concept'}
+                    ? 'Select concepts, then generate a passage from all of their word banks'
+                    : 'Select concepts, then generate a sentence from all of their word banks'}
                 </Typography>
                 <HelpTip
                   title={
                     kind === 'passage'
-                      ? 'Click a concept to generate. Passages pull from the new-concept word bank and every review-concept word bank together, then even out the mix. Andrea samples from those banks instead of using every word.'
-                      : 'Click a concept to generate a sentence from that concept’s full word bank.'
+                      ? 'Toggle every concept you want included. Andrea pulls the full word bank for each selected concept and weaves those words into one passage.'
+                      : 'Toggle every concept you want included. Andrea pulls the full word bank for each selected concept and weaves those words into one sentence.'
                   }
                 />
               </Stack>
               {conceptButtons.length ? (
-                <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-                  {conceptButtons.map((concept) => {
-                    const wordCount = wordsFromConceptBank(wordsByConceptId, concept.id).length
-                    return (
-                      <AskAndreaButton
-                        key={concept.id}
-                        size="small"
-                        variant={concept.role === 'new' ? 'contained' : 'outlined'}
-                        loading={generating && generatingConceptId === concept.id}
-                        disabled={saving || generating || loadingCatalog || wordCount === 0}
-                        tooltip={
-                          wordCount
-                            ? kind === 'passage'
-                              ? `Write a passage using the full ${concept.concept} bank plus the other lesson concept banks.`
-                              : `Write a sentence using the full ${concept.concept} word bank (${wordCount} words).`
-                            : `No catalog words for ${concept.concept} yet.`
-                        }
-                        onClick={() => void handleGenerate(concept)}
-                      >
-                        {`${concept.concept} · ${concept.role}`}
-                      </AskAndreaButton>
-                    )
-                  })}
+                <Stack spacing={1}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 0.75,
+                    }}
+                  >
+                    {conceptButtons.map((concept) => {
+                      const wordCount = wordsFromConceptBank(wordsByConceptId, concept.id).length
+                      const selected = selectedAndreaIds.has(concept.id)
+                      const unavailable = wordCount === 0
+                      return (
+                        <Tooltip
+                          key={concept.id}
+                          title={
+                            unavailable
+                              ? `No catalog words for ${concept.concept} yet.`
+                              : selected
+                                ? `Selected. Click to remove ${concept.concept} from generation.`
+                                : `Select ${concept.concept} to include its word bank.`
+                          }
+                        >
+                          <span
+                            style={{
+                              display: 'flex',
+                              flex: '1 1 140px',
+                              maxWidth: '100%',
+                            }}
+                          >
+                            <Button
+                              size="small"
+                              variant={selected ? 'contained' : 'outlined'}
+                              color="primary"
+                              disabled={saving || generating || loadingCatalog || unavailable}
+                              onClick={() => {
+                                setSelectedAndreaIds((prev) => {
+                                  const next = new Set(prev)
+                                  if (next.has(concept.id)) next.delete(concept.id)
+                                  else next.add(concept.id)
+                                  return next
+                                })
+                              }}
+                              sx={{
+                                height: 'auto',
+                                minHeight: 36,
+                                py: 0.75,
+                                px: 1.25,
+                                lineHeight: 1.2,
+                                whiteSpace: 'normal',
+                                textAlign: 'center',
+                                maxWidth: { xs: '100%', sm: 220 },
+                                width: '100%',
+                              }}
+                            >
+                              <Box component="span" sx={{ display: 'block', fontWeight: 700 }}>
+                                {concept.concept}
+                              </Box>
+                              <Box
+                                component="span"
+                                sx={{
+                                  display: 'block',
+                                  fontSize: '0.65rem',
+                                  fontWeight: 600,
+                                  opacity: 0.85,
+                                  textTransform: 'capitalize',
+                                }}
+                              >
+                                {concept.role}
+                                {unavailable ? ' · no words' : ''}
+                              </Box>
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      )
+                    })}
+                  </Box>
+                  <AskAndreaButton
+                    size="small"
+                    variant="contained"
+                    loading={generating}
+                    disabled={
+                      saving
+                      || generating
+                      || loadingCatalog
+                      || ![...selectedAndreaIds].some((id) =>
+                        wordsFromConceptBank(wordsByConceptId, id).length,
+                      )
+                    }
+                    tooltip={
+                      kind === 'passage'
+                        ? 'Write a passage using the word banks for every selected concept.'
+                        : 'Write a sentence using the word banks for every selected concept.'
+                    }
+                    onClick={() => void handleGenerate()}
+                  >
+                    {kind === 'passage' ? 'Generate passage' : 'Generate sentence'}
+                  </AskAndreaButton>
                 </Stack>
               ) : (
                 <Typography variant="body2" color="text.secondary">

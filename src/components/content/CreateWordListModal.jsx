@@ -121,11 +121,16 @@ export default function CreateWordListModal({
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 3fr) minmax(200px, 1fr)' },
+            gridTemplateColumns: { xs: '1fr', md: 'minmax(200px, 1fr) minmax(0, 3fr)' },
             gap: 1.5,
             alignItems: 'stretch',
           }}
         >
+          <SelectedWordsPanel
+            words={selectedWordRows}
+            onRemove={(row) => setWordSelection((prev) => deselectWord(prev, row))}
+            emptyLabel="Select words from the right, roll 10, or Ask Andrea."
+          />
           <Box sx={{ height: { xs: 320, md: 420 }, minWidth: 0 }}>
             <DataGridPro
               key={concept?.id || 'none'}
@@ -151,11 +156,6 @@ export default function CreateWordListModal({
               }}
             />
           </Box>
-          <SelectedWordsPanel
-            words={selectedWordRows}
-            onRemove={(row) => setWordSelection((prev) => deselectWord(prev, row))}
-            emptyLabel="No words selected yet. Use Random 10, Ask Andrea, or check rows on the left."
-          />
         </Box>
         <TextField
           label="List name"

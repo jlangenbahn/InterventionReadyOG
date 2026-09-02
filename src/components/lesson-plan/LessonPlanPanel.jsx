@@ -72,6 +72,7 @@ import PublishLessonTemplateDialog from './PublishLessonTemplateDialog'
 import HelpTip from '../shared/HelpTip'
 import { BRAND, globalLessonGridSx, gradeBandFromPercent, gradeRowSx } from '../../theme'
 import { LESSON_PLAN_PRINT_PAGE_STYLE } from '../../lib/lessonPlanPrint'
+import { sampleWordFromBank } from '../../lib/generateLessonText'
 
 const MASTERY_STATUSES = ['unknown', 'new', 'review', 'mastered']
 
@@ -236,6 +237,15 @@ function snapshotPassage(passage) {
   }
 }
 
+function snapshotEncodingConcept(concept) {
+  if (!concept?.id) return null
+  return {
+    id: concept.id,
+    concept: concept.concept || concept.name || '',
+    sampleWord: concept.sampleWord || '',
+  }
+}
+
 const SAVED_LESSON_COLUMNS = [
   {
     field: 'lessonNumber',
@@ -299,6 +309,8 @@ export default function LessonPlanPanel({
   const [lessonMode, setLessonMode] = useState(LESSON_MODE_VIEW)
   const [selectedNewConceptId, setSelectedNewConceptId] = useState(null)
   const [selectedReviewConceptIds, setSelectedReviewConceptIds] = useState([])
+  const [selectedWhatSpellsConceptIds, setSelectedWhatSpellsConceptIds] = useState([])
+  const [selectedSosConceptIds, setSelectedSosConceptIds] = useState([])
   const [lessonNotes, setLessonNotes] = useState('')
   const [lessonName, setLessonName] = useState('')
   const [shareLesson, setShareLesson] = useState(null)
@@ -411,6 +423,8 @@ export default function LessonPlanPanel({
     setLessonMode(LESSON_MODE_VIEW)
     setSelectedNewConceptId(null)
     setSelectedReviewConceptIds([])
+    setSelectedWhatSpellsConceptIds([])
+    setSelectedSosConceptIds([])
     setLessonNotes('')
     setLessonName('')
     lastGeneratedNameRef.current = ''
@@ -455,6 +469,7 @@ export default function LessonPlanPanel({
           masteryStatus,
           inScope: entry?.inScope === true,
           sequence: Number.isFinite(Number(entry?.sequence)) ? Number(entry.sequence) : null,
+          sampleWord: sampleWordFromBank(wordsByConceptId, concept.id),
         }
       })
       .sort((a, b) => {
@@ -464,7 +479,7 @@ export default function LessonPlanPanel({
         if (seqA !== seqB) return seqA - seqB
         return a.concept.localeCompare(b.concept)
       })
-  }, [concepts, student?.scopeAndSequence, payload?.student?.scopeAndSequence])
+  }, [concepts, student?.scopeAndSequence, payload?.student?.scopeAndSequence, wordsByConceptId])
 
   const lists = useMemo(
     () =>
@@ -785,6 +800,20 @@ export default function LessonPlanPanel({
   const selectedSentences = SENTENCE_SLOT_KEYS.map((key) => sentenceForSlot(key))
   const selectedPassages = PASSAGE_SLOT_KEYS.map((key) => passageForSlot(key))
   const selectedPassage = selectedPassages[0] ?? null
+  const whatSpellsConcepts = selectedWhatSpellsConceptIds
+    .map((id) => {
+      const live = conceptOptions.find((item) => item.id === id)
+      const snap = (snapshots?.whatSpells ?? []).find((item) => item?.id === id)
+      return live || snap || null
+    })
+    .filter(Boolean)
+  const sosConcepts = selectedSosConceptIds
+    .map((id) => {
+      const live = conceptOptions.find((item) => item.id === id)
+      const snap = (snapshots?.sos ?? []).find((item) => item?.id === id)
+      return live || snap || null
+    })
+    .filter(Boolean)
 
   const newConceptIds = listSlots.newConcept ? [listSlots.newConcept] : []
   const reviewIds = idsFromSlots(listSlots, REVIEW_SLOT_KEYS)
@@ -822,6 +851,8 @@ export default function LessonPlanPanel({
       || String(lessonNotes ?? '').trim()
       || selectedNewConceptId
       || selectedReviewConceptIds.length
+      || selectedWhatSpellsConceptIds.length
+      || selectedSosConceptIds.length
       || Object.values(listSlots).some(Boolean)
       || Object.values(sentenceSlots).some(Boolean)
       || Object.values(passageSlots).some(Boolean)
@@ -836,6 +867,8 @@ export default function LessonPlanPanel({
     lessonNotes,
     selectedNewConceptId,
     selectedReviewConceptIds,
+    selectedWhatSpellsConceptIds,
+    selectedSosConceptIds,
     listSlots,
     sentenceSlots,
     passageSlots,
@@ -1006,6 +1039,8 @@ export default function LessonPlanPanel({
     setActiveStep(0)
     setSelectedNewConceptId(null)
     setSelectedReviewConceptIds([])
+    setSelectedWhatSpellsConceptIds([])
+    setSelectedSosConceptIds([])
     setLessonNotes('')
     setLessonName('')
     lastGeneratedNameRef.current = ''
@@ -1083,6 +1118,16 @@ export default function LessonPlanPanel({
     }
     setSelectedNewConceptId(inferredNewConceptId)
     setSelectedReviewConceptIds(uniqueReviewIds)
+    const inferredWhatSpells =
+      Array.isArray(data.conceptSlots?.whatSpellsConceptIds) && data.conceptSlots.whatSpellsConceptIds.length
+        ? data.conceptSlots.whatSpellsConceptIds.filter(Boolean)
+        : (data.snapshots?.whatSpells ?? []).map((item) => item?.id).filter(Boolean)
+    const inferredSos =
+      Array.isArray(data.conceptSlots?.sosConceptIds) && data.conceptSlots.sosConceptIds.length
+        ? data.conceptSlots.sosConceptIds.filter(Boolean)
+        : (data.snapshots?.sos ?? []).map((item) => item?.id).filter(Boolean)
+    setSelectedWhatSpellsConceptIds(inferredWhatSpells)
+    setSelectedSosConceptIds(inferredSos)
     setLessonNotes(data.notes ?? lesson?.comments ?? '')
     const loadedName = data.name || lesson?.name || ''
     const loadedConcept =
@@ -1161,6 +1206,8 @@ export default function LessonPlanPanel({
       conceptSlots: {
         newConceptId: selectedNewConceptId,
         reviewConceptIds: selectedReviewConceptIds,
+        whatSpellsConceptIds: selectedWhatSpellsConceptIds,
+        sosConceptIds: selectedSosConceptIds,
       },
       notes: lessonNotes,
       name: resolvedName,
@@ -1174,6 +1221,12 @@ export default function LessonPlanPanel({
         sentences: selectedSentences.map(snapshotSentence).filter(Boolean),
         passages: selectedPassages.map(snapshotPassage).filter(Boolean),
         passage: snapshotPassage(selectedPassage),
+        whatSpells: selectedWhatSpellsConceptIds
+          .map((id) => snapshotEncodingConcept(conceptOptions.find((item) => item.id === id)))
+          .filter(Boolean),
+        sos: selectedSosConceptIds
+          .map((id) => snapshotEncodingConcept(conceptOptions.find((item) => item.id === id)))
+          .filter(Boolean),
       },
       instructor,
     }
@@ -1441,8 +1494,12 @@ export default function LessonPlanPanel({
                 conceptOptions={conceptOptions}
                 selectedNewConceptId={selectedNewConceptId}
                 selectedReviewConceptIds={selectedReviewConceptIds}
+                selectedWhatSpellsConceptIds={selectedWhatSpellsConceptIds}
+                selectedSosConceptIds={selectedSosConceptIds}
                 onSelectedNewConceptChange={handleSelectedNewConceptChange}
                 onSelectedReviewConceptsChange={handleSelectedReviewConceptsChange}
+                onSelectedWhatSpellsChange={setSelectedWhatSpellsConceptIds}
+                onSelectedSosChange={setSelectedSosConceptIds}
                 lessonNotes={lessonNotes}
                 onLessonNotesChange={setLessonNotes}
                 lessonName={lessonName}
@@ -1733,6 +1790,8 @@ export default function LessonPlanPanel({
                   sentences={selectedSentences}
                   passages={selectedPassages}
                   passage={selectedPassage}
+                  whatSpellsConcepts={whatSpellsConcepts}
+                  sosConcepts={sosConcepts}
                   date={dateLabel}
                   lessonNumber={lessonNumber}
                   lessonName={lessonDisplayName}

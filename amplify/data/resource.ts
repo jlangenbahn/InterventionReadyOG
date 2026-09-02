@@ -18,6 +18,12 @@ const schema = a.schema({
     words: a.string().array(),
   }),
 
+  LessonEncodingConcept: a.customType({
+    id: a.id(),
+    concept: a.string(),
+    sampleWord: a.string(),
+  }),
+
   LessonSentenceSnapshot: a.customType({
     id: a.id(),
     text: a.string(),
@@ -50,6 +56,8 @@ const schema = a.schema({
     review3List: a.ref('LessonListSnapshot'),
     sentences: a.ref('LessonSentenceSnapshot').array(),
     passages: a.ref('LessonPassageSnapshot').array(),
+    whatSpells: a.ref('LessonEncodingConcept').array(),
+    sos: a.ref('LessonEncodingConcept').array(),
   }),
 
   /** Publishable lesson materials. Scores never belong here. */
@@ -59,6 +67,8 @@ const schema = a.schema({
     passageIds: a.id().array(),
     newConceptId: a.id(),
     reviewConceptIds: a.id().array(),
+    whatSpellsConceptIds: a.id().array(),
+    sosConceptIds: a.id().array(),
     snapshots: a.ref('LessonSnapshots'),
     instructor: a.string(),
   }),

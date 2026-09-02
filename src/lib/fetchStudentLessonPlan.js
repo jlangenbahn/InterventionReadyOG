@@ -223,6 +223,7 @@ export async function saveStudentLesson({
     concepts: conceptId,
     plan: planDocument,
     scores: serializeScores(scoreMap),
+    lessonData: JSON.stringify(canonical),
   }
   if (comments !== undefined) payload.comments = comments
   if (name !== undefined) payload.name = name
@@ -232,6 +233,25 @@ export async function saveStudentLesson({
   if (result.errors?.length && name !== undefined) {
     const { name: _unusedName, ...withoutName } = payload
     const retry = await saveLessonRecord(id, withoutName, LESSON_SELECTION)
+    if (!retry.errors?.length && retry.data?.id) return retry.data
+    result = retry
+  }
+
+  if (result.errors?.length) {
+    const snapshots = planDocument.snapshots && typeof planDocument.snapshots === 'object'
+      ? planDocument.snapshots
+      : {}
+    const { whatSpells: _whatSpells, sos: _sos, ...legacySnapshots } = snapshots
+    const {
+      whatSpellsConceptIds: _whatSpellsIds,
+      sosConceptIds: _sosIds,
+      ...legacyPlan
+    } = planDocument
+    const strippedPayload = {
+      ...payload,
+      plan: { ...legacyPlan, snapshots: legacySnapshots },
+    }
+    const retry = await saveLessonRecord(id, strippedPayload, LESSON_SELECTION_CORE.concat(['scores']))
     if (!retry.errors?.length && retry.data?.id) return retry.data
     result = retry
   }

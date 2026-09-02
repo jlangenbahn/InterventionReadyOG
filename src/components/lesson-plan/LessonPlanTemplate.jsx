@@ -4,6 +4,7 @@
 import { forwardRef } from 'react'
 import { Box, Paper, Typography } from '@mui/material'
 import { sanitizeLessonBody } from '../../lib/sanitizeLessonText'
+import { formatEncodingConceptList } from '../../lib/lessonPlanDocument'
 import { BRAND, FONT_FAMILY, studentTypeSx } from '../../theme'
 
 const readerPaperSx = {
@@ -86,6 +87,11 @@ const labelSx = {
   fontSize: '11px',
   fontFamily: FONT_FAMILY,
   letterSpacing: '-0.02em',
+}
+
+const encodingLabelSx = {
+  ...labelSx,
+  width: 168,
 }
 
 const contentSx = {
@@ -264,6 +270,8 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
     sentences = [null, null, null, null, null, null],
     passages = [null, null],
     passage = null,
+    whatSpellsConcepts = [],
+    sosConcepts = [],
     date,
     lessonNumber,
     lessonName,
@@ -375,12 +383,12 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
             Encoding
           </Typography>
           <Box sx={rowSx}>
-            <Box sx={labelSx}>What Spells?</Box>
-            <Box sx={contentSx}>{'\u00a0'}</Box>
+            <Box sx={encodingLabelSx}>What Spells?</Box>
+            <Box sx={contentSx}>{formatEncodingConceptList(whatSpellsConcepts) || '\u00a0'}</Box>
           </Box>
           <Box sx={rowSx}>
-            <Box sx={labelSx}>Simultaneous Oral Spelling</Box>
-            <Box sx={contentSx}>{'\u00a0'}</Box>
+            <Box sx={encodingLabelSx}>Simultaneous Oral Spelling</Box>
+            <Box sx={contentSx}>{formatEncodingConceptList(sosConcepts) || '\u00a0'}</Box>
           </Box>
           <Box sx={rowSx}>
             <Box sx={labelSx}>Dictation</Box>

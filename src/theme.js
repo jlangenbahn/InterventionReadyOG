@@ -210,6 +210,21 @@ export const globalLessonGridSx = {
   '& .MuiDataGrid-iconButtonContainer, & .MuiDataGrid-menuIcon, & .MuiDataGrid-sortIcon, & .MuiIconButton-root, & .MuiSvgIcon-root': {
     color: BRAND.navyDark,
   },
+  // Dark mode paints a filled circle on the active sort control; keep the arrow
+  // visible on the gold header instead.
+  '& .MuiDataGrid-columnHeader .MuiIconButton-root, & .MuiDataGrid-sortButton': {
+    color: `${BRAND.navyDark} !important`,
+    backgroundColor: 'transparent !important',
+    '&:hover, &:focus, &.Mui-focusVisible': {
+      backgroundColor: `${BRAND.goldHover} !important`,
+      color: `${BRAND.navyDark} !important`,
+    },
+  },
+  '& .MuiDataGrid-sortIcon': {
+    color: `${BRAND.navyDark} !important`,
+    fill: `${BRAND.navyDark} !important`,
+    opacity: '1 !important',
+  },
   '& .MuiDataGrid-row': {
     bgcolor: BRAND.goldBg,
     color: BRAND.navyDark,
@@ -503,12 +518,37 @@ export function createAppTheme(mode = 'light') {
             fontFamily: FONT_FAMILY,
             fontSize: '0.75rem',
             letterSpacing: '-0.02em',
+            ...(isDark
+              ? {
+                  // Keep selected rows on a dark navy/sky wash so light cell text stays readable.
+                  '--DataGrid-rowSelectedBackground': 'rgba(91, 130, 196, 0.42)',
+                  '--DataGrid-rowSelectedHoverBackground': 'rgba(91, 130, 196, 0.58)',
+                }
+              : {}),
           },
           columnHeaderTitle: {
             fontFamily: FONT_FAMILY,
             fontWeight: 700,
             letterSpacing: '-0.015em',
           },
+          row: isDark
+            ? {
+                '&.Mui-selected': {
+                  backgroundColor: `${BRAND.navyMid} !important`,
+                  color: `${DARK.ink} !important`,
+                  '&:hover': {
+                    backgroundColor: `${BRAND.navy} !important`,
+                  },
+                  '& .MuiDataGrid-cell': {
+                    color: `${DARK.ink} !important`,
+                    backgroundColor: 'transparent !important',
+                  },
+                  '& .MuiCheckbox-root': {
+                    color: `${DARK.ink} !important`,
+                  },
+                },
+              }
+            : undefined,
           cell: {
             fontFamily: FONT_FAMILY,
           },

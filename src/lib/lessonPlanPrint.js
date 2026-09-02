@@ -101,6 +101,8 @@ export function lessonPlanTemplateProps(lesson, student, extras = {}) {
     sentences: [0, 1, 2, 3, 4, 5].map((index) => sentenceSnaps[index] ?? null),
     passages: [passageSnaps[0] ?? null, passageSnaps[1] ?? null],
     passage: passageSnaps[0] ?? null,
+    whatSpellsConcepts: data.snapshots?.whatSpells ?? [],
+    sosConcepts: data.snapshots?.sos ?? [],
     date: extras.date || formatLessonPlanDate(lesson?.date),
     lessonNumber,
     lessonName: formatLessonDisplayName(data.name || lesson?.name, conceptName, lessonNumber),

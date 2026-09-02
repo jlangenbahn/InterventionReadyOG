@@ -78,6 +78,30 @@ function compactPassage(passage) {
   }
 }
 
+function compactEncodingConcept(item) {
+  if (!item || typeof item !== 'object') return null
+  const id = asId(item.id)
+  const concept = String(item.concept ?? item.name ?? '').trim()
+  const sampleWord = String(item.sampleWord ?? '').trim()
+  if (!id && !concept) return null
+  return {
+    id,
+    concept: concept || null,
+    sampleWord: sampleWord || null,
+  }
+}
+
+export function encodingConceptLabel(item) {
+  const name = String(item?.concept ?? item?.name ?? '').trim()
+  const sample = String(item?.sampleWord ?? '').trim()
+  if (!name) return sample
+  return sample ? `${name} (${sample})` : name
+}
+
+export function formatEncodingConceptList(items) {
+  return (items ?? []).map(encodingConceptLabel).filter(Boolean).join(', ')
+}
+
 function slotsFromIds(keys, ids) {
   const slots = {}
   keys.forEach((key, index) => {
@@ -107,6 +131,8 @@ function legacySnapshotsToCanonical(raw) {
     sentences: asArray(raw?.sentences).map(compactSentence).filter(Boolean),
     passages: passages.map(compactPassage).filter(Boolean),
     passage: compactPassage(raw?.passage) || compactPassage(passages[0]),
+    whatSpells: asArray(raw?.whatSpells).map(compactEncodingConcept).filter(Boolean),
+    sos: asArray(raw?.sos).map(compactEncodingConcept).filter(Boolean),
   }
 }
 
@@ -140,6 +166,8 @@ export function planToCanonical(plan) {
     conceptSlots: {
       newConceptId: asId(plan.newConceptId),
       reviewConceptIds: asArray(plan.reviewConceptIds).map(asId).filter(Boolean),
+      whatSpellsConceptIds: asArray(plan.whatSpellsConceptIds).map(asId).filter(Boolean),
+      sosConceptIds: asArray(plan.sosConceptIds).map(asId).filter(Boolean),
     },
     snapshots: {
       lists: {
@@ -151,6 +179,8 @@ export function planToCanonical(plan) {
       sentences: asArray(snaps.sentences).map(compactSentence).filter(Boolean),
       passages,
       passage: passages[0] ?? null,
+      whatSpells: asArray(snaps.whatSpells).map(compactEncodingConcept).filter(Boolean),
+      sos: asArray(snaps.sos).map(compactEncodingConcept).filter(Boolean),
     },
     instructor: String(plan.instructor ?? '').trim() || null,
   }
@@ -183,6 +213,14 @@ export function canonicalToPlan(canonical) {
       : passages.map((item) => asId(item?.id)).filter(Boolean),
     newConceptId: asId(data.conceptSlots?.newConceptId) || asId(lists.newConcept?.conceptID),
     reviewConceptIds: asArray(data.conceptSlots?.reviewConceptIds).map(asId).filter(Boolean),
+    whatSpellsConceptIds:
+      asArray(data.conceptSlots?.whatSpellsConceptIds).map(asId).filter(Boolean).length
+        ? asArray(data.conceptSlots?.whatSpellsConceptIds).map(asId).filter(Boolean)
+        : asArray(snapshots.whatSpells).map((item) => asId(item?.id)).filter(Boolean),
+    sosConceptIds:
+      asArray(data.conceptSlots?.sosConceptIds).map(asId).filter(Boolean).length
+        ? asArray(data.conceptSlots?.sosConceptIds).map(asId).filter(Boolean)
+        : asArray(snapshots.sos).map((item) => asId(item?.id)).filter(Boolean),
     snapshots: {
       newConceptList: compactList(lists.newConcept),
       review1List: compactList(lists.review1),
@@ -190,6 +228,8 @@ export function canonicalToPlan(canonical) {
       review3List: compactList(lists.review3),
       sentences: asArray(snapshots.sentences).map(compactSentence).filter(Boolean),
       passages: passages.map(compactPassage).filter(Boolean),
+      whatSpells: asArray(snapshots.whatSpells).map(compactEncodingConcept).filter(Boolean),
+      sos: asArray(snapshots.sos).map(compactEncodingConcept).filter(Boolean),
     },
     instructor: String(data.instructor ?? '').trim() || null,
   }
@@ -218,6 +258,8 @@ function legacyToCanonical(raw) {
     conceptSlots: {
       newConceptId: asId(data.conceptSlots?.newConceptId),
       reviewConceptIds: asArray(data.conceptSlots?.reviewConceptIds).map(asId).filter(Boolean),
+      whatSpellsConceptIds: asArray(data.conceptSlots?.whatSpellsConceptIds).map(asId).filter(Boolean),
+      sosConceptIds: asArray(data.conceptSlots?.sosConceptIds).map(asId).filter(Boolean),
     },
     snapshots: legacySnapshotsToCanonical(data.snapshots),
     instructor: String(data.instructor ?? '').trim() || null,
@@ -228,15 +270,41 @@ function legacyToCanonical(raw) {
 
 export function getLessonPlan(lesson) {
   if (!lesson) return {}
+  const fromLegacy = legacyToCanonical(lesson.lessonData)
   if (lesson.plan && typeof lesson.plan === 'object' && !Array.isArray(lesson.plan)) {
     const fromPlan = planToCanonical(lesson.plan)
+    const whatSpells = fromPlan.snapshots?.whatSpells?.length
+      ? fromPlan.snapshots.whatSpells
+      : fromLegacy.snapshots?.whatSpells ?? []
+    const sos = fromPlan.snapshots?.sos?.length
+      ? fromPlan.snapshots.sos
+      : fromLegacy.snapshots?.sos ?? []
     return {
       ...fromPlan,
-      name: lesson.name || fromPlan.name,
-      notes: lesson.comments || fromPlan.notes,
+      name: lesson.name || fromPlan.name || fromLegacy.name,
+      notes: lesson.comments || fromPlan.notes || fromLegacy.notes,
+      conceptSlots: {
+        ...(fromLegacy.conceptSlots ?? {}),
+        ...(fromPlan.conceptSlots ?? {}),
+        whatSpellsConceptIds: fromPlan.conceptSlots?.whatSpellsConceptIds?.length
+          ? fromPlan.conceptSlots.whatSpellsConceptIds
+          : fromLegacy.conceptSlots?.whatSpellsConceptIds?.length
+            ? fromLegacy.conceptSlots.whatSpellsConceptIds
+            : whatSpells.map((item) => item?.id).filter(Boolean),
+        sosConceptIds: fromPlan.conceptSlots?.sosConceptIds?.length
+          ? fromPlan.conceptSlots.sosConceptIds
+          : fromLegacy.conceptSlots?.sosConceptIds?.length
+            ? fromLegacy.conceptSlots.sosConceptIds
+            : sos.map((item) => item?.id).filter(Boolean),
+      },
+      snapshots: {
+        ...(fromPlan.snapshots ?? {}),
+        whatSpells,
+        sos,
+      },
     }
   }
-  return legacyToCanonical(lesson.lessonData)
+  return fromLegacy
 }
 
 export function getLessonScores(lesson) {
@@ -284,10 +352,14 @@ export function planFieldSelection(prefix = 'plan') {
     `${prefix}.passageIds`,
     `${prefix}.newConceptId`,
     `${prefix}.reviewConceptIds`,
+    `${prefix}.whatSpellsConceptIds`,
+    `${prefix}.sosConceptIds`,
     `${prefix}.instructor`,
     ...listPrefixes.flatMap((path) => listFields.map((field) => `${path}.${field}`)),
     ...sentenceFields.map((field) => `${prefix}.snapshots.sentences.${field}`),
     ...passageFields.map((field) => `${prefix}.snapshots.passages.${field}`),
+    ...['id', 'concept', 'sampleWord'].map((field) => `${prefix}.snapshots.whatSpells.${field}`),
+    ...['id', 'concept', 'sampleWord'].map((field) => `${prefix}.snapshots.sos.${field}`),
   ]
 }
 

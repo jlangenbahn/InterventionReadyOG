@@ -24,6 +24,14 @@ export function wordsFromConceptBank(wordsByConceptId, conceptId) {
   return uniqueWords(wordsByConceptId?.get?.(conceptId) ?? [])
 }
 
+export function sampleWordFromBank(wordsByConceptId, conceptId) {
+  const rows = wordsByConceptId?.get?.(conceptId) ?? []
+  const label = (row) => String(row?.word ?? '').trim()
+  const real = rows.find((row) => !row?.isNonsenseWord && label(row))
+  const any = rows.find((row) => label(row))
+  return label(real || any)
+}
+
 export function buildWordBanks(banks) {
   return (banks ?? [])
     .map((bank) => ({

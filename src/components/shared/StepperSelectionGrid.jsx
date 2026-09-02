@@ -5,6 +5,7 @@ import { useMemo } from 'react'
 import { Box, Chip, IconButton, Stack, Typography } from '@mui/material'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { BRAND } from '../../theme'
 
 function limitIds(ids, maxCount) {
   const unique = []
@@ -14,6 +15,31 @@ function limitIds(ids, maxCount) {
     if (unique.length >= maxCount) break
   }
   return unique
+}
+
+function idsFromSelectionModel(model) {
+  if (!model) return []
+  if (model instanceof Set) return [...model]
+  if (Array.isArray(model)) return model.filter(Boolean)
+  if (model.ids instanceof Set) return [...model.ids]
+  if (Array.isArray(model.ids)) return model.ids.filter(Boolean)
+  return []
+}
+
+function mergeLimitedIds(previousIds, nextIds, maxCount) {
+  const incoming = new Set(nextIds ?? [])
+  const merged = []
+  for (const id of previousIds ?? []) {
+    if (!incoming.has(id) || merged.includes(id)) continue
+    merged.push(id)
+    if (merged.length >= maxCount) return merged
+  }
+  for (const id of nextIds ?? []) {
+    if (merged.includes(id)) continue
+    merged.push(id)
+    if (merged.length >= maxCount) break
+  }
+  return merged
 }
 
 export default function StepperSelectionGrid({
@@ -35,6 +61,7 @@ export default function StepperSelectionGrid({
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const excluded = useMemo(() => new Set(excludeIds), [excludeIds])
   const atMax = selectedIds.length >= maxCount
+  const checkboxSelection = maxCount > 1
 
   const rows = useMemo(
     () =>
@@ -81,8 +108,14 @@ export default function StepperSelectionGrid({
   }
 
   function handleRowClick(params, event) {
+    if (checkboxSelection) return
     if (event?.target?.closest?.('button')) return
     toggleId(params.id)
+  }
+
+  function handleSelectionModelChange(model) {
+    if (!checkboxSelection) return
+    onChange(mergeLimitedIds(selectedIds, idsFromSelectionModel(model), maxCount))
   }
 
   function removeId(id) {
@@ -139,8 +172,10 @@ export default function StepperSelectionGrid({
           })
         ) : (
           <Typography variant="body2" color="text.secondary">
-            {maxCount <= 1
-              ? 'Click a row to select it. Click again to remove it.'
+            {checkboxSelection
+              ? `Check up to ${maxCount} rows to select them. Uncheck a row to remove it.`
+              : maxCount <= 1
+                ? 'Click a row to select it. Click again to remove it.'
               : `Click up to ${maxCount} rows to select them. Click a selected row to remove it.`}
           </Typography>
         )}
@@ -150,8 +185,13 @@ export default function StepperSelectionGrid({
           rows={rows}
           columns={gridColumns}
           getRowId={(row) => row.id}
-          rowSelectionModel={selectionModel}
+          checkboxSelection={checkboxSelection}
+          disableRowSelectionExcludeModel={checkboxSelection}
+          disableMultipleRowSelection={!checkboxSelection}
           disableRowSelectionOnClick
+          hideFooterSelectedRowCount={checkboxSelection}
+          rowSelectionModel={selectionModel}
+          onRowSelectionModelChange={handleSelectionModelChange}
           onRowClick={handleRowClick}
           isRowSelectable={(params) => selectedSet.has(params.id) || !atMax}
           getRowClassName={(params) => {
@@ -180,19 +220,36 @@ export default function StepperSelectionGrid({
           localeText={{
             noRowsLabel: noRowsLabel || 'No rows',
           }}
-          sx={{
-            '& .MuiDataGrid-row': {
-              cursor: 'pointer',
+          sx={[
+            {
+              '& .MuiDataGrid-row': {
+                cursor: checkboxSelection ? 'default' : 'pointer',
+              },
+              '& .stepper-selected-row': {
+                bgcolor: 'action.selected',
+              },
+              '& .stepper-row-disabled': {
+                opacity: 0.45,
+                cursor: 'not-allowed',
+              },
             },
-            '& .stepper-selected-row': {
-              bgcolor: 'action.selected',
-            },
-            '& .stepper-row-disabled': {
-              opacity: 0.45,
-              cursor: 'not-allowed',
-            },
-            ...gridSx,
-          }}
+            gridSx,
+            (theme) =>
+              theme.palette.mode === 'dark'
+                ? {
+                    '& .MuiDataGrid-row.Mui-selected, & .stepper-selected-row': {
+                      bgcolor: `${BRAND.navyMid} !important`,
+                      color: '#ffffff !important',
+                      '&:hover': { bgcolor: `${BRAND.navy} !important` },
+                      '& .MuiDataGrid-cell': {
+                        bgcolor: 'transparent !important',
+                        color: '#ffffff !important',
+                      },
+                      '& .MuiCheckbox-root': { color: '#ffffff' },
+                    },
+                  }
+                : {},
+          ]}
         />
       </Box>
     </Box>

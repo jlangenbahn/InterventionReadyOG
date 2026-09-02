@@ -5,6 +5,7 @@ import { downloadBlob, sanitizeFileStem, zipStore } from './exportTable'
 import { studentDisplayName } from './fetchStudentLessonPlan'
 import { sanitizeLessonBody } from './sanitizeLessonText'
 import { formatLessonPlanDate, lessonPlanTemplateProps } from './lessonPlanPrint'
+import { formatEncodingConceptList } from './lessonPlanDocument'
 import { formatTimeRange, parseScheduleDate } from './schedule'
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -136,8 +137,8 @@ function lessonToParagraphs(section) {
     labeledLine('New concept', props.newConceptList?.name || props.newConceptList?.concept),
     paragraph('Methods: VATK, Coding of New Concept, Handwriting'),
     paragraph('Encoding', { style: 'Heading2' }),
-    labeledLine('What spells?', ''),
-    labeledLine('Simultaneous Oral Spelling', ''),
+    labeledLine('What spells?', formatEncodingConceptList(props.whatSpellsConcepts)),
+    labeledLine('Simultaneous Oral Spelling', formatEncodingConceptList(props.sosConcepts)),
     labeledLine(
       'Dictation',
       sentences.map((sentence, index) => `${index + 1}. ${sentenceText(sentence)}`).join('\n'),
