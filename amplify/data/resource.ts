@@ -4,6 +4,7 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { generateLessonTextFn } from '../functions/generate-lesson-text/resource';
 import { selectFocusWordsFn } from '../functions/select-focus-words/resource';
+import { commitLessonScopeFn } from '../functions/commit-lesson-scope/resource';
 
 /**
  * Ported from ready-og Gen1 schema.graphql (app 6cvcpcvgbjdq3evrmqh4zyw4oi).
@@ -403,6 +404,7 @@ const schema = a.schema({
       conceptName: a.string().required(),
       words: a.string().required(),
       studentContext: a.string(),
+      instructorNotes: a.string(),
     })
     .returns(a.string())
     .handler(a.handler.function(generateLessonTextFn))
@@ -421,6 +423,21 @@ const schema = a.schema({
     })
     .returns(a.string())
     .handler(a.handler.function(selectFocusWordsFn))
+    .authorization((allow) => [allow.authenticated()]),
+
+  /**
+   * ConditionCheck the saved Lesson and update Student.scopeAndSequence in one
+   * DynamoDB transaction so New/Review status cannot drift from lesson history.
+   */
+  commitLessonScopeStatuses: a
+    .mutation()
+    .arguments({
+      studentId: a.id().required(),
+      lessonId: a.id().required(),
+      scopeAndSequence: a.string().required(),
+    })
+    .returns(a.string())
+    .handler(a.handler.function(commitLessonScopeFn))
     .authorization((allow) => [allow.authenticated()]),
 });
 

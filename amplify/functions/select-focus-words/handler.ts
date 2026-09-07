@@ -15,11 +15,12 @@ Return ONLY JSON with this shape:
 Rules:
 - Choose only from the candidate list. Use each candidate's id exactly.
 - Choose exactly the requested count, or every candidate if there are fewer.
+- Always include every candidate whose priority is "missed" (the student got these wrong in data entry).
+- Strictly prefer candidates whose priority is "unseen" (they have not appeared in prior lesson plans).
+- If there are not enough unseen words, fill remaining slots with priority "recycle" in the given order (oldest lesson-plan exposure first).
 - Heavily prefer simpler words relative to the rest of the set: shorter, more common, fewer syllables, more regular spelling.
 - Heavily prefer words that share a topic or setting so they can later be woven into one simple story (home, school, animals, food, weather, play, and similar).
 - Prefer real words over nonsense words unless the concept clearly needs nonsense practice.
-- Use the student profile. If the focus concept is new, strongly prefer words the student has already seen so the new pattern is practiced in familiar vocabulary.
-- Words the student has read correctly are useful anchors. Words they missed may be included for review only if they still keep the set simple and thematically related.
 - Do not pick a mixed bag of unrelated hard words.`;
 
 const client = new BedrockRuntimeClient({
@@ -31,6 +32,15 @@ type Candidate = {
   id?: string | null;
   word?: string | null;
   nonsense?: boolean | null;
+  priority?: string | null;
+  prior?: {
+    lists?: number;
+    lessons?: number;
+    correct?: number;
+    incorrect?: number;
+    firstSeen?: string;
+    lastSeen?: string;
+  } | null;
 };
 
 type SelectEvent = {
@@ -101,6 +111,53 @@ function uniqueIds(ids: string[]) {
   return result;
 }
 
+function rankCandidates(candidates: Candidate[]) {
+  const missed: Candidate[] = [];
+  const unseen: Candidate[] = [];
+  const recycle: Candidate[] = [];
+  for (const item of candidates) {
+    const prior = item.prior;
+    const seen = Number(prior?.lessons || 0) > 0 || Number(prior?.lists || 0) > 0;
+    if (Number(prior?.incorrect || 0) > 0 || item.priority === 'missed') missed.push(item);
+    else if (!seen || item.priority === 'unseen') unseen.push(item);
+    else recycle.push(item);
+  }
+  missed.sort((a, b) => Number(b.prior?.incorrect || 0) - Number(a.prior?.incorrect || 0));
+  recycle.sort((a, b) => {
+    const left = String(a.prior?.firstSeen || a.prior?.lastSeen || '9999');
+    const right = String(b.prior?.firstSeen || b.prior?.lastSeen || '9999');
+    return left.localeCompare(right);
+  });
+  return {
+    missedIds: missed.map((item) => String(item.id)),
+    unseenIds: unseen.map((item) => String(item.id)),
+    recycleIds: recycle.map((item) => String(item.id)),
+    ordered: [...missed, ...unseen, ...recycle],
+  };
+}
+
+function applySelectionPolicy(modelIds: string[], ranked: ReturnType<typeof rankCandidates>, count: number) {
+  const unseenSet = new Set(ranked.unseenIds);
+  const recycleSet = new Set(ranked.recycleIds);
+  const picked: string[] = [];
+  const used = new Set<string>();
+  const push = (ids: string[]) => {
+    for (const id of ids) {
+      if (!id || used.has(id)) continue;
+      picked.push(id);
+      used.add(id);
+      if (picked.length >= count) return true;
+    }
+    return false;
+  };
+  if (push(ranked.missedIds)) return picked;
+  if (push(modelIds.filter((id) => unseenSet.has(id)))) return picked;
+  if (push(ranked.unseenIds)) return picked;
+  if (push(modelIds.filter((id) => recycleSet.has(id)))) return picked;
+  push(ranked.recycleIds);
+  return picked.slice(0, count);
+}
+
 function resolveModelIds(parsed: Record<string, unknown> | null, candidates: Candidate[], count: number) {
   const byId = new Map(candidates.map((item) => [String(item.id ?? ''), item]));
   const byWord = new Map<string, Candidate>();
@@ -150,12 +207,16 @@ export const handler = async (event: SelectEvent): Promise<string> => {
     throw new Error('Select a concept that has words before asking Andrea.');
   }
 
+  const ranked = rankCandidates(candidates);
+  const variationToken = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const userText = [
     `Pick the ${Math.min(count, candidates.length)} best practice words for this student.`,
+    'Prioritize unseen lesson-plan words. Always inject missed (incorrect) words. If the unseen bank is exhausted, recycle the oldest seen words.',
+    `Variation token: ${variationToken}`,
     'Student and concept context:',
     JSON.stringify({ ...payload, candidates: undefined }),
-    'Candidate words:',
-    JSON.stringify(candidates),
+    'Candidate words (already ordered missed → unseen → oldest recycle):',
+    JSON.stringify(ranked.ordered),
   ].join('\n');
 
   try {
@@ -166,12 +227,13 @@ export const handler = async (event: SelectEvent): Promise<string> => {
         messages: [{ role: 'user', content: [{ text: userText }] }],
         inferenceConfig: {
           maxTokens: 600,
-          temperature: 0.2,
+          temperature: 0.5,
         },
       }),
     );
     const parsed = parseJsonObject(converseText(response));
-    const ids = resolveModelIds(parsed, candidates, Math.min(count, candidates.length));
+    const modelIds = resolveModelIds(parsed, ranked.ordered, Math.min(count, candidates.length));
+    const ids = applySelectionPolicy(modelIds, ranked, Math.min(count, candidates.length));
     if (!ids.length) {
       throw new Error('Andrea could not pick words from this set. Try again.');
     }

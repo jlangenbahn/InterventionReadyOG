@@ -48,6 +48,17 @@ export const LESSON_PLAN_PRINT_PAGE_STYLE = `
     text-transform: none !important;
     text-decoration: none !important;
   }
+  .lesson-plan-page-2 .lesson-plan-word-list,
+  .lesson-plan-page-3 .lesson-plan-word-list,
+  .lesson-plan-page-4 .lesson-plan-word-list,
+  .lesson-plan-word-list {
+    line-height: 2 !important;
+  }
+  .lesson-plan-word-list-item {
+    line-height: 2 !important;
+    min-height: 2em !important;
+    padding-bottom: 0.85em !important;
+  }
   .lesson-plan-page:not(.lesson-plan-reader-page) {
     font-family: "Century Gothic", "Comic Sans MS", Andika, sans-serif !important;
     font-size: 11px !important;

@@ -21,6 +21,7 @@ type GenerateEvent = {
     conceptName?: string | null;
     words?: string | null;
     studentContext?: string | null;
+    instructorNotes?: string | null;
   };
 };
 
@@ -132,7 +133,24 @@ function stripGeneratedHeading(text: string, conceptName: string) {
   return out.trim();
 }
 
-function passagePrompt(conceptName: string, banks: WordBank[], historyBlock: string) {
+function instructorNotesBlock(raw: string) {
+  const notes = String(raw ?? '').trim();
+  if (!notes) return '';
+  return `\nInstructor instructions (follow these if they do not conflict with decodability, exact target-word spelling, or the constraints above): ${notes}`;
+}
+
+function variationBlock() {
+  const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return `\nWrite a fresh, distinct version. Do not repeat previous sentences or passages. Variation token: ${token}`;
+}
+
+function passagePrompt(
+  conceptName: string,
+  banks: WordBank[],
+  historyBlock: string,
+  notesBlock: string,
+  variation: string,
+) {
   const bankCount = Math.max(banks.length, 1);
   const share = Math.round(100 / bankCount);
   const banksBlock = formatBanksForPrompt(banks);
@@ -150,10 +168,16 @@ Strict constraints:
 - Error on the side of being too simple.
 
 Concept word banks:
-${banksBlock}${historyBlock}`;
+${banksBlock}${historyBlock}${notesBlock}${variation}`;
 }
 
-function sentencePrompt(conceptName: string, banks: WordBank[], historyBlock: string) {
+function sentencePrompt(
+  conceptName: string,
+  banks: WordBank[],
+  historyBlock: string,
+  notesBlock: string,
+  variation: string,
+) {
   const bankCount = Math.max(banks.length, 1);
   const banksBlock = formatBanksForPrompt(banks);
   const conceptList =
@@ -161,7 +185,7 @@ function sentencePrompt(conceptName: string, banks: WordBank[], historyBlock: st
   return `Write one short simple sentence that practices these concept(s) for this student: ${conceptList}. Do not include a title, markdown, or the concept name as a label. Integrate target words from across ALL of the provided concept word banks in the same sentence when it still sounds natural. There are ${bankCount} concept bank(s); draw from each bank rather than using only one. Prefer 2 or 3 target words total when possible. Do not try to use every word.
 
 Concept word banks:
-${banksBlock}${historyBlock}`;
+${banksBlock}${historyBlock}${notesBlock}${variation}`;
 }
 
 export const handler = async (event: GenerateEvent): Promise<string> => {
@@ -177,11 +201,13 @@ export const handler = async (event: GenerateEvent): Promise<string> => {
   const historyBlock = studentContext
     ? `\nStudent history JSON. Use familiar words and review/mastered concepts as the surrounding language. If the focus concept is new, keep almost all non-target words familiar. Include a little new practice, but do not copy recentTexts. ${studentContext}`
     : '';
+  const notesBlock = instructorNotesBlock(String(event.arguments?.instructorNotes || ''));
+  const variation = variationBlock();
 
   const userText =
     kind === 'passage'
-      ? passagePrompt(conceptName, banks, historyBlock)
-      : sentencePrompt(conceptName, banks, historyBlock);
+      ? passagePrompt(conceptName, banks, historyBlock, notesBlock, variation)
+      : sentencePrompt(conceptName, banks, historyBlock, notesBlock, variation);
 
   try {
     const response = await client.send(
@@ -191,7 +217,7 @@ export const handler = async (event: GenerateEvent): Promise<string> => {
         messages: [{ role: 'user', content: [{ text: userText }] }],
         inferenceConfig: {
           maxTokens: kind === 'passage' ? 1200 : 200,
-          temperature: 0.4,
+          temperature: 0.8,
         },
       }),
     );

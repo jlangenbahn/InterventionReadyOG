@@ -203,15 +203,16 @@ export default function DataEntryPanel({
       currentLesson.concepts
       || parsed.snapshots?.lists?.newConcept?.conceptID
       || parsed.conceptSlots?.newConceptId
-    const saved = await saveStudentLesson({
-      id: currentLesson.id,
-      studentID: student.id,
-      date: toIsoDate(currentLesson.date),
-      lessonNumber: currentLesson.lessonNumber,
-      conceptId,
-      plan: parsed,
-      scores: nextScores,
-    })
+      const saved = await saveStudentLesson({
+        id: currentLesson.id,
+        studentID: student.id,
+        date: toIsoDate(currentLesson.date),
+        lessonNumber: currentLesson.lessonNumber,
+        conceptId,
+        plan: parsed,
+        scores: nextScores,
+        syncScope: false,
+      })
     const lessons = (await onLessonsChanged?.()) ?? savedLessons
     const refreshed = (lessons ?? []).find((item) => item.id === saved.id)
     return refreshed ?? { ...currentLesson, ...saved, scores: nextScores }

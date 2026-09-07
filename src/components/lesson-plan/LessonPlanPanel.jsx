@@ -288,6 +288,7 @@ export default function LessonPlanPanel({
   groups = [],
   leaveGuardRef,
   openLessonId = null,
+  onScopeUpdated,
 }) {
   const printRef = useRef(null)
   const lastGeneratedNameRef = useRef('')
@@ -1245,6 +1246,7 @@ export default function LessonPlanPanel({
         comments: lessonNotes.trim() || null,
         name: resolvedName,
       })
+      if (saved.scopeStudent) onScopeUpdated?.(saved.scopeStudent)
       const lessons = await loadSavedLessons()
       const refreshed = (lessons ?? []).find((item) => item.id === saved.id)
       const nextLesson = refreshed ?? { ...saved, createdAt: saved.createdAt ?? loadedLesson?.createdAt }
@@ -1289,6 +1291,7 @@ export default function LessonPlanPanel({
   }
 
   async function handleTemplateApplied(saved) {
+    if (saved?.scopeStudent) onScopeUpdated?.(saved.scopeStudent)
     const lessons = await loadSavedLessons()
     const refreshed = (lessons ?? []).find((item) => item.id === saved?.id) ?? saved
     if (refreshed?.id) applyLesson(refreshed)
@@ -1346,6 +1349,9 @@ export default function LessonPlanPanel({
     setSharing(true)
     try {
       const copied = await copyLessonToStudents(shareLesson, targetStudentIds)
+      for (const item of copied) {
+        if (item?.scopeStudent) onScopeUpdated?.(item.scopeStudent)
+      }
       setNotice(`Copied this lesson to ${copied.length} student${copied.length === 1 ? '' : 's'}.`)
       setShareLesson(null)
       setError('')

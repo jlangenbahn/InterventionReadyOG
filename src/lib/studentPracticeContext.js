@@ -25,6 +25,7 @@ function emptyExposure(word) {
     lessons: 0,
     correct: 0,
     incorrect: 0,
+    firstSeen: null,
     lastSeen: null,
   }
 }
@@ -37,6 +38,10 @@ function addExposure(map, word, patch = {}) {
   if (patch.lessons) current.lessons += patch.lessons
   if (patch.correct) current.correct += patch.correct
   if (patch.incorrect) current.incorrect += patch.incorrect
+  const seenAt = patch.firstSeen || patch.lastSeen || null
+  if (seenAt && (!current.firstSeen || String(seenAt) < String(current.firstSeen))) {
+    current.firstSeen = seenAt
+  }
   if (patch.lastSeen && (!current.lastSeen || String(patch.lastSeen) > String(current.lastSeen))) {
     current.lastSeen = patch.lastSeen
   }
@@ -80,6 +85,7 @@ function compactExposure(entry) {
     lessons: entry.lessons || undefined,
     correct: entry.correct || undefined,
     incorrect: entry.incorrect || undefined,
+    firstSeen: entry.firstSeen || undefined,
     lastSeen: entry.lastSeen || undefined,
   }
 }
@@ -123,7 +129,13 @@ export function buildStudentWordContext({
       concept: names.get(list?.conceptID) || 'Unknown concept',
       words: listWords.slice(0, 20),
     })
-    for (const word of listWords) addExposure(exposure, word, { lists: 1 })
+    for (const word of listWords) {
+      addExposure(exposure, word, {
+        lists: 1,
+        firstSeen: list?.createdAt || list?.updatedAt || null,
+        lastSeen: list?.createdAt || list?.updatedAt || null,
+      })
+    }
   }
 
   const recentTexts = []
@@ -144,6 +156,7 @@ export function buildStudentWordContext({
         lessons: seenThisLesson.has(key) ? 0 : 1,
         correct: state === SCORE_CORRECT ? 1 : 0,
         incorrect: state === SCORE_INCORRECT ? 1 : 0,
+        firstSeen: lastSeen,
         lastSeen,
       })
       seenThisLesson.add(key)
@@ -247,7 +260,84 @@ export function buildStudentWordContext({
       recentLists: recentLists.slice(0, 12),
       familiarWords,
       recentTexts: recentTexts.slice(-8),
+      seenWordCount: [...exposure.values()].filter((entry) => entry.lessons > 0 || entry.lists > 0).length,
     },
     candidates,
   }
 }
+
+function compareOldestSeen(left, right) {
+  const leftSeen = String(left?.prior?.firstSeen || left?.prior?.lastSeen || '9999')
+  const rightSeen = String(right?.prior?.firstSeen || right?.prior?.lastSeen || '9999')
+  return leftSeen.localeCompare(rightSeen)
+}
+
+/**
+ * Rank Ask Andrea word-list candidates:
+ * missed (data-entry incorrect) first, then unseen lesson-plan words,
+ * then oldest previously seen words when the unseen bank is exhausted.
+ */
+export function rankFocusWordCandidates(candidates = [], count = 10) {
+  const missed = []
+  const unseen = []
+  const recycle = []
+
+  for (const item of candidates ?? []) {
+    if (!item?.id) continue
+    const prior = item.prior
+    const seen = Number(prior?.lessons || 0) > 0 || Number(prior?.lists || 0) > 0
+    if (Number(prior?.incorrect || 0) > 0) missed.push(item)
+    else if (!seen) unseen.push(item)
+    else recycle.push(item)
+  }
+
+  missed.sort((a, b) => Number(b.prior?.incorrect || 0) - Number(a.prior?.incorrect || 0))
+  recycle.sort(compareOldestSeen)
+
+  return {
+    candidates: [
+      ...missed.map((item) => ({ ...item, priority: 'missed' })),
+      ...unseen.map((item) => ({ ...item, priority: 'unseen' })),
+      ...recycle.map((item) => ({ ...item, priority: 'recycle' })),
+    ],
+    missedIds: missed.map((item) => item.id),
+    unseenIds: unseen.map((item) => item.id),
+    recycleIds: recycle.map((item) => item.id),
+    policy: {
+      preferUnseen: true,
+      injectMissed: true,
+      recycleOldestWhenExhausted: true,
+      requestedCount: count,
+    },
+  }
+}
+
+export function applyFocusWordOverrides(modelIds = [], ranked, count) {
+  const limit = Number.isFinite(Number(count)) && Number(count) > 0 ? Number(count) : 10
+  const missed = ranked?.missedIds ?? []
+  const unseen = ranked?.unseenIds ?? []
+  const recycle = ranked?.recycleIds ?? []
+  const unseenSet = new Set(unseen)
+  const recycleSet = new Set(recycle)
+  const model = Array.isArray(modelIds) ? modelIds : []
+  const picked = []
+  const used = new Set()
+
+  function push(ids) {
+    for (const id of ids ?? []) {
+      if (!id || used.has(id)) continue
+      picked.push(id)
+      used.add(id)
+      if (picked.length >= limit) return true
+    }
+    return false
+  }
+
+  if (push(missed)) return picked
+  if (push(model.filter((id) => unseenSet.has(id)))) return picked
+  if (push(unseen)) return picked
+  if (push(model.filter((id) => recycleSet.has(id)))) return picked
+  push(recycle)
+  return picked.slice(0, limit)
+}
+

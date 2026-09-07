@@ -63,6 +63,7 @@ export default function CreateMultiWordPanel({
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState('')
   const [notice, setNotice] = useState('')
+  const [andreaNotes, setAndreaNotes] = useState('')
   const [selectedAndreaIds, setSelectedAndreaIds] = useState(() => new Set())
   const [focusConceptId, setFocusConceptId] = useState(
     editItem?.focusConceptId ?? preferredFocusId ?? null,
@@ -79,6 +80,7 @@ export default function CreateMultiWordPanel({
       setFocusConceptId(preferredFocusId)
       setFocusTouched(Boolean(preferredFocusId))
       setNotice('')
+      setAndreaNotes('')
       return
     }
     setText(editItem.text || '')
@@ -87,6 +89,7 @@ export default function CreateMultiWordPanel({
     setFocusTouched(Boolean(editItem.focusConceptId))
     setNotice('')
     setGenerateError('')
+    setAndreaNotes('')
   }, [
     editItem?.id,
     editItem?.kind,
@@ -212,6 +215,7 @@ export default function CreateMultiWordPanel({
         concepts,
         studentLists: lists,
         wordsByConceptId,
+        instructorNotes: andreaNotes,
       })
       const cleaned = sanitizeGeneratedLessonText(draft, {
         conceptName,
@@ -493,6 +497,18 @@ export default function CreateMultiWordPanel({
                       )
                     })}
                   </Box>
+                  <TextField
+                    label="Notes for Andrea"
+                    size="small"
+                    value={andreaNotes}
+                    onChange={(event) => setAndreaNotes(event.target.value)}
+                    placeholder="Optional — e.g. Student likes astronomy, or keep it to 5 words or less"
+                    helperText="Andrea follows these notes when writing this sentence or passage. Leave blank to use the default prompt."
+                    multiline
+                    minRows={2}
+                    fullWidth
+                    disabled={saving || generating}
+                  />
                   <AskAndreaButton
                     size="small"
                     variant="contained"

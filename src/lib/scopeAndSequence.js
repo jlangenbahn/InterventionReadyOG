@@ -57,6 +57,52 @@ export function serializeScopeAndSequence(inventory) {
   return JSON.stringify(inventory)
 }
 
+/**
+ * Automate New/Review from lesson-plan history. Mastered stays manual.
+ * 0 prior appearances → New; 1+ prior appearances → Review.
+ */
+export function applyGeneratedLessonScopeStatuses(inventory, conceptIds, previousCounts) {
+  const entries = (Array.isArray(inventory) ? inventory : [])
+    .filter((entry) => entry?.conceptId)
+    .map(normalizeScopeEntry)
+  const byId = new Map(entries.map((entry) => [entry.conceptId, { ...entry }]))
+  let changed = false
+
+  for (const conceptId of [...new Set((conceptIds ?? []).filter(Boolean))]) {
+    const current = byId.get(conceptId) ?? {
+      conceptId,
+      inScope: false,
+      masteryStatus: 'unknown',
+      sequence: null,
+    }
+    if (current.masteryStatus === 'mastered') continue
+    const previous = Number(
+      previousCounts instanceof Map
+        ? previousCounts.get(conceptId) ?? 0
+        : previousCounts?.[conceptId] ?? 0,
+    )
+    const next = {
+      ...current,
+      masteryStatus: previous >= 1 ? 'review' : 'new',
+      inScope: true,
+    }
+    if (
+      !byId.has(conceptId)
+      || next.masteryStatus !== current.masteryStatus
+      || next.inScope !== current.inScope
+    ) {
+      changed = true
+    }
+    byId.set(conceptId, next)
+  }
+
+  const nextInventory = entries.map((entry) => byId.get(entry.conceptId) ?? entry)
+  for (const [conceptId, entry] of byId) {
+    if (!entries.some((item) => item.conceptId === conceptId)) nextInventory.push(entry)
+  }
+  return { inventory: nextInventory, changed }
+}
+
 /** New + review in-scope concepts, ordered like a typical lesson (1 new, then reviews). */
 export function lessonConceptsFromScope(concepts, inventory) {
   const byId = new Map((inventory ?? []).map((entry) => [entry?.conceptId, entry]))

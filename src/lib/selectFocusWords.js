@@ -4,7 +4,12 @@
 import { client } from './amplifyClient'
 import { FOCUS_WORD_COUNT } from './wordSelection'
 import { studentDisplayName } from './fetchStudentLessonPlan'
-import { buildStudentWordContext, loadStudentPracticeHistory } from './studentPracticeContext'
+import {
+  applyFocusWordOverrides,
+  buildStudentWordContext,
+  loadStudentPracticeHistory,
+  rankFocusWordCandidates,
+} from './studentPracticeContext'
 
 function messageFromErrors(errors) {
   return (errors ?? [])
@@ -84,6 +89,13 @@ export async function selectFocusWords({
     throw new Error('This concept has no words for Andrea to choose from.')
   }
 
+  const ranked = rankFocusWordCandidates(payload.candidates, count)
+  payload.candidates = ranked.candidates
+  payload.selectionPolicy = ranked.policy
+  payload.missedIds = ranked.missedIds
+  payload.unseenIds = ranked.unseenIds
+  payload.recycleIds = ranked.recycleIds
+
   let data
   let errors
   try {
@@ -109,7 +121,8 @@ export async function selectFocusWords({
 
   const parsed = parseSelection(unwrapGeneratedText(data))
   const allowed = new Set(payload.candidates.map((item) => item.id))
-  const ids = parsed.ids.filter((id) => allowed.has(id)).slice(0, count)
+  const modelIds = parsed.ids.filter((id) => allowed.has(id))
+  const ids = applyFocusWordOverrides(modelIds, ranked, count).filter((id) => allowed.has(id))
   if (!ids.length) {
     throw new Error('Andrea did not return a usable word set. Try again.')
   }

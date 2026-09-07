@@ -203,6 +203,7 @@ export async function saveStudentLesson({
   scores,
   comments,
   name,
+  syncScope = true,
 }) {
   if (!studentID) throw new Error('Student is required to save a lesson plan')
   if (!date) throw new Error('Lesson date is required')
@@ -232,9 +233,7 @@ export async function saveStudentLesson({
 
   if (result.errors?.length && name !== undefined) {
     const { name: _unusedName, ...withoutName } = payload
-    const retry = await saveLessonRecord(id, withoutName, LESSON_SELECTION)
-    if (!retry.errors?.length && retry.data?.id) return retry.data
-    result = retry
+    result = await saveLessonRecord(id, withoutName, LESSON_SELECTION)
   }
 
   if (result.errors?.length) {
@@ -251,9 +250,7 @@ export async function saveStudentLesson({
       ...payload,
       plan: { ...legacyPlan, snapshots: legacySnapshots },
     }
-    const retry = await saveLessonRecord(id, strippedPayload, LESSON_SELECTION_CORE.concat(['scores']))
-    if (!retry.errors?.length && retry.data?.id) return retry.data
-    result = retry
+    result = await saveLessonRecord(id, strippedPayload, LESSON_SELECTION_CORE.concat(['scores']))
   }
 
   if (result.errors?.length && (errorsMention(result.errors, 'plan') || errorsMention(result.errors, 'scores'))) {
@@ -265,7 +262,7 @@ export async function saveStudentLesson({
         scores: scoreMap,
       }),
     }
-    const retry = await saveLessonRecord(id, fallback, [
+    result = await saveLessonRecord(id, fallback, [
       'id',
       'date',
       'createdAt',
@@ -276,15 +273,26 @@ export async function saveStudentLesson({
       'comments',
       'name',
     ])
-    if (!retry.errors?.length && retry.data?.id) return retry.data
-    result = retry
   }
 
   if (result.errors?.length) {
     throw new Error(result.errors.map((e) => e.message).join(', '))
   }
   if (!result.data?.id) throw new Error('Failed to save lesson plan')
-  return result.data
+
+  const saved = result.data
+  if (!syncScope) return saved
+  try {
+    const { syncLessonGeneratedScope } = await import('./lessonScopeSync')
+    const scopeStudent = await syncLessonGeneratedScope({
+      studentID,
+      lesson: saved,
+    })
+    return scopeStudent ? { ...saved, scopeStudent } : saved
+  } catch (err) {
+    console.warn('Lesson saved, but Scope and Sequence could not be updated', err)
+    return saved
+  }
 }
 
 export async function copyLessonToStudents(sourceLesson, targetStudentIds = []) {
@@ -591,13 +599,53 @@ export function lessonConceptKeys(lesson) {
     for (const key of conceptIdentityKeys(list?.conceptID, list?.concept)) keys.add(key)
   }
   if (lesson?.concepts) keys.add(`id:${lesson.concepts}`)
+  const slots = data.conceptSlots ?? {}
+  if (slots.newConceptId) keys.add(`id:${slots.newConceptId}`)
+  for (const id of slots.reviewConceptIds ?? []) {
+    if (id) keys.add(`id:${id}`)
+  }
+  for (const id of slots.whatSpellsConceptIds ?? []) {
+    if (id) keys.add(`id:${id}`)
+  }
+  for (const id of slots.sosConceptIds ?? []) {
+    if (id) keys.add(`id:${id}`)
+  }
+  for (const item of data.snapshots?.whatSpells ?? []) {
+    for (const key of conceptIdentityKeys(item?.id, item?.concept)) keys.add(key)
+  }
+  for (const item of data.snapshots?.sos ?? []) {
+    for (const key of conceptIdentityKeys(item?.id, item?.concept)) keys.add(key)
+  }
   const passage = data.snapshots?.passage
   for (const key of conceptIdentityKeys(passage?.conceptID, passage?.concept)) keys.add(key)
   const passageList = Array.isArray(data.snapshots?.passages) ? data.snapshots.passages : []
   for (const item of passageList) {
     for (const key of conceptIdentityKeys(item?.conceptID, item?.concept)) keys.add(key)
   }
+  const sentenceList = Array.isArray(data.snapshots?.sentences) ? data.snapshots.sentences : []
+  for (const item of sentenceList) {
+    for (const key of conceptIdentityKeys(item?.conceptID, item?.focusConcept)) keys.add(key)
+  }
   return keys
+}
+
+export function lessonConceptIds(lesson) {
+  const ids = []
+  for (const key of lessonConceptKeys(lesson)) {
+    if (key.startsWith('id:')) ids.push(key.slice(3))
+  }
+  return [...new Set(ids.filter(Boolean))]
+}
+
+export function countPreviousConceptAppearances(lessons, currentLessonId) {
+  const counts = new Map()
+  for (const lesson of lessons ?? []) {
+    if (!lesson?.id || lesson.id === currentLessonId) continue
+    for (const conceptId of lessonConceptIds(lesson)) {
+      counts.set(conceptId, (counts.get(conceptId) || 0) + 1)
+    }
+  }
+  return counts
 }
 
 function isPreviousLesson(lesson, current) {

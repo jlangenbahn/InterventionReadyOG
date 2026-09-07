@@ -7,12 +7,14 @@ import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { generateLessonTextFn } from './functions/generate-lesson-text/resource';
 import { selectFocusWordsFn } from './functions/select-focus-words/resource';
+import { commitLessonScopeFn } from './functions/commit-lesson-scope/resource';
 
 const backend = defineBackend({
   auth,
   data,
   generateLessonTextFn,
   selectFocusWordsFn,
+  commitLessonScopeFn,
 });
 
 const HAIKU_45_MODEL = 'anthropic.claude-haiku-4-5-20251001-v1:0';
@@ -35,3 +37,16 @@ function grantHaikuConverse(lambda: { addToRolePolicy: (statement: PolicyStateme
 
 grantHaikuConverse(backend.generateLessonTextFn.resources.lambda);
 grantHaikuConverse(backend.selectFocusWordsFn.resources.lambda);
+
+const studentTable = backend.data.resources.tables['Student'];
+const lessonTable = backend.data.resources.tables['Lesson'];
+studentTable.grantReadWriteData(backend.commitLessonScopeFn.resources.lambda);
+lessonTable.grantReadWriteData(backend.commitLessonScopeFn.resources.lambda);
+backend.commitLessonScopeFn.addEnvironment(
+  'STUDENT_TABLE_NAME',
+  studentTable.tableName,
+);
+backend.commitLessonScopeFn.addEnvironment(
+  'LESSON_TABLE_NAME',
+  lessonTable.tableName,
+);

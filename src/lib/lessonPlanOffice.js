@@ -137,8 +137,8 @@ function lessonToParagraphs(section) {
     labeledLine('New concept', props.newConceptList?.name || props.newConceptList?.concept),
     paragraph('Methods: VATK, Coding of New Concept, Handwriting'),
     paragraph('Encoding', { style: 'Heading2' }),
-    labeledLine('What spells?', formatEncodingConceptList(props.whatSpellsConcepts)),
-    labeledLine('Simultaneous Oral Spelling', formatEncodingConceptList(props.sosConcepts)),
+    labeledLine('What says?', formatEncodingConceptList(props.whatSpellsConcepts)),
+    labeledLine('What spells?', formatEncodingConceptList(props.sosConcepts)),
     labeledLine(
       'Dictation',
       sentences.map((sentence, index) => `${index + 1}. ${sentenceText(sentence)}`).join('\n'),
@@ -186,7 +186,7 @@ function stylesXml() {
     '<w:style w:type="paragraph" w:styleId="ReaderWord">' +
     '<w:name w:val="Reader Word"/>' +
     '<w:basedOn w:val="Normal"/>' +
-    '<w:pPr><w:spacing w:after="80"/></w:pPr>' +
+    '<w:pPr><w:spacing w:line="480" w:lineRule="auto" w:after="240"/></w:pPr>' +
     '<w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="48"/><w:szCs w:val="48"/></w:rPr>' +
     '</w:style>' +
     '</w:styles>'

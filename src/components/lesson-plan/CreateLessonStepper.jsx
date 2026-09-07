@@ -515,7 +515,7 @@ export default function CreateLessonStepper({
                 />
               </Box>
               <ConceptAutocomplete
-                label="What Spells"
+                label="What Says"
                 multiple
                 maxCount={8}
                 options={conceptOptions}
@@ -525,7 +525,7 @@ export default function CreateLessonStepper({
                 formatTagLabel={encodingConceptLabel}
               />
               <ConceptAutocomplete
-                label="Simultaneous Oral Spelling"
+                label="What Spells"
                 multiple
                 maxCount={8}
                 options={conceptOptions}

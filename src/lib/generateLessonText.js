@@ -100,6 +100,7 @@ export async function generateLessonText({
   concepts = [],
   studentLists,
   wordsByConceptId,
+  instructorNotes,
 }) {
   const generate = client.queries?.generateLessonDraft
   if (typeof generate !== 'function') {
@@ -144,11 +145,13 @@ export async function generateLessonText({
   let data
   let errors
   try {
+    const notes = String(instructorNotes ?? '').trim()
     const result = await generate({
       kind: kindLabel,
       conceptName: String(conceptName || 'this concept').trim() || 'this concept',
       words: wordsPayload,
       studentContext: studentContext || undefined,
+      instructorNotes: notes || undefined,
     })
     data = result?.data
     errors = result?.errors

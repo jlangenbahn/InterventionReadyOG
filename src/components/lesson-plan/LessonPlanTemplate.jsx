@@ -91,7 +91,7 @@ const labelSx = {
 
 const encodingLabelSx = {
   ...labelSx,
-  width: 168,
+  width: 110,
 }
 
 const contentSx = {
@@ -148,13 +148,29 @@ function passageText(passage) {
   return title || body
 }
 
+const readerWordListSx = {
+  ...readerTypeSx,
+  lineHeight: 2,
+}
+
+const readerWordItemSx = {
+  lineHeight: 2,
+  minHeight: '2em',
+  pb: '0.85em',
+  '@media print': {
+    lineHeight: 2,
+    minHeight: '2em',
+    paddingBottom: '0.85em',
+  },
+}
+
 function ReaderWordList({ list }) {
   const words = listWordLabels(list)
   return (
-    <Box sx={readerTypeSx}>
+    <Box className="lesson-plan-word-list" sx={readerWordListSx}>
       {words.length
         ? words.map((word, index) => (
-            <Box key={index} component="div">
+            <Box key={index} component="div" className="lesson-plan-word-list-item" sx={readerWordItemSx}>
               {word}
             </Box>
           ))
@@ -383,11 +399,11 @@ const LessonPlanTemplate = forwardRef(function LessonPlanTemplate(
             Encoding
           </Typography>
           <Box sx={rowSx}>
-            <Box sx={encodingLabelSx}>What Spells?</Box>
+            <Box sx={encodingLabelSx}>What Says?</Box>
             <Box sx={contentSx}>{formatEncodingConceptList(whatSpellsConcepts) || '\u00a0'}</Box>
           </Box>
           <Box sx={rowSx}>
-            <Box sx={encodingLabelSx}>Simultaneous Oral Spelling</Box>
+            <Box sx={encodingLabelSx}>What Spells?</Box>
             <Box sx={contentSx}>{formatEncodingConceptList(sosConcepts) || '\u00a0'}</Box>
           </Box>
           <Box sx={rowSx}>

@@ -967,6 +967,7 @@ export default function AppShell({ user, signOut }) {
                 groups={groups}
                 leaveGuardRef={lessonLeaveGuardRef}
                 openLessonId={openLessonId}
+                onScopeUpdated={handleScopeUpdated}
               />
             ) : mainTab === TAB_SCOPE ? (
               <ScopeAndSequencePanel
