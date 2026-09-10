@@ -20,7 +20,6 @@ const backend = defineBackend({
 });
 
 const HAIKU_45_MODEL = 'anthropic.claude-haiku-4-5-20251001-v1:0';
-const HAIKU_35_MODEL = 'anthropic.claude-3-5-haiku-20241022-v1:0';
 const account = backend.data.stack.account;
 
 // Ask Andrea Lambdas call Claude Haiku via Bedrock Converse (cross-region + global profiles).
@@ -41,15 +40,15 @@ function grantHaikuConverse(lambda: { addToRolePolicy: (statement: PolicyStateme
 grantHaikuConverse(backend.generateLessonTextFn.resources.lambda);
 grantHaikuConverse(backend.selectFocusWordsFn.resources.lambda);
 
-// Data-quality audit uses Claude 3.5 Haiku via the US cross-region inference profile.
-// The foundation-model ARN is required in addition to the inference profile for CRIS.
+// Data-quality audit uses Claude Haiku 4.5 via the US cross-region inference profile.
+// CRIS requires both the inference-profile ARN and the foundation-model ARN.
 backend.runDataQualityAuditFn.resources.lambda.addToRolePolicy(
   new PolicyStatement({
     effect: Effect.ALLOW,
     actions: ['bedrock:InvokeModel'],
     resources: [
-      `arn:aws:bedrock:*:${account}:inference-profile/us.${HAIKU_35_MODEL}`,
-      `arn:aws:bedrock:*::foundation-model/${HAIKU_35_MODEL}`,
+      `arn:aws:bedrock:*:${account}:inference-profile/us.${HAIKU_45_MODEL}`,
+      `arn:aws:bedrock:*::foundation-model/${HAIKU_45_MODEL}`,
     ],
   }),
 );

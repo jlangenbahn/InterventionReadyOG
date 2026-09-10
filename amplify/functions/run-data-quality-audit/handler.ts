@@ -1,5 +1,5 @@
 /**
- * Bedrock Converse audit: sample catalog words, ask Claude 3.5 Haiku for
+ * Bedrock Converse audit: sample catalog words, ask Claude Haiku 4.5 for
  * ADD/REMOVE concept tags, then write OPEN DataQualityFinding rows.
  */
 import {
@@ -13,7 +13,7 @@ import {
   type AttributeValue,
 } from '@aws-sdk/client-dynamodb';
 
-const MODEL_ID = 'us.anthropic.claude-3-5-haiku-20241022-v1:0';
+const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 const WORD_BATCH_SIZE = 10;
 const SYSTEM_PROMPT = `You are an expert Orton-Gillingham practitioner and catalog editor.
 You review word-to-concept tags in a shared intervention word bank.
