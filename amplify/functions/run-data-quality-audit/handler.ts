@@ -102,18 +102,41 @@ function parseJsonObject(text: string) {
   }
 }
 
+function projectionFor(fields: string[]) {
+  const expressionAttributeNames: Record<string, string> = {};
+  const tokens = fields.map((field) => {
+    const alias = `#${field}`;
+    expressionAttributeNames[alias] = field;
+    return alias;
+  });
+  return {
+    ProjectionExpression: tokens.join(', '),
+    ExpressionAttributeNames: expressionAttributeNames,
+  };
+}
+
 async function scanAll(
   tableName: string,
-  projection: string,
-  options: { filterExpression?: string; expressionAttributeValues?: Record<string, AttributeValue>; limit?: number } = {},
+  fields: string[],
+  options: {
+    filterExpression?: string;
+    expressionAttributeNames?: Record<string, string>;
+    expressionAttributeValues?: Record<string, AttributeValue>;
+    limit?: number;
+  } = {},
 ) {
+  const projection = projectionFor(fields);
   const items: Record<string, AttributeValue>[] = [];
   let exclusiveStartKey: Record<string, AttributeValue> | undefined;
   do {
     const result = await dynamo.send(
       new ScanCommand({
         TableName: tableName,
-        ProjectionExpression: projection,
+        ProjectionExpression: projection.ProjectionExpression,
+        ExpressionAttributeNames: {
+          ...projection.ExpressionAttributeNames,
+          ...options.expressionAttributeNames,
+        },
         FilterExpression: options.filterExpression,
         ExpressionAttributeValues: options.expressionAttributeValues,
         ExclusiveStartKey: exclusiveStartKey,
@@ -128,13 +151,15 @@ async function scanAll(
 }
 
 async function scanWords(tableName: string, limit: number): Promise<CatalogWord[]> {
+  const projection = projectionFor(['id', 'word', 'isNonsenseWord']);
   const words: CatalogWord[] = [];
   let exclusiveStartKey: Record<string, AttributeValue> | undefined;
   do {
     const result = await dynamo.send(
       new ScanCommand({
         TableName: tableName,
-        ProjectionExpression: 'id, word, isNonsenseWord',
+        ProjectionExpression: projection.ProjectionExpression,
+        ExpressionAttributeNames: projection.ExpressionAttributeNames,
         ExclusiveStartKey: exclusiveStartKey,
         Limit: Math.max(limit - words.length, 1) * 2,
       }),
@@ -230,7 +255,7 @@ export const handler = async (): Promise<AuditResult> => {
 
   const [wordRows, conceptItems] = await Promise.all([
     scanWords(wordTable, WORD_BATCH_SIZE),
-    scanAll(conceptTable, 'id, concept, category, subcategory, level'),
+    scanAll(conceptTable, ['id', 'concept', 'category', 'subcategory', 'level']),
   ]);
   const concepts = parseConcepts(conceptItems);
   const conceptsById = new Map(concepts.map((concept) => [concept.id, concept]));
@@ -243,8 +268,9 @@ export const handler = async (): Promise<AuditResult> => {
   }
 
   const { names, values } = inValues(wordRows.map((word) => word.id), 'w');
-  const linkItems = await scanAll(conceptWordTable, 'id, wordId, conceptId', {
-    filterExpression: `wordId IN (${names.join(', ')})`,
+  const linkItems = await scanAll(conceptWordTable, ['id', 'wordId', 'conceptId'], {
+    filterExpression: `#wordId IN (${names.join(', ')})`,
+    expressionAttributeNames: { '#wordId': 'wordId' },
     expressionAttributeValues: values,
   });
   const wordsById = new Map(wordRows.map((word) => [word.id, word]));
