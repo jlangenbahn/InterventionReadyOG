@@ -16,7 +16,7 @@ import {
   Typography,
 } from '@mui/material'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import HelpTip from '../shared/HelpTip'
 import {
   createParadigmWithMappings,
@@ -271,7 +271,7 @@ export default function ParadigmSettingsPanel({ concepts = [], setError }) {
             Core ontological base concepts
           </Typography>
           <Box sx={{ height: { xs: 360, md: 'calc(100vh - 240px)' }, minHeight: 280 }}>
-            <DataGridPro
+            <DataGrid
               rows={compareRows}
               columns={[
                 { field: 'baseConcept', headerName: 'Base concept', flex: 1.4, minWidth: 160 },
@@ -318,7 +318,7 @@ export default function ParadigmSettingsPanel({ concepts = [], setError }) {
             ) : null}
           </Stack>
           <Box sx={{ height: { xs: 360, md: 'calc(100vh - 280px)' }, minHeight: 280 }}>
-            <DataGridPro
+            <DataGrid
               rows={compareRows}
               columns={[
                 { field: 'baseConcept', headerName: 'Base concept', flex: 1, minWidth: 140 },

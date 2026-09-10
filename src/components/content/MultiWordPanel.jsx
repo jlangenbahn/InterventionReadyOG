@@ -20,7 +20,7 @@ import AddIcon from '@mui/icons-material/Add'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import CreateMultiWordPanel from './CreateMultiWordPanel'
 import MultiWordPreview from './MultiWordPreview'
 import ConfirmDeleteDialog from '../shared/ConfirmDeleteDialog'
@@ -671,7 +671,7 @@ export default function MultiWordPanel({
                 />
               </Stack>
               <Box sx={{ height: { xs: 360, md: 'calc(100vh - 420px)' }, minHeight: 280, width: '100%' }}>
-                <DataGridPro
+                <DataGrid
                   rows={filteredRows}
                   columns={columns}
                   getRowId={(row) => row.id}
@@ -683,7 +683,6 @@ export default function MultiWordPanel({
                   initialState={{
                     pagination: { paginationModel: { pageSize: 10 } },
                     sorting: { sortModel: [{ field: 'createdAt', sort: 'desc' }] },
-                    pinnedColumns: { right: ['actions'] },
                   }}
                   slots={{ toolbar: GridToolbar }}
                   slotProps={{

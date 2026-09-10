@@ -11,7 +11,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
@@ -482,7 +482,7 @@ export default function ReportingPanel({ student, concepts = [], wordsByConceptI
             In-scope concepts
           </Typography>
           <Box sx={{ flex: 1, minHeight: 280, width: '100%' }}>
-            <DataGridPro
+            <DataGrid
               rows={masteryRows}
               columns={MASTERY_COLUMNS}
               getRowId={(row) => row.id}
@@ -520,7 +520,7 @@ export default function ReportingPanel({ student, concepts = [], wordsByConceptI
             Word practice
           </Typography>
           <Box sx={{ flex: 1, minHeight: 280, width: '100%' }}>
-            <DataGridPro
+            <DataGrid
               rows={wordRows}
               columns={WORD_COLUMNS}
               getRowId={(row) => row.id}

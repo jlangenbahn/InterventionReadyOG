@@ -32,7 +32,7 @@ import EditIcon from '@mui/icons-material/Edit'
 import ShareIcon from '@mui/icons-material/Share'
 import PublicIcon from '@mui/icons-material/Public'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import LessonPlanTemplate from './LessonPlanTemplate'
 import CreateLessonStepper from './CreateLessonStepper'
 import CreateWordListModal from '../content/CreateWordListModal'
@@ -1618,7 +1618,7 @@ export default function LessonPlanPanel({
                   overflow: 'hidden',
                 }}
               >
-                <DataGridPro
+                <DataGrid
                   key={viewingGlobal ? 'global' : 'student'}
                   rows={viewingGlobal ? globalLessonRows : savedLessonRows}
                   columns={viewingGlobal ? globalColumns : viewColumns}
@@ -1648,7 +1648,6 @@ export default function LessonPlanPanel({
                     sorting: viewingGlobal
                       ? { sortModel: [{ field: 'name', sort: 'asc' }] }
                       : { sortModel: [{ field: 'lessonDateLabel', sort: 'desc' }] },
-                    pinnedColumns: { right: ['actions'] },
                   }}
                   slots={{ toolbar: GridToolbar }}
                   slotProps={{

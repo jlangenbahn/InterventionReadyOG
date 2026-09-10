@@ -14,7 +14,7 @@ import {
   Typography,
 } from '@mui/material'
 import SaveIcon from '@mui/icons-material/Save'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import {
   fetchLessonsForStudents,
   formatLessonDisplayName,
@@ -252,7 +252,7 @@ export default function GroupPanel({
           sx={{ mb: 2 }}
         />
         <Box sx={{ height: { xs: 360, md: 'calc(100vh - 360px)' }, minHeight: 280, width: '100%' }}>
-          <DataGridPro
+          <DataGrid
             rows={rows}
             columns={STUDENT_COLUMNS}
             checkboxSelection
@@ -294,7 +294,7 @@ export default function GroupPanel({
           Lesson plans currently saved for students in this group, including copies shared from another student.
         </Typography>
         <Box sx={{ height: { xs: 360, md: 'calc(100vh - 280px)' }, minHeight: 280, width: '100%' }}>
-          <DataGridPro
+          <DataGrid
             rows={lessonRows}
             columns={GROUP_LESSON_COLUMNS}
             getRowId={(row) => row.id}

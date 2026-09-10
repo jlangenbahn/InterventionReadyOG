@@ -14,7 +14,7 @@ import {
   TextField,
 } from '@mui/material'
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import { createWordList } from '../../lib/crudRecords'
 import { studentDisplayName } from '../../lib/fetchStudentLessonPlan'
 import { deselectWord, emptyWordSelection, wordRowId } from '../../lib/wordSelection'
@@ -132,13 +132,12 @@ export default function CreateWordListModal({
             emptyLabel="Select words from the right, roll 10, or Ask Andrea."
           />
           <Box sx={{ height: { xs: 320, md: 420 }, minWidth: 0 }}>
-            <DataGridPro
+            <DataGrid
               key={concept?.id || 'none'}
               rows={words}
               columns={WORD_COLUMNS}
               getRowId={wordRowId}
               checkboxSelection
-              disableRowSelectionExcludeModel
               disableRowSelectionOnClick
               hideFooterSelectedRowCount
               rowSelectionModel={wordSelection}

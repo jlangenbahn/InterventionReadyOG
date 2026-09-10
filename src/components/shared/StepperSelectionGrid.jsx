@@ -4,7 +4,7 @@
 import { useMemo } from 'react'
 import { Box, Chip, IconButton, Stack, Typography } from '@mui/material'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import { BRAND } from '../../theme'
 
 function limitIds(ids, maxCount) {
@@ -181,12 +181,11 @@ export default function StepperSelectionGrid({
         )}
       </Stack>
       <Box sx={{ height: 280, width: '100%' }}>
-        <DataGridPro
+        <DataGrid
           rows={rows}
           columns={gridColumns}
           getRowId={(row) => row.id}
           checkboxSelection={checkboxSelection}
-          disableRowSelectionExcludeModel={checkboxSelection}
           disableMultipleRowSelection={!checkboxSelection}
           disableRowSelectionOnClick
           hideFooterSelectedRowCount={checkboxSelection}
@@ -210,7 +209,6 @@ export default function StepperSelectionGrid({
           pageSizeOptions={[10, 25, 50]}
           initialState={{
             pagination: { paginationModel: { pageSize: 10 } },
-            pinnedColumns: onDeleteItem ? { right: ['actions'] } : undefined,
           }}
           slots={{ toolbar: GridToolbar }}
           slotProps={{

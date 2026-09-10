@@ -12,7 +12,7 @@ import {
 } from '@mui/material'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import ConceptCountChart from '../shared/ConceptCountChart'
 
 const CONCEPT_COLUMNS = [
@@ -228,7 +228,7 @@ export default function MultiWordPreview({
           Concepts in this text
         </Typography>
         <Box sx={{ height: 280, width: '100%' }}>
-          <DataGridPro
+          <DataGrid
             rows={conceptRows}
             columns={CONCEPT_COLUMNS}
             getRowId={(row) => row.id}

@@ -14,7 +14,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import {
   applyLessonTemplate,
   deleteLessonTemplate,
@@ -196,7 +196,7 @@ export default function LessonTemplateGallery({
         />
       </Stack>
       <Box sx={{ height: { xs: 360, md: 'calc(100vh - 380px)' }, minHeight: 280, width: '100%' }}>
-        <DataGridPro
+        <DataGrid
           rows={rows}
           columns={columns}
           getRowId={(row) => row.id}

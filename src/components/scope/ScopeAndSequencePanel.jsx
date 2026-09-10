@@ -31,7 +31,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { DataGridPro, GridToolbar, useGridApiRef } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar, useGridApiRef } from '@mui/x-data-grid'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined'
@@ -837,7 +837,7 @@ export default function ScopeAndSequencePanel({
       )}
 
       <Box sx={{ flex: 1, width: '100%' }}>
-        <DataGridPro
+        <DataGrid
           key={`${student.id}-${subTab}`}
           apiRef={gridApiRef}
           rows={gridRows}

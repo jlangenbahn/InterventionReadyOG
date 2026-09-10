@@ -23,7 +23,7 @@ import AddIcon from '@mui/icons-material/Add'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import { parseListData, resolveListWords, studentDisplayName } from '../../lib/fetchStudentLessonPlan'
 import { client } from '../../lib/amplifyClient'
 import { deleteWordList, updateWordList } from '../../lib/crudRecords'
@@ -409,7 +409,7 @@ export default function WordListsPanel({
             {mode === MODE_CREATE ? (
               <>
                 <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
-                  <DataGridPro
+                  <DataGrid
                     rows={conceptRows}
                     columns={CONCEPT_COLUMNS}
                     getRowId={(row) => row.id}
@@ -472,7 +472,7 @@ export default function WordListsPanel({
               </Box>
             ) : (
               <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
-                <DataGridPro
+                <DataGrid
                   rows={myListRows}
                   columns={listColumns}
                   getRowId={(row) => row.id}
@@ -484,7 +484,6 @@ export default function WordListsPanel({
                   initialState={{
                     pagination: { paginationModel: { pageSize: 10 } },
                     sorting: { sortModel: [{ field: 'name', sort: 'asc' }] },
-                    pinnedColumns: { right: ['actions'] },
                   }}
                   slots={{ toolbar: GridToolbar }}
                   slotProps={{
@@ -569,14 +568,13 @@ export default function WordListsPanel({
                   }}
                 >
                   <Box sx={{ height: { xs: 320, md: 'calc(100vh - 280px)' }, minHeight: 240, minWidth: 0 }}>
-                    <DataGridPro
+                    <DataGrid
                       key={selectedConceptId}
                       rows={selectedWords}
                       columns={wordColumns}
                       getRowId={wordRowId}
                       getRowHeight={() => 'auto'}
                       checkboxSelection
-                      disableRowSelectionExcludeModel
                       disableRowSelectionOnClick
                       hideFooterSelectedRowCount
                       rowSelectionModel={wordSelection}
@@ -585,7 +583,6 @@ export default function WordListsPanel({
                       pageSizeOptions={[25, 50, 100]}
                       initialState={{
                         pagination: { paginationModel: { pageSize: 50 } },
-                        pinnedColumns: { right: ['editConcepts'] },
                       }}
                       slots={{ toolbar: GridToolbar }}
                       slotProps={{ toolbar: { showQuickFilter: true } }}
@@ -660,7 +657,7 @@ export default function WordListsPanel({
                 sx={{ mt: 1, mb: 1.5 }}
               />
               <Box sx={{ height: { xs: 320, md: 'calc(100vh - 280px)' }, minHeight: 240, width: '100%' }}>
-                <DataGridPro
+                <DataGrid
                   rows={selectedListWords}
                   columns={[{ field: 'word', headerName: 'Word', flex: 1, minWidth: 120 }]}
                   getRowId={(row) => row.id}

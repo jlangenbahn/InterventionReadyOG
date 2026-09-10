@@ -13,7 +13,7 @@ import {
   Typography,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 
 export default function MergeSelectionCard({
   title,
@@ -157,7 +157,7 @@ export default function MergeSelectionCard({
             })}
           </Stack>
           <Box sx={{ flex: 1, minWidth: 0, height: 260 }}>
-            <DataGridPro
+            <DataGrid
               rows={rows}
               columns={gridColumns}
               getRowId={(row) => row.id}

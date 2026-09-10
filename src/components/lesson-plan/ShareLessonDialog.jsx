@@ -14,7 +14,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import { studentDisplayName } from '../../lib/fetchStudentLessonPlan'
 
 export default function ShareLessonDialog({
@@ -101,7 +101,7 @@ export default function ShareLessonDialog({
               Groups
             </Typography>
             <Box sx={{ height: 180, width: '100%' }}>
-              <DataGridPro
+              <DataGrid
                 rows={groupRows}
                 columns={[
                   { field: 'name', headerName: 'Group', flex: 1, minWidth: 140 },
@@ -132,7 +132,7 @@ export default function ShareLessonDialog({
             Students
           </Typography>
           <Box sx={{ height: 280, width: '100%' }}>
-            <DataGridPro
+            <DataGrid
               rows={studentRows}
               columns={[
                 { field: 'name', headerName: 'Student', flex: 1.2, minWidth: 140 },
