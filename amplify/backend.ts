@@ -9,6 +9,8 @@ import { generateLessonTextFn } from './functions/generate-lesson-text/resource'
 import { selectFocusWordsFn } from './functions/select-focus-words/resource';
 import { commitLessonScopeFn } from './functions/commit-lesson-scope/resource';
 import { runDataQualityAuditFn } from './functions/run-data-quality-audit/resource';
+import { runSpellCheckFn } from './functions/run-spell-check/resource';
+import { generateConceptDescriptionsFn } from './functions/generate-concept-descriptions/resource';
 
 const backend = defineBackend({
   auth,
@@ -17,6 +19,8 @@ const backend = defineBackend({
   selectFocusWordsFn,
   commitLessonScopeFn,
   runDataQualityAuditFn,
+  runSpellCheckFn,
+  generateConceptDescriptionsFn,
 });
 
 const HAIKU_45_MODEL = 'anthropic.claude-haiku-4-5-20251001-v1:0';
@@ -40,18 +44,24 @@ function grantHaikuConverse(lambda: { addToRolePolicy: (statement: PolicyStateme
 grantHaikuConverse(backend.generateLessonTextFn.resources.lambda);
 grantHaikuConverse(backend.selectFocusWordsFn.resources.lambda);
 
-// Data-quality audit uses Claude Haiku 4.5 via the US cross-region inference profile.
+// Data-quality Lambdas use Claude Haiku 4.5 via the US cross-region inference profile.
 // CRIS requires both the inference-profile ARN and the foundation-model ARN.
-backend.runDataQualityAuditFn.resources.lambda.addToRolePolicy(
-  new PolicyStatement({
-    effect: Effect.ALLOW,
-    actions: ['bedrock:InvokeModel'],
-    resources: [
-      `arn:aws:bedrock:*:${account}:inference-profile/us.${HAIKU_45_MODEL}`,
-      `arn:aws:bedrock:*::foundation-model/${HAIKU_45_MODEL}`,
-    ],
-  }),
-);
+function grantHaikuUsInvoke(lambda: { addToRolePolicy: (statement: PolicyStatement) => void }) {
+  lambda.addToRolePolicy(
+    new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['bedrock:InvokeModel'],
+      resources: [
+        `arn:aws:bedrock:*:${account}:inference-profile/us.${HAIKU_45_MODEL}`,
+        `arn:aws:bedrock:*::foundation-model/${HAIKU_45_MODEL}`,
+      ],
+    }),
+  );
+}
+
+grantHaikuUsInvoke(backend.runDataQualityAuditFn.resources.lambda);
+grantHaikuUsInvoke(backend.runSpellCheckFn.resources.lambda);
+grantHaikuUsInvoke(backend.generateConceptDescriptionsFn.resources.lambda);
 
 const studentTable = backend.data.resources.tables['Student'];
 const lessonTable = backend.data.resources.tables['Lesson'];
@@ -78,3 +88,11 @@ backend.runDataQualityAuditFn.addEnvironment('WORD_TABLE_NAME', wordTable.tableN
 backend.runDataQualityAuditFn.addEnvironment('CONCEPT_TABLE_NAME', conceptTable.tableName);
 backend.runDataQualityAuditFn.addEnvironment('CONCEPT_WORD_TABLE_NAME', conceptWordTable.tableName);
 backend.runDataQualityAuditFn.addEnvironment('FINDING_TABLE_NAME', findingTable.tableName);
+
+wordTable.grantReadData(backend.runSpellCheckFn.resources.lambda);
+findingTable.grantReadWriteData(backend.runSpellCheckFn.resources.lambda);
+backend.runSpellCheckFn.addEnvironment('WORD_TABLE_NAME', wordTable.tableName);
+backend.runSpellCheckFn.addEnvironment('FINDING_TABLE_NAME', findingTable.tableName);
+
+conceptTable.grantReadWriteData(backend.generateConceptDescriptionsFn.resources.lambda);
+backend.generateConceptDescriptionsFn.addEnvironment('CONCEPT_TABLE_NAME', conceptTable.tableName);

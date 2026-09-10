@@ -6,6 +6,8 @@ import { generateLessonTextFn } from '../functions/generate-lesson-text/resource
 import { selectFocusWordsFn } from '../functions/select-focus-words/resource';
 import { commitLessonScopeFn } from '../functions/commit-lesson-scope/resource';
 import { runDataQualityAuditFn } from '../functions/run-data-quality-audit/resource';
+import { runSpellCheckFn } from '../functions/run-spell-check/resource';
+import { generateConceptDescriptionsFn } from '../functions/generate-concept-descriptions/resource';
 
 /**
  * Ported from ready-og Gen1 schema.graphql (app 6cvcpcvgbjdq3evrmqh4zyw4oi).
@@ -229,6 +231,8 @@ const schema = a.schema({
       category: a.string(),
       level: a.string(),
       definition: a.string(),
+      /** Instructor-facing Orton-Gillingham phonetic/orthographic rule for this concept. */
+      ogDescription: a.string(),
       trainingResources: a.json(),
       NewLessons: a.hasMany('Lesson', 'concepts'),
       Lists: a.hasMany('List', 'conceptID'),
@@ -429,7 +433,7 @@ const schema = a.schema({
     .handler(a.handler.function(selectFocusWordsFn))
     .authorization((allow) => [allow.authenticated()]),
 
-  DataQualityActionType: a.enum(['ADD', 'REMOVE']),
+  DataQualityActionType: a.enum(['ADD', 'REMOVE', 'SPELLING']),
 
   DataQualityFindingStatus: a.enum(['OPEN', 'APPROVED', 'REJECTED']),
 
@@ -439,15 +443,17 @@ const schema = a.schema({
   }),
 
   /**
-   * Suggested catalog correction (word ↔ concept). Produced by runDataQualityAudit
-   * (Bedrock later). Instructors approve to apply ConceptWord create/delete.
+   * Suggested catalog correction. ADD/REMOVE retag a word ↔ concept.
+   * SPELLING proposes a corrected Word.word and leaves recommendedConceptId empty.
    */
   DataQualityFinding: a
     .model({
       wordId: a.id().required(),
       word: a.belongsTo('Word', 'wordId'),
-      recommendedConceptId: a.id().required(),
+      recommendedConceptId: a.id(),
       recommendedConcept: a.belongsTo('Concept', 'recommendedConceptId'),
+      /** Corrected catalog spelling for SPELLING findings. */
+      suggestedSpelling: a.string(),
       actionType: a.ref('DataQualityActionType').required(),
       reason: a.string().required(),
       status: a.ref('DataQualityFindingStatus').required(),
@@ -488,13 +494,33 @@ const schema = a.schema({
     .authorization((allow) => [allow.authenticated()]),
 
   /**
-   * Bedrock Converse catalog audit. Samples words, asks Claude 3.5 Haiku for
+   * Bedrock Converse catalog audit. Samples words, asks Claude Haiku 4.5 for
    * ADD/REMOVE tags, and writes OPEN DataQualityFinding rows.
    */
   runDataQualityAudit: a
     .mutation()
     .returns(a.ref('DataQualityAuditResult'))
     .handler(a.handler.function(runDataQualityAuditFn))
+    .authorization((allow) => [allow.authenticated()]),
+
+  /**
+   * Bedrock Converse spell check. Samples real catalog words, flags misspellings,
+   * and writes OPEN DataQualityFinding rows with actionType SPELLING.
+   */
+  runSpellCheck: a
+    .mutation()
+    .returns(a.ref('DataQualityAuditResult'))
+    .handler(a.handler.function(runSpellCheckFn))
+    .authorization((allow) => [allow.authenticated()]),
+
+  /**
+   * Bedrock Converse OG rule writer. Samples concepts and overwrites
+   * Concept.ogDescription in place so prompt iterations can replace prior text.
+   */
+  generateConceptDescriptions: a
+    .mutation()
+    .returns(a.ref('DataQualityAuditResult'))
+    .handler(a.handler.function(generateConceptDescriptionsFn))
     .authorization((allow) => [allow.authenticated()]),
 
   /**
