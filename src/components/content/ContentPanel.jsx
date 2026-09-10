@@ -53,6 +53,7 @@ export default function ContentPanel({
   studentLists = [],
   loadingLists = false,
   onReloadLists,
+  onCatalogReload,
   setError,
   onConceptUpdated,
 }) {
@@ -114,6 +115,7 @@ export default function ContentPanel({
           loadingCatalog={loadingCatalog}
           setError={setError}
           onConceptUpdated={onConceptUpdated}
+          onCatalogReload={onCatalogReload}
         />
       ) : (
         <WordListsPanel
@@ -124,6 +126,7 @@ export default function ContentPanel({
           studentLists={studentLists}
           loadingLists={loadingLists}
           onReloadLists={onReloadLists}
+          onCatalogReload={onCatalogReload}
           setError={setError}
         />
       )}

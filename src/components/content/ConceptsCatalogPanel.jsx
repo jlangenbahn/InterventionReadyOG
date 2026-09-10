@@ -24,6 +24,8 @@ import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
 import { client } from '../../lib/amplifyClient'
 import HelpTip from '../shared/HelpTip'
 import StudentContentExplainer from './StudentContentExplainer'
+import { buildWordConceptColumns, wordConceptGridSx } from './WordConceptsEditor'
+import { wordRowId } from '../../lib/wordSelection'
 
 export default function ConceptsCatalogPanel({
   concepts = [],
@@ -31,12 +33,14 @@ export default function ConceptsCatalogPanel({
   loadingCatalog = false,
   setError,
   onConceptUpdated,
+  onCatalogReload,
 }) {
   const [editing, setEditing] = useState(null)
   const [label, setLabel] = useState('')
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
   const [selectedId, setSelectedId] = useState(null)
+  const [editingWordRowId, setEditingWordRowId] = useState(null)
 
   const rows = useMemo(
     () =>
@@ -101,10 +105,37 @@ export default function ConceptsCatalogPanel({
     () =>
       (selectedId ? wordsByConceptId?.get(selectedId) ?? [] : []).map((row, index) => ({
         id: row?.conceptWordId || row?.id || `${selectedId}-${index}`,
+        wordId: row?.wordId || row?.id,
+        conceptWordId: row?.conceptWordId,
         word: row?.word || '',
         isNonsenseWord: Boolean(row?.isNonsenseWord),
       })),
     [selectedId, wordsByConceptId],
+  )
+
+  const wordColumns = useMemo(
+    () =>
+      buildWordConceptColumns({
+        editingRowId: editingWordRowId,
+        onStartEdit: setEditingWordRowId,
+        onCancelEdit: () => setEditingWordRowId(null),
+        onSaved: async () => {
+          setEditingWordRowId(null)
+          await onCatalogReload?.()
+        },
+        concepts,
+        wordsByConceptId,
+        setError,
+        extraColumns: [
+          {
+            field: 'isNonsenseWord',
+            headerName: 'Nonsense',
+            width: 100,
+            type: 'boolean',
+          },
+        ],
+      }),
+    [editingWordRowId, concepts, wordsByConceptId, onCatalogReload, setError],
   )
 
   async function handleSave(event) {
@@ -169,7 +200,10 @@ export default function ConceptsCatalogPanel({
               rows={rows}
               columns={columns}
               getRowId={(row) => row.id}
-              onRowClick={(params) => setSelectedId(params.id)}
+              onRowClick={(params) => {
+                setSelectedId(params.id)
+                setEditingWordRowId(null)
+              }}
               getRowClassName={(params) => (params.id === selectedId ? 'Mui-selected' : '')}
               loading={loadingCatalog}
               pagination
@@ -242,19 +276,19 @@ export default function ConceptsCatalogPanel({
             <Box sx={{ height: { xs: 280, md: 'calc(100vh - 320px)' }, minHeight: 220, width: '100%' }}>
               <DataGridPro
                 rows={selectedWords}
-                columns={[
-                  { field: 'word', headerName: 'Word', flex: 1, minWidth: 120 },
-                  { field: 'isNonsenseWord', headerName: 'Nonsense', width: 100, type: 'boolean' },
-                ]}
-                getRowId={(row) => row.id}
+                columns={wordColumns}
+                getRowId={wordRowId}
+                getRowHeight={() => 'auto'}
                 disableRowSelectionOnClick
                 pagination
                 pageSizeOptions={[25, 50, 100]}
                 initialState={{
                   pagination: { paginationModel: { pageSize: 25 } },
+                  pinnedColumns: { right: ['editConcepts'] },
                 }}
                 density="compact"
                 localeText={{ noRowsLabel: 'No words tagged to this concept.' }}
+                sx={wordConceptGridSx}
               />
             </Box>
           </Paper>

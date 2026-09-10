@@ -33,19 +33,10 @@ import HelpTip from '../shared/HelpTip'
 import StudentContentExplainer from './StudentContentExplainer'
 import SelectedWordsPanel from './SelectedWordsPanel'
 import WordSelectionActions from './WordSelectionActions'
+import { buildWordConceptColumns, wordConceptGridSx } from './WordConceptsEditor'
 
 const MODE_VIEW = 0
 const MODE_CREATE = 1
-
-const WORD_COLUMNS = [
-  { field: 'word', headerName: 'Word', flex: 1, minWidth: 120 },
-  {
-    field: 'isNonsenseWord',
-    headerName: 'Nonsense',
-    width: 100,
-    type: 'boolean',
-  },
-]
 
 const LIST_COLUMNS = [
   { field: 'name', headerName: 'List', flex: 1.2, minWidth: 110 },
@@ -90,6 +81,7 @@ export default function WordListsPanel({
   studentLists = [],
   loadingLists = false,
   onReloadLists,
+  onCatalogReload,
   setError,
 }) {
   const [selectedConceptId, setSelectedConceptId] = useState(null)
@@ -104,6 +96,7 @@ export default function WordListsPanel({
   const [deletingList, setDeletingList] = useState(false)
   const [mode, setMode] = useState(MODE_VIEW)
   const [selectedListId, setSelectedListId] = useState(null)
+  const [editingWordRowId, setEditingWordRowId] = useState(null)
 
   const selectedConcept = useMemo(
     () => concepts.find((item) => item.id === selectedConceptId) ?? null,
@@ -183,6 +176,31 @@ export default function WordListsPanel({
     [selectedList, selectedListId, wordLookup],
   )
 
+  const wordColumns = useMemo(
+    () =>
+      buildWordConceptColumns({
+        editingRowId: editingWordRowId,
+        onStartEdit: setEditingWordRowId,
+        onCancelEdit: () => setEditingWordRowId(null),
+        onSaved: async () => {
+          setEditingWordRowId(null)
+          await onCatalogReload?.()
+        },
+        concepts,
+        wordsByConceptId,
+        setError,
+        extraColumns: [
+          {
+            field: 'isNonsenseWord',
+            headerName: 'Nonsense',
+            width: 100,
+            type: 'boolean',
+          },
+        ],
+      }),
+    [editingWordRowId, concepts, wordsByConceptId, onCatalogReload, setError],
+  )
+
   const listColumns = useMemo(
     () => [
       ...LIST_COLUMNS,
@@ -232,6 +250,7 @@ export default function WordListsPanel({
   useEffect(() => {
     setWordSelection(emptyWordSelection())
     setCreateListOpen(false)
+    setEditingWordRowId(null)
   }, [selectedConceptId])
 
   useEffect(() => {
@@ -553,8 +572,9 @@ export default function WordListsPanel({
                     <DataGridPro
                       key={selectedConceptId}
                       rows={selectedWords}
-                      columns={WORD_COLUMNS}
+                      columns={wordColumns}
                       getRowId={wordRowId}
+                      getRowHeight={() => 'auto'}
                       checkboxSelection
                       disableRowSelectionExcludeModel
                       disableRowSelectionOnClick
@@ -565,10 +585,12 @@ export default function WordListsPanel({
                       pageSizeOptions={[25, 50, 100]}
                       initialState={{
                         pagination: { paginationModel: { pageSize: 50 } },
+                        pinnedColumns: { right: ['editConcepts'] },
                       }}
                       slots={{ toolbar: GridToolbar }}
                       slotProps={{ toolbar: { showQuickFilter: true } }}
                       density="compact"
+                      sx={wordConceptGridSx}
                     />
                   </Box>
                   <SelectedWordsPanel

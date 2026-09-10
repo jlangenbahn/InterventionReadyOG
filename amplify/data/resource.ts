@@ -5,6 +5,7 @@ import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { generateLessonTextFn } from '../functions/generate-lesson-text/resource';
 import { selectFocusWordsFn } from '../functions/select-focus-words/resource';
 import { commitLessonScopeFn } from '../functions/commit-lesson-scope/resource';
+import { runDataQualityAuditFn } from '../functions/run-data-quality-audit/resource';
 
 /**
  * Ported from ready-og Gen1 schema.graphql (app 6cvcpcvgbjdq3evrmqh4zyw4oi).
@@ -216,6 +217,7 @@ const schema = a.schema({
       concepts: a.hasMany('ConceptWord', 'wordId'),
       sentences: a.hasMany('SentenceWord', 'wordId'),
       Lists: a.hasMany('WordList', 'wordId'),
+      dataQualityFindings: a.hasMany('DataQualityFinding', 'wordId'),
       wordData: a.json(),
     })
     .authorization((allow) => [allow.authenticated()]),
@@ -236,6 +238,8 @@ const schema = a.schema({
       ReviewLessons: a.hasMany('ConceptLesson', 'conceptId'),
       sentences: a.hasMany('SentenceConcept', 'conceptId'),
       FocusSentences: a.hasMany('Sentence', 'conceptID'),
+      dataQualityFindings: a.hasMany('DataQualityFinding', 'recommendedConceptId'),
+      paradigmMappings: a.hasMany('ParadigmConceptMapping', 'baseConceptId'),
     })
     .authorization((allow) => [allow.authenticated()]),
 
@@ -423,6 +427,74 @@ const schema = a.schema({
     })
     .returns(a.string())
     .handler(a.handler.function(selectFocusWordsFn))
+    .authorization((allow) => [allow.authenticated()]),
+
+  DataQualityActionType: a.enum(['ADD', 'REMOVE']),
+
+  DataQualityFindingStatus: a.enum(['OPEN', 'APPROVED', 'REJECTED']),
+
+  DataQualityAuditResult: a.customType({
+    createdCount: a.integer(),
+    message: a.string(),
+  }),
+
+  /**
+   * Suggested catalog correction (word ↔ concept). Produced by runDataQualityAudit
+   * (Bedrock later). Instructors approve to apply ConceptWord create/delete.
+   */
+  DataQualityFinding: a
+    .model({
+      wordId: a.id().required(),
+      word: a.belongsTo('Word', 'wordId'),
+      recommendedConceptId: a.id().required(),
+      recommendedConcept: a.belongsTo('Concept', 'recommendedConceptId'),
+      actionType: a.ref('DataQualityActionType').required(),
+      reason: a.string().required(),
+      status: a.ref('DataQualityFindingStatus').required(),
+      confidence: a.float(),
+      createdAt: a.datetime(),
+    })
+    .secondaryIndexes((index) => [
+      index('status').sortKeys(['createdAt']).queryField('listDataQualityFindingByStatus'),
+      index('wordId').queryField('listDataQualityFindingByWordId'),
+    ])
+    .authorization((allow) => [allow.authenticated()]),
+
+  /**
+   * Named terminology overlay on the core Concept ontology. Lessons, lists, and
+   * Scope & Sequence keep using Concept ids; this only stores alternate labels.
+   */
+  Paradigm: a
+    .model({
+      name: a.string().required(),
+      description: a.string(),
+      mappings: a.hasMany('ParadigmConceptMapping', 'paradigmId'),
+    })
+    .authorization((allow) => [allow.authenticated()]),
+
+  ParadigmConceptMapping: a
+    .model({
+      paradigmId: a.id().required(),
+      paradigm: a.belongsTo('Paradigm', 'paradigmId'),
+      baseConceptId: a.id().required(),
+      baseConcept: a.belongsTo('Concept', 'baseConceptId'),
+      label: a.string().required(),
+      sequenceOrder: a.integer(),
+    })
+    .secondaryIndexes((index) => [
+      index('paradigmId').queryField('listParadigmConceptMappingByParadigmId'),
+      index('baseConceptId').queryField('listParadigmConceptMappingByBaseConceptId'),
+    ])
+    .authorization((allow) => [allow.authenticated()]),
+
+  /**
+   * Placeholder for a Bedrock catalog audit. Writes DataQualityFinding rows when
+   * the Lambda is hooked up; the handler currently returns a no-op result.
+   */
+  runDataQualityAudit: a
+    .mutation()
+    .returns(a.ref('DataQualityAuditResult'))
+    .handler(a.handler.function(runDataQualityAuditFn))
     .authorization((allow) => [allow.authenticated()]),
 
   /**

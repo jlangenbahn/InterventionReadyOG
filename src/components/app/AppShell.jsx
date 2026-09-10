@@ -39,6 +39,8 @@ import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
 import Groups3Icon from '@mui/icons-material/Groups3'
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary'
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined'
+import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import LessonPlanPanel from '../lesson-plan/LessonPlanPanel'
 import DataPanel from '../data/DataPanel'
 import ContentPanel from '../content/ContentPanel'
@@ -47,6 +49,8 @@ import HomePanel from '../home/HomePanel'
 import SchedulePanel from '../schedule/SchedulePanel'
 import ScopeAndSequencePanel from '../scope/ScopeAndSequencePanel'
 import ResourcesPanel from '../resources/ResourcesPanel'
+import DataQualityPanel from '../data/DataQualityPanel'
+import ParadigmSettingsPanel from '../paradigm/ParadigmSettingsPanel'
 import ConfirmDeleteDialog from '../shared/ConfirmDeleteDialog'
 import NavSectionHeader from './NavSectionHeader'
 import { ColorModeToggle } from './colorMode'
@@ -127,6 +131,8 @@ export default function AppShell({ user, signOut }) {
   const [viewingHome, setViewingHome] = useState(true)
   const [viewingSchedule, setViewingSchedule] = useState(false)
   const [viewingResources, setViewingResources] = useState(false)
+  const [viewingDataQuality, setViewingDataQuality] = useState(false)
+  const [viewingParadigmSettings, setViewingParadigmSettings] = useState(false)
   const [studentsNavOpen, setStudentsNavOpen] = useState(true)
   const [groupsNavOpen, setGroupsNavOpen] = useState(true)
   const [scheduleCreateNonce, setScheduleCreateNonce] = useState(0)
@@ -143,6 +149,22 @@ export default function AppShell({ user, signOut }) {
     () => groups.find((group) => group.id === selectedGroupId) ?? null,
     [groups, selectedGroupId],
   )
+
+  const inWorkspace =
+    !viewingHome &&
+    !viewingSchedule &&
+    !viewingResources &&
+    !viewingDataQuality &&
+    !viewingParadigmSettings
+
+  function setAppView(view) {
+    setViewingHome(view === 'home')
+    setViewingSchedule(view === 'schedule')
+    setViewingResources(view === 'resources')
+    setViewingDataQuality(view === 'dataQuality')
+    setViewingParadigmSettings(view === 'paradigmSettings')
+    setError('')
+  }
 
   const handleScopeUpdated = useCallback((updatedStudent) => {
     setStudents((prev) =>
@@ -280,9 +302,7 @@ export default function AppShell({ user, signOut }) {
       studentId === selectedStudentId &&
       !creatingGroup &&
       !selectedGroupId &&
-      !viewingHome &&
-      !viewingSchedule &&
-      !viewingResources
+      inWorkspace
     ) {
       return
     }
@@ -290,31 +310,21 @@ export default function AppShell({ user, signOut }) {
       setSelectedStudentId(studentId)
       setSelectedGroupId(null)
       setCreatingGroup(false)
-      setViewingHome(false)
-      setViewingSchedule(false)
-      setViewingResources(false)
+      setAppView(null)
       setOpenLessonId(null)
       setScopeLocked(true)
     })
   }
 
   function handleSelectGroup(groupId) {
-    if (
-      groupId === selectedGroupId &&
-      !creatingGroup &&
-      !viewingHome &&
-      !viewingSchedule &&
-      !viewingResources
-    ) {
+    if (groupId === selectedGroupId && !creatingGroup && inWorkspace) {
       return
     }
     requestNavigation(() => {
       setSelectedGroupId(groupId)
       setSelectedStudentId(null)
       setCreatingGroup(false)
-      setViewingHome(false)
-      setViewingSchedule(false)
-      setViewingResources(false)
+      setAppView(null)
       setScopeLocked(true)
     })
   }
@@ -326,16 +336,14 @@ export default function AppShell({ user, signOut }) {
       setCreatingGroup(true)
       setSelectedGroupId(null)
       setSelectedStudentId(null)
-      setViewingHome(false)
-      setViewingSchedule(false)
-      setViewingResources(false)
+      setAppView(null)
       setScopeLocked(true)
     })
   }
 
   function handleSelectGroupsSection() {
     if (creatingGroup) return
-    if (selectedGroupId && !viewingHome && !viewingSchedule && !viewingResources && !selectedStudentId) {
+    if (selectedGroupId && inWorkspace && !selectedStudentId) {
       return
     }
     if (selectedGroupId) {
@@ -348,9 +356,7 @@ export default function AppShell({ user, signOut }) {
   function handleSelectHome() {
     if (viewingHome) return
     requestNavigation(() => {
-      setViewingHome(true)
-      setViewingSchedule(false)
-      setViewingResources(false)
+      setAppView('home')
       setSelectedStudentId(null)
       setSelectedGroupId(null)
       setCreatingGroup(false)
@@ -362,9 +368,7 @@ export default function AppShell({ user, signOut }) {
   function handleSelectSchedule() {
     if (viewingSchedule) return
     requestNavigation(() => {
-      setViewingSchedule(true)
-      setViewingHome(false)
-      setViewingResources(false)
+      setAppView('schedule')
       setSelectedStudentId(null)
       setSelectedGroupId(null)
       setCreatingGroup(false)
@@ -374,9 +378,7 @@ export default function AppShell({ user, signOut }) {
 
   function handleStartCreateScheduledLesson() {
     requestNavigation(() => {
-      setViewingSchedule(true)
-      setViewingHome(false)
-      setViewingResources(false)
+      setAppView('schedule')
       setSelectedStudentId(null)
       setSelectedGroupId(null)
       setCreatingGroup(false)
@@ -388,9 +390,29 @@ export default function AppShell({ user, signOut }) {
   function handleSelectResources() {
     if (viewingResources) return
     requestNavigation(() => {
-      setViewingResources(true)
-      setViewingHome(false)
-      setViewingSchedule(false)
+      setAppView('resources')
+      setSelectedStudentId(null)
+      setSelectedGroupId(null)
+      setCreatingGroup(false)
+      setScopeLocked(true)
+    })
+  }
+
+  function handleSelectDataQuality() {
+    if (viewingDataQuality) return
+    requestNavigation(() => {
+      setAppView('dataQuality')
+      setSelectedStudentId(null)
+      setSelectedGroupId(null)
+      setCreatingGroup(false)
+      setScopeLocked(true)
+    })
+  }
+
+  function handleSelectParadigmSettings() {
+    if (viewingParadigmSettings) return
+    requestNavigation(() => {
+      setAppView('paradigmSettings')
       setSelectedStudentId(null)
       setSelectedGroupId(null)
       setCreatingGroup(false)
@@ -521,9 +543,7 @@ export default function AppShell({ user, signOut }) {
           setSelectedStudentId(data.id)
           setSelectedGroupId(null)
           setCreatingGroup(false)
-          setViewingHome(false)
-          setViewingSchedule(false)
-          setViewingResources(false)
+          setAppView(null)
           setScopeLocked(true)
         }
       }
@@ -729,9 +749,7 @@ export default function AppShell({ user, signOut }) {
                         selected={
                           !creatingGroup &&
                           !selectedGroupId &&
-                          !viewingHome &&
-                          !viewingSchedule &&
-                          !viewingResources &&
+                          inWorkspace &&
                           student.id === selectedStudentId
                         }
                         onClick={() => handleSelectStudent(student.id)}
@@ -758,7 +776,7 @@ export default function AppShell({ user, signOut }) {
             addLabel="Add group"
             addDisabled={!canCreateGroup}
             addDisabledReason="Add at least two students before creating a group."
-            selected={creatingGroup || Boolean(selectedGroupId && !viewingHome && !viewingSchedule && !viewingResources)}
+            selected={creatingGroup || Boolean(selectedGroupId && inWorkspace)}
             icon={<Groups3Icon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />}
           />
           <Divider />
@@ -802,9 +820,7 @@ export default function AppShell({ user, signOut }) {
                       <ListItemButton
                         selected={
                           !creatingGroup &&
-                          !viewingHome &&
-                          !viewingSchedule &&
-                          !viewingResources &&
+                          inWorkspace &&
                           group.id === selectedGroupId
                         }
                         onClick={() => handleSelectGroup(group.id)}
@@ -821,6 +837,24 @@ export default function AppShell({ user, signOut }) {
               </List>
             )}
           </Collapse>
+          <Divider />
+          <NavSectionHeader
+            title="Data Quality"
+            selected={viewingDataQuality}
+            onSelect={handleSelectDataQuality}
+            icon={
+              <FactCheckOutlinedIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+            }
+          />
+          <Divider />
+          <NavSectionHeader
+            title="Paradigm Settings"
+            selected={viewingParadigmSettings}
+            onSelect={handleSelectParadigmSettings}
+            icon={
+              <AccountTreeIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+            }
+          />
           <Divider />
           <NavSectionHeader
             title="Resources"
@@ -854,13 +888,24 @@ export default function AppShell({ user, signOut }) {
           !creatingGroup &&
           !selectedGroup &&
           !viewingSchedule &&
-          !viewingResources) ? (
+          !viewingResources &&
+          !viewingDataQuality &&
+          !viewingParadigmSettings) ? (
           <HomePanel
             instructor={user?.signInDetails?.loginId ?? user?.username ?? ''}
             onAddStudent={openCreateStudent}
             onOpenSchedule={handleSelectSchedule}
             onOpenResources={handleSelectResources}
           />
+        ) : viewingDataQuality ? (
+          <DataQualityPanel
+            concepts={concepts}
+            wordsByConceptId={wordsByConceptId}
+            onCatalogReload={loadCatalog}
+            setError={setError}
+          />
+        ) : viewingParadigmSettings ? (
+          <ParadigmSettingsPanel concepts={concepts} setError={setError} />
         ) : viewingResources ? (
           <ResourcesPanel />
         ) : viewingSchedule ? (
@@ -872,9 +917,7 @@ export default function AppShell({ user, signOut }) {
             instructor={user?.signInDetails?.loginId ?? user?.username ?? ''}
             onOpenStudent={(studentId, lessonId) => {
               requestNavigation(() => {
-                setViewingHome(false)
-                setViewingSchedule(false)
-                setViewingResources(false)
+                setAppView(null)
                 setSelectedStudentId(studentId)
                 setOpenLessonId(lessonId || null)
                 setSelectedGroupId(null)
@@ -991,6 +1034,7 @@ export default function AppShell({ user, signOut }) {
                 onReloadLists={loadStudentLists}
                 setError={setError}
                 onConceptUpdated={handleConceptUpdated}
+                onCatalogReload={loadCatalog}
               />
             ) : mainTab === TAB_DATA ? (
               <DataPanel

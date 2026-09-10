@@ -8,6 +8,7 @@ import { data } from './data/resource';
 import { generateLessonTextFn } from './functions/generate-lesson-text/resource';
 import { selectFocusWordsFn } from './functions/select-focus-words/resource';
 import { commitLessonScopeFn } from './functions/commit-lesson-scope/resource';
+import { runDataQualityAuditFn } from './functions/run-data-quality-audit/resource';
 
 const backend = defineBackend({
   auth,
@@ -15,6 +16,7 @@ const backend = defineBackend({
   generateLessonTextFn,
   selectFocusWordsFn,
   commitLessonScopeFn,
+  runDataQualityAuditFn,
 });
 
 const HAIKU_45_MODEL = 'anthropic.claude-haiku-4-5-20251001-v1:0';
