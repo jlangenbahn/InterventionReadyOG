@@ -4,6 +4,7 @@
 import { client } from './amplifyClient'
 import { listAll } from './paginate'
 import { assignedConceptLinks, saveWordConcepts } from './wordConcepts'
+import { DICTIONARY_BATCH_LIMIT } from './dictionaryData'
 
 function throwIfErrors(result) {
   if (result?.errors?.length) {
@@ -49,6 +50,16 @@ export async function generateConceptDescriptions(conceptIds = []) {
   const ids = (conceptIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean)
   return runNamedMutation('generateConceptDescriptions', 'OG description generation', {
     conceptIds: ids,
+  })
+}
+
+export async function generateDictionaryDefinitions(wordIds = []) {
+  const ids = [...new Set((wordIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean))].slice(
+    0,
+    DICTIONARY_BATCH_LIMIT,
+  )
+  return runNamedMutation('generateDictionaryDefinitions', 'Dictionary definition generation', {
+    wordIds: ids,
   })
 }
 

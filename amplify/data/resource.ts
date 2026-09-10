@@ -8,6 +8,7 @@ import { commitLessonScopeFn } from '../functions/commit-lesson-scope/resource';
 import { runDataQualityAuditFn } from '../functions/run-data-quality-audit/resource';
 import { runSpellCheckFn } from '../functions/run-spell-check/resource';
 import { generateConceptDescriptionsFn } from '../functions/generate-concept-descriptions/resource';
+import { generateDictionaryDefinitionsFn } from '../functions/generate-dictionary-definitions/resource';
 
 /**
  * Ported from ready-og Gen1 schema.graphql (app 6cvcpcvgbjdq3evrmqh4zyw4oi).
@@ -216,11 +217,17 @@ const schema = a.schema({
     .model({
       word: a.string(),
       isNonsenseWord: a.boolean(),
+      /** Tagged OG concepts via ConceptWord. */
       concepts: a.hasMany('ConceptWord', 'wordId'),
       sentences: a.hasMany('SentenceWord', 'wordId'),
       Lists: a.hasMany('WordList', 'wordId'),
       dataQualityFindings: a.hasMany('DataQualityFinding', 'wordId'),
       wordData: a.json(),
+      /**
+       * DictionaryData JSON:
+       * { syllabication, ipa, partOfSpeech, definitions[], etymology, exampleSentence }
+       */
+      dictionaryData: a.json(),
     })
     .authorization((allow) => [allow.authenticated()]),
 
@@ -528,6 +535,19 @@ const schema = a.schema({
     .authorization((allow) => [allow.authenticated()]),
 
   /**
+   * Bedrock Converse dictionary writer. Processes one word-id batch (max 10)
+   * so AppSync stays under its 30-second timeout.
+   */
+  generateDictionaryDefinitions: a
+    .mutation()
+    .arguments({
+      wordIds: a.id().array().required(),
+    })
+    .returns(a.ref('DataQualityAuditResult'))
+    .handler(a.handler.function(generateDictionaryDefinitionsFn))
+    .authorization((allow) => [allow.authenticated()]),
+
+  /**
    * ConditionCheck the saved Lesson and update Student.scopeAndSequence in one
    * DynamoDB transaction so New/Review status cannot drift from lesson history.
    */
@@ -542,6 +562,15 @@ const schema = a.schema({
     .handler(a.handler.function(commitLessonScopeFn))
     .authorization((allow) => [allow.authenticated()]),
 });
+
+export type DictionaryData = {
+  syllabication: string;
+  ipa: string;
+  partOfSpeech: string;
+  definitions: string[];
+  etymology: string;
+  exampleSentence: string;
+};
 
 export type Schema = ClientSchema<typeof schema>;
 

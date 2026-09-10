@@ -11,6 +11,7 @@ import { commitLessonScopeFn } from './functions/commit-lesson-scope/resource';
 import { runDataQualityAuditFn } from './functions/run-data-quality-audit/resource';
 import { runSpellCheckFn } from './functions/run-spell-check/resource';
 import { generateConceptDescriptionsFn } from './functions/generate-concept-descriptions/resource';
+import { generateDictionaryDefinitionsFn } from './functions/generate-dictionary-definitions/resource';
 
 const backend = defineBackend({
   auth,
@@ -21,6 +22,7 @@ const backend = defineBackend({
   runDataQualityAuditFn,
   runSpellCheckFn,
   generateConceptDescriptionsFn,
+  generateDictionaryDefinitionsFn,
 });
 
 const HAIKU_45_MODEL = 'anthropic.claude-haiku-4-5-20251001-v1:0';
@@ -62,6 +64,7 @@ function grantHaikuUsInvoke(lambda: { addToRolePolicy: (statement: PolicyStateme
 grantHaikuUsInvoke(backend.runDataQualityAuditFn.resources.lambda);
 grantHaikuUsInvoke(backend.runSpellCheckFn.resources.lambda);
 grantHaikuUsInvoke(backend.generateConceptDescriptionsFn.resources.lambda);
+grantHaikuUsInvoke(backend.generateDictionaryDefinitionsFn.resources.lambda);
 
 const studentTable = backend.data.resources.tables['Student'];
 const lessonTable = backend.data.resources.tables['Lesson'];
@@ -96,3 +99,6 @@ backend.runSpellCheckFn.addEnvironment('FINDING_TABLE_NAME', findingTable.tableN
 
 conceptTable.grantReadWriteData(backend.generateConceptDescriptionsFn.resources.lambda);
 backend.generateConceptDescriptionsFn.addEnvironment('CONCEPT_TABLE_NAME', conceptTable.tableName);
+
+wordTable.grantReadWriteData(backend.generateDictionaryDefinitionsFn.resources.lambda);
+backend.generateDictionaryDefinitionsFn.addEnvironment('WORD_TABLE_NAME', wordTable.tableName);

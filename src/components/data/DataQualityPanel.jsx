@@ -6,6 +6,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   LinearProgress,
   Paper,
   Stack,
@@ -17,21 +18,25 @@ import {
 } from '@mui/material'
 import CategoryIcon from '@mui/icons-material/Category'
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined'
+import ImportContactsIcon from '@mui/icons-material/ImportContacts'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import HelpTip from '../shared/HelpTip'
+import DictionaryWordTooltip from './DictionaryWordTooltip'
 import { client } from '../../lib/amplifyClient'
 import {
   approveDataQualityFinding,
   approveDataQualityFindings,
   fetchDataQualityFindings,
   generateConceptDescriptions,
+  generateDictionaryDefinitions,
   rejectDataQualityFinding,
   rejectDataQualityFindings,
   runDataQualityAudit,
   runSpellCheck,
 } from '../../lib/dataQuality'
-import { wordLabelById } from '../../lib/wordConcepts'
+import { DICTIONARY_BATCH_LIMIT, wordsMissingDictionaryData } from '../../lib/dictionaryData'
+import { assignedConcepts, wordLabelById } from '../../lib/wordConcepts'
 
 const TAB_WORDS = 'words'
 const TAB_CONCEPTS = 'concepts'
@@ -153,6 +158,8 @@ export default function DataQualityPanel({
   const [loading, setLoading] = useState(true)
   const [auditing, setAuditing] = useState(false)
   const [spellChecking, setSpellChecking] = useState(false)
+  const [writingDefinitions, setWritingDefinitions] = useState(false)
+  const [dictionaryProgress, setDictionaryProgress] = useState(null)
   const [generating, setGenerating] = useState(false)
   const [generateProgress, setGenerateProgress] = useState(null)
   const [rowBusyId, setRowBusyId] = useState(null)
@@ -170,6 +177,13 @@ export default function DataQualityPanel({
     () => wordLabelById(wordsByConceptId, catalogWords),
     [wordsByConceptId, catalogWords],
   )
+  const catalogWordById = useMemo(() => {
+    const map = new Map()
+    for (const word of catalogWords ?? []) {
+      if (word?.id) map.set(word.id, word)
+    }
+    return map
+  }, [catalogWords])
 
   const loadFindings = useCallback(async () => {
     setLoading(true)
@@ -287,7 +301,25 @@ export default function DataQualityPanel({
 
   const findingColumns = useMemo(
     () => [
-      { field: 'word', headerName: 'Word', flex: 0.8, minWidth: 120 },
+      {
+        field: 'word',
+        headerName: 'Word',
+        flex: 0.8,
+        minWidth: 120,
+        renderCell: (params) => {
+          const catalogWord = catalogWordById.get(params.row.wordId)
+          const tagged = assignedConcepts(params.row.wordId, wordsByConceptId, concepts)
+          return (
+            <DictionaryWordTooltip
+              word={params.row.word}
+              dictionaryData={catalogWord?.dictionaryData}
+              taggedConcepts={tagged}
+            >
+              {params.row.word}
+            </DictionaryWordTooltip>
+          )
+        },
+      },
       { field: 'concept', headerName: 'Recommended concept', flex: 1, minWidth: 140 },
       { field: 'suggestedSpelling', headerName: 'Suggested spelling', flex: 0.8, minWidth: 140 },
       { field: 'actionType', headerName: 'Action', width: 120 },
@@ -336,7 +368,7 @@ export default function DataQualityPanel({
         },
       },
     ],
-    [rowBusyId, bulkBusy, handleApproveOne, handleRejectOne],
+    [rowBusyId, bulkBusy, handleApproveOne, handleRejectOne, catalogWordById, wordsByConceptId, concepts],
   )
 
   const conceptColumns = useMemo(
@@ -381,6 +413,31 @@ export default function DataQualityPanel({
       setError(err instanceof Error ? err.message : 'Failed to run spell check')
     } finally {
       setSpellChecking(false)
+    }
+  }
+
+  async function handleWriteDictionaryDefinitions() {
+    const batch = wordsMissingDictionaryData(catalogWords).slice(0, DICTIONARY_BATCH_LIMIT)
+    if (!batch.length) {
+      setNotice('No catalog words still need dictionary data.')
+      return
+    }
+    const total = batch.length
+    setWritingDefinitions(true)
+    setDictionaryProgress({ processed: 0, total })
+    setNotice(`Processed 0 of ${total} words`)
+    try {
+      const result = await generateDictionaryDefinitions(batch.map((word) => word.id))
+      const processed = Number(result.createdCount ?? 0)
+      setDictionaryProgress({ processed, total })
+      setNotice(result.message || `Processed ${processed} of ${total} words`)
+      setError('')
+      await onCatalogReload?.()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to write dictionary definitions')
+    } finally {
+      setWritingDefinitions(false)
+      setDictionaryProgress(null)
     }
   }
 
@@ -498,7 +555,7 @@ export default function DataQualityPanel({
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
         <FactCheckOutlinedIcon color="action" />
         <Typography variant="h5">Data Quality</Typography>
-        <HelpTip title="Audit word-concept tags, flag misspellings, and generate Orton-Gillingham rule descriptions. Approve applies catalog changes; Reject only closes the finding." />
+        <HelpTip title="Audit word-concept tags, flag misspellings, write dictionary definitions, and generate Orton-Gillingham rule descriptions. Approve applies catalog changes; Reject only closes the finding." />
         {notice ? <Chip size="small" color="success" label={notice} /> : null}
       </Stack>
       <Paper variant="outlined" sx={{ px: 1.5, pt: 0.5, mb: 2 }}>
@@ -512,6 +569,8 @@ export default function DataQualityPanel({
         <WordsTabContent
           auditing={auditing}
           spellChecking={spellChecking}
+          writingDefinitions={writingDefinitions}
+          dictionaryProgress={dictionaryProgress}
           running={running}
           bulkBusy={bulkBusy}
           selectedOpen={selectedOpen}
@@ -522,6 +581,7 @@ export default function DataQualityPanel({
           loading={loading}
           onRunAudit={() => void handleRunAudit()}
           onRunSpellCheck={() => void handleRunSpellCheck()}
+          onWriteDictionaryDefinitions={() => void handleWriteDictionaryDefinitions()}
           onApproveSelected={() => void handleApproveSelected(selectedOpen)}
           onRejectSelected={() => void handleRejectSelected(selectedOpen)}
           onIssueViewChange={(next) => {
@@ -550,6 +610,8 @@ export default function DataQualityPanel({
 function WordsTabContent({
   auditing,
   spellChecking,
+  writingDefinitions,
+  dictionaryProgress,
   running,
   bulkBusy,
   selectedOpen,
@@ -560,40 +622,70 @@ function WordsTabContent({
   loading,
   onRunAudit,
   onRunSpellCheck,
+  onWriteDictionaryDefinitions,
   onApproveSelected,
   onRejectSelected,
   onIssueViewChange,
   onSelectionChange,
 }) {
+  const dictionaryProgressValue =
+    dictionaryProgress?.total > 0
+      ? Math.round((dictionaryProgress.processed / dictionaryProgress.total) * 100)
+      : 0
+
   return (
     <>
       <Paper sx={{ p: 2, mb: 2 }}>
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-          <Button variant="contained" onClick={onRunAudit} disabled={running}>
-            {auditing ? 'Running audit…' : 'Run Audit'}
-          </Button>
-          <Button variant="outlined" onClick={onRunSpellCheck} disabled={running}>
-            {spellChecking ? 'Checking spelling…' : 'Run Spell Check'}
-          </Button>
-          <Button
-            variant="outlined"
-            disabled={bulkBusy || selectedOpen.length < 1}
-            onClick={onApproveSelected}
-          >
-            {bulkBusy ? 'Working…' : 'Approve Selected'}
-          </Button>
-          <Button
-            color="error"
-            variant="outlined"
-            disabled={bulkBusy || selectedOpen.length < 1}
-            onClick={onRejectSelected}
-          >
-            Reject Selected
-          </Button>
-          <Typography variant="body2" color="text.secondary">
-            Approve applies ADD/REMOVE tags or the suggested spelling. Reject closes the finding
-            without changing the catalog.
-          </Typography>
+        <Stack spacing={1.5}>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Button variant="contained" onClick={onRunAudit} disabled={running}>
+              {auditing ? 'Running audit…' : 'Run Audit'}
+            </Button>
+            <Button variant="outlined" onClick={onRunSpellCheck} disabled={running}>
+              {spellChecking ? 'Checking spelling…' : 'Run Spell Check'}
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={
+                writingDefinitions ? <CircularProgress size={16} color="inherit" /> : <ImportContactsIcon />
+              }
+              onClick={onWriteDictionaryDefinitions}
+              disabled={writingDefinitions}
+            >
+              {writingDefinitions ? 'Writing definitions…' : 'Write Dictionary Definitions'}
+            </Button>
+            <Button
+              variant="outlined"
+              disabled={bulkBusy || selectedOpen.length < 1}
+              onClick={onApproveSelected}
+            >
+              {bulkBusy ? 'Working…' : 'Approve Selected'}
+            </Button>
+            <Button
+              color="error"
+              variant="outlined"
+              disabled={bulkBusy || selectedOpen.length < 1}
+              onClick={onRejectSelected}
+            >
+              Reject Selected
+            </Button>
+            <Typography variant="body2" color="text.secondary">
+              Approve applies ADD/REMOVE tags or the suggested spelling. Reject closes the finding
+              without changing the catalog. Dictionary writes at most {DICTIONARY_BATCH_LIMIT}{' '}
+              missing entries per run.
+            </Typography>
+          </Stack>
+          {dictionaryProgress ? (
+            <Box>
+              <Typography variant="body2" sx={{ mb: 0.75 }}>
+                Processed {dictionaryProgress.processed} of {dictionaryProgress.total} words
+              </Typography>
+              <LinearProgress
+                variant={dictionaryProgress.processed === 0 ? 'indeterminate' : 'determinate'}
+                value={dictionaryProgressValue}
+              />
+            </Box>
+          ) : null}
         </Stack>
       </Paper>
       <Paper sx={{ p: 2 }}>
@@ -628,6 +720,11 @@ function WordsTabContent({
               },
             }}
             density="compact"
+            sx={{
+              '& .MuiDataGrid-cell': {
+                overflow: 'visible',
+              },
+            }}
             localeText={{
               noRowsLabel:
                 wordIssueView === VIEW_HISTORY

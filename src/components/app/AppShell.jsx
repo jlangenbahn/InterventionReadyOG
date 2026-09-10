@@ -212,8 +212,12 @@ export default function AppShell({ user, signOut }) {
       const [conceptItems, wordItems, linkItems] = await Promise.all([
         listAll(client.models.Concept),
         listAll(client.models.Word, {
-          selectionSet: ['id', 'word', 'isNonsenseWord'],
-        }),
+          selectionSet: ['id', 'word', 'isNonsenseWord', 'dictionaryData'],
+        }).catch(() =>
+          listAll(client.models.Word, {
+            selectionSet: ['id', 'word', 'isNonsenseWord'],
+          }),
+        ),
         listAll(client.models.ConceptWord, {
           selectionSet: ['id', 'conceptId', 'wordId'],
         }),
