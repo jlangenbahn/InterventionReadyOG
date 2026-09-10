@@ -24,16 +24,28 @@ export type GeneratedDictionaryEntry = {
 export const DICTIONARY_BATCH_LIMIT = 10
 
 function parseJsonValue(raw: unknown): unknown {
-  if (raw == null) return null
-  if (typeof raw === 'object') return raw
-  if (typeof raw !== 'string') return null
-  const text = raw.trim()
-  if (!text) return null
-  try {
-    return JSON.parse(text)
-  } catch {
-    return null
+  let current = raw
+  for (let i = 0; i < 3; i += 1) {
+    if (current == null) return null
+    if (typeof current === 'object') return current
+    if (typeof current !== 'string') return null
+    const text = current.trim()
+    if (!text) return null
+    try {
+      current = JSON.parse(text)
+    } catch {
+      return null
+    }
   }
+  return typeof current === 'object' ? current : null
+}
+
+function asDefinitionList(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((definition) => String(definition ?? '').trim()).filter(Boolean)
+  }
+  if (typeof value === 'string' && value.trim()) return [value.trim()]
+  return []
 }
 
 function normalizeIpa(value: string) {
@@ -47,9 +59,7 @@ export function parseDictionaryData(raw: unknown): DictionaryData | null {
   const value = parseJsonValue(raw)
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const item = value as Record<string, unknown>
-  const definitions = (Array.isArray(item.definitions) ? item.definitions : [])
-    .map((definition) => String(definition ?? '').trim())
-    .filter(Boolean)
+  const definitions = asDefinitionList(item.definitions)
   const syllabication = String(item.syllabication ?? '').trim()
   const ipa = normalizeIpa(String(item.ipa ?? ''))
   const partOfSpeech = String(item.partOfSpeech ?? '').trim()

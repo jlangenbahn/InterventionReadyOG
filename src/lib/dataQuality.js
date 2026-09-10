@@ -4,7 +4,7 @@
 import { client } from './amplifyClient'
 import { listAll } from './paginate'
 import { assignedConceptLinks, saveWordConcepts } from './wordConcepts'
-import { DICTIONARY_BATCH_LIMIT } from './dictionaryData'
+import { DICTIONARY_BATCH_LIMIT, parseDictionaryData } from './dictionaryData'
 
 function throwIfErrors(result) {
   if (result?.errors?.length) {
@@ -20,17 +20,18 @@ function findingsModel() {
   return model
 }
 
-async function runNamedMutation(name, fallbackMessage, args = {}) {
+async function runNamedMutation(name, fallbackMessage, args = {}, selectionSet) {
   const run = client.mutations?.[name]
   if (typeof run !== 'function') {
     throw new Error(`${fallbackMessage} is still deploying. Wait for Amplify to finish, then try again.`)
   }
-  const result = await run(args)
+  const result = selectionSet ? await run(args, { selectionSet }) : await run(args)
   throwIfErrors(result)
   const data = result?.data ?? {}
   return {
     createdCount: Number(data.createdCount ?? 0),
     message: String(data.message || fallbackMessage),
+    entries: data.entries ?? null,
   }
 }
 
@@ -58,9 +59,48 @@ export async function generateDictionaryDefinitions(wordIds = []) {
     0,
     DICTIONARY_BATCH_LIMIT,
   )
-  return runNamedMutation('generateDictionaryDefinitions', 'Dictionary definition generation', {
-    wordIds: ids,
-  })
+  let result
+  try {
+    result = await runNamedMutation(
+      'generateDictionaryDefinitions',
+      'Dictionary definition generation',
+      { wordIds: ids },
+      ['createdCount', 'message', 'entries'],
+    )
+  } catch (err) {
+    const message = err instanceof Error ? err.message : ''
+    if (!/entries/i.test(message)) throw err
+    result = await runNamedMutation(
+      'generateDictionaryDefinitions',
+      'Dictionary definition generation',
+      { wordIds: ids },
+      ['createdCount', 'message'],
+    )
+  }
+  const rawEntries = Array.isArray(result.entries)
+    ? result.entries
+    : parseDictionaryEntries(result.entries)
+  return {
+    ...result,
+    entries: (rawEntries ?? []).map((item) => ({
+      id: item.wordId || item.id,
+      word: item.word,
+      dictionaryData: parseDictionaryData(item.dictionaryData ?? item),
+    })),
+  }
+}
+
+function parseDictionaryEntries(raw) {
+  if (raw == null) return []
+  if (Array.isArray(raw)) return raw
+  if (typeof raw !== 'string') return []
+  try {
+    let current = JSON.parse(raw)
+    if (typeof current === 'string') current = JSON.parse(current)
+    return Array.isArray(current) ? current : []
+  } catch {
+    return []
+  }
 }
 
 export async function fetchWordDictionaryEntries(wordIds = []) {

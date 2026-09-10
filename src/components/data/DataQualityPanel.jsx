@@ -437,9 +437,12 @@ export default function DataQualityPanel({
       setDictionaryProgress({ processed, total })
       setNotice(result.message || `Processed ${processed} of ${total} words`)
       setError('')
-      const entries = await fetchWordDictionaryEntries(batchIds)
+      const mutationEntries = (result.entries ?? []).filter((item) => item?.id)
+      const fetched = mutationEntries.length
+        ? mutationEntries
+        : await fetchWordDictionaryEntries(batchIds)
       setGeneratedDefinitions(
-        entries.map((item) => ({
+        fetched.map((item) => ({
           id: item.id,
           word: item.word || wordsById.get(item.id) || item.id,
           dictionaryData: parseDictionaryData(item.dictionaryData),

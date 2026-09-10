@@ -448,6 +448,8 @@ const schema = a.schema({
   DataQualityAuditResult: a.customType({
     createdCount: a.integer(),
     message: a.string(),
+    /** Written dictionary rows for generateDictionaryDefinitions. AWSJSON array. */
+    entries: a.json(),
   }),
 
   /**

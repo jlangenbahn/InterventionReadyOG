@@ -91,6 +91,11 @@ export type DictionaryData = {
 type AuditResult = {
   createdCount: number;
   message: string;
+  entries: Array<{
+    wordId: string;
+    word: string;
+    dictionaryData: DictionaryData;
+  }>;
 };
 
 type CatalogWord = {
@@ -118,16 +123,28 @@ function attrString(item: Record<string, AttributeValue> | undefined, key: strin
 }
 
 function parseJsonValue(raw: unknown): unknown {
-  if (raw == null) return null;
-  if (typeof raw === 'object') return raw;
-  if (typeof raw !== 'string') return null;
-  const text = raw.trim();
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
+  let current = raw;
+  for (let i = 0; i < 3; i += 1) {
+    if (current == null) return null;
+    if (typeof current === 'object') return current;
+    if (typeof current !== 'string') return null;
+    const text = current.trim();
+    if (!text) return null;
+    try {
+      current = JSON.parse(text);
+    } catch {
+      return null;
+    }
   }
+  return typeof current === 'object' ? current : null;
+}
+
+function asDefinitionList(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((definition) => String(definition ?? '').trim()).filter(Boolean);
+  }
+  if (typeof value === 'string' && value.trim()) return [value.trim()];
+  return [];
 }
 
 function normalizeIpa(value: string) {
@@ -141,9 +158,7 @@ export function parseDictionaryData(raw: unknown): DictionaryData | null {
   const value = parseJsonValue(raw);
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
-  const definitions = (Array.isArray(item.definitions) ? item.definitions : [])
-    .map((definition) => String(definition ?? '').trim())
-    .filter(Boolean);
+  const definitions = asDefinitionList(item.definitions);
   const syllabication = String(item.syllabication ?? '').trim();
   const ipa = normalizeIpa(String(item.ipa ?? ''));
   const partOfSpeech = String(item.partOfSpeech ?? '').trim();
@@ -163,9 +178,15 @@ export function parseDictionaryData(raw: unknown): DictionaryData | null {
 function toolUseInput(response: {
   output?: { message?: { content?: Array<{ toolUse?: { input?: unknown } }> } };
 }): Record<string, unknown> | null {
-  const input = response.output?.message?.content?.find((block) => block.toolUse)?.toolUse?.input;
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
-  return input as Record<string, unknown>;
+  const raw = response.output?.message?.content?.find((block) => block.toolUse)?.toolUse?.input;
+  const parsed = parseJsonValue(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    console.error('generateDictionaryDefinitions missing tool input', {
+      rawType: raw == null ? 'null' : Array.isArray(raw) ? 'array' : typeof raw,
+    });
+    return null;
+  }
+  return parsed as Record<string, unknown>;
 }
 
 function projectionFor(fields: string[]) {
@@ -224,18 +245,43 @@ async function loadWordsByIds(tableName: string, ids: string[]): Promise<Catalog
 }
 
 function parseEntries(raw: Record<string, unknown> | null, words: CatalogWord[]) {
-  const ids = new Set(words.map((word) => word.id));
+  const byId = new Map(words.map((word) => [word.id, word]));
+  const byLabel = new Map(words.map((word) => [word.word.toLowerCase(), word]));
   const list = Array.isArray(raw?.entries) ? raw.entries : [];
   const entries: ModelEntry[] = [];
 
+  if (!list.length) {
+    console.error('generateDictionaryDefinitions tool result had no entries array', {
+      keys: raw ? Object.keys(raw) : [],
+    });
+  }
+
   for (const row of list) {
-    if (!row || typeof row !== 'object') continue;
+    if (!row || typeof row !== 'object') {
+      console.error('generateDictionaryDefinitions skipped non-object entry', { row });
+      continue;
+    }
     const item = row as Record<string, unknown>;
     const wordId = String(item.wordId ?? '').trim();
-    if (!ids.has(wordId)) continue;
+    const wordLabel = String(item.word ?? '').trim().toLowerCase();
+    const catalog = byId.get(wordId) || byLabel.get(wordLabel);
+    if (!catalog) {
+      console.error('generateDictionaryDefinitions skipped entry with unknown wordId', {
+        wordId,
+        word: item.word,
+      });
+      continue;
+    }
     const parsed = parseDictionaryData(item);
-    if (!parsed) continue;
-    entries.push({ wordId, ...parsed });
+    if (!parsed) {
+      console.error('generateDictionaryDefinitions skipped malformed dictionary payload', {
+        wordId: catalog.id,
+        word: catalog.word,
+        keys: Object.keys(item),
+      });
+      continue;
+    }
+    entries.push({ wordId: catalog.id, ...parsed });
   }
   return entries;
 }
@@ -248,7 +294,7 @@ export const handler = async (event: GenerateEvent): Promise<AuditResult> => {
 
   const wordIds = uniqueIds(event.arguments?.wordIds);
   if (!wordIds.length) {
-    return { createdCount: 0, message: 'No word ids were provided.' };
+    return { createdCount: 0, message: 'No word ids were provided.', entries: [] };
   }
   if (wordIds.length > MAX_BATCH) {
     throw new Error(`Send at most ${MAX_BATCH} word ids per request.`);
@@ -257,9 +303,17 @@ export const handler = async (event: GenerateEvent): Promise<AuditResult> => {
   const loaded = await loadWordsByIds(wordTable, wordIds);
   const words = loaded.filter((word) => !word.isNonsenseWord && !word.dictionaryData);
   if (!words.length) {
+    const existing = loaded
+      .filter((word) => word.dictionaryData)
+      .map((word) => ({
+        wordId: word.id,
+        word: word.word,
+        dictionaryData: word.dictionaryData as DictionaryData,
+      }));
     return {
       createdCount: 0,
       message: `Processed 0 of ${wordIds.length} words. None still needed dictionary data.`,
+      entries: existing,
     };
   }
 
@@ -298,32 +352,54 @@ ${JSON.stringify(words.map((word) => ({
   }
 
   const entries = parseEntries(parsed, words);
+  if (!entries.length) {
+    console.error('generateDictionaryDefinitions parsed zero writable entries', {
+      requested: words.map((word) => ({ wordId: word.id, word: word.word })),
+    });
+    throw new Error('The dictionary model returned no usable entries. Try again.');
+  }
+
   const now = new Date().toISOString();
-  let updated = 0;
+  const written: AuditResult['entries'] = [];
 
   for (const row of entries) {
     const { wordId, ...dictionaryData } = row;
-    await dynamo.send(
-      new UpdateItemCommand({
-        TableName: wordTable,
-        Key: { id: { S: wordId } },
-        UpdateExpression: 'SET #dictionaryData = :data, #updatedAt = :now',
-        ConditionExpression: 'attribute_exists(id)',
-        ExpressionAttributeNames: {
-          '#dictionaryData': 'dictionaryData',
-          '#updatedAt': 'updatedAt',
-        },
-        ExpressionAttributeValues: {
-          ':data': { S: JSON.stringify(dictionaryData) },
-          ':now': { S: now },
-        },
-      }),
-    );
-    updated += 1;
+    const catalog = words.find((word) => word.id === wordId);
+    try {
+      await dynamo.send(
+        new UpdateItemCommand({
+          TableName: wordTable,
+          Key: { id: { S: wordId } },
+          UpdateExpression: 'SET #dictionaryData = :data, #updatedAt = :now',
+          ConditionExpression: 'attribute_exists(id)',
+          ExpressionAttributeNames: {
+            '#dictionaryData': 'dictionaryData',
+            '#updatedAt': 'updatedAt',
+          },
+          ExpressionAttributeValues: {
+            ':data': { S: JSON.stringify(dictionaryData) },
+            ':now': { S: now },
+          },
+        }),
+      );
+      written.push({
+        wordId,
+        word: catalog?.word || wordId,
+        dictionaryData,
+      });
+    } catch (err) {
+      console.error('generateDictionaryDefinitions failed to write dictionaryData', {
+        wordId,
+        word: catalog?.word,
+        error: err instanceof Error ? err.message : err,
+      });
+      throw err;
+    }
   }
 
   return {
-    createdCount: updated,
-    message: `Processed ${updated} of ${wordIds.length} words`,
+    createdCount: written.length,
+    message: `Processed ${written.length} of ${wordIds.length} words`,
+    entries: written,
   };
 };
