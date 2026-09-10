@@ -18,7 +18,7 @@ import {
 import CategoryIcon from '@mui/icons-material/Category'
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import HelpTip from '../shared/HelpTip'
 import { client } from '../../lib/amplifyClient'
 import {
@@ -159,10 +159,8 @@ export default function DataQualityPanel({
   const [bulkBusy, setBulkBusy] = useState(false)
   const [notice, setNotice] = useState('')
   const [selectionModel, setSelectionModel] = useState(emptySelection)
-  const [conceptSelectionModel, setConceptSelectionModel] = useState(emptySelection)
   const [savingConceptId, setSavingConceptId] = useState(null)
   const [wordIssueView, setWordIssueView] = useState(VIEW_OPEN)
-  const [conceptIssueView, setConceptIssueView] = useState(VIEW_OPEN)
 
   const conceptById = useMemo(
     () => new Map((concepts ?? []).map((concept) => [concept.id, concept])),
@@ -219,15 +217,6 @@ export default function DataQualityPanel({
     [rows, wordIssueView],
   )
 
-  const conceptFindingRows = useMemo(
-    () =>
-      rows.filter((row) => {
-        const action = String(row.actionType || '').toUpperCase()
-        return (action === 'ADD' || action === 'REMOVE') && matchesIssueView(row, conceptIssueView)
-      }),
-    [rows, conceptIssueView],
-  )
-
   const conceptRows = useMemo(
     () =>
       (concepts ?? [])
@@ -248,14 +237,6 @@ export default function DataQualityPanel({
     [selectionModel, wordRows],
   )
   const selectedOpen = useMemo(() => openRows(wordRows, selectedIds), [wordRows, selectedIds])
-  const conceptSelectedIds = useMemo(
-    () => selectedRowIds(conceptSelectionModel, conceptFindingRows.map((row) => row.id)),
-    [conceptSelectionModel, conceptFindingRows],
-  )
-  const conceptSelectedOpen = useMemo(
-    () => openRows(conceptFindingRows, conceptSelectedIds),
-    [conceptFindingRows, conceptSelectedIds],
-  )
 
   const handleApproveOne = useCallback(
     async (finding) => {
@@ -367,8 +348,8 @@ export default function DataQualityPanel({
       {
         field: 'ogDescription',
         headerName: 'OG description',
-        flex: 2.2,
-        minWidth: 260,
+        flex: 1,
+        minWidth: 400,
         editable: true,
       },
     ],
@@ -457,7 +438,6 @@ export default function DataQualityPanel({
       setNotice(`Approved ${count} finding${count === 1 ? '' : 's'}.`)
       setError('')
       setSelectionModel(emptySelection())
-      setConceptSelectionModel(emptySelection())
       await onCatalogReload?.()
       await loadFindings()
     } catch (err) {
@@ -476,7 +456,6 @@ export default function DataQualityPanel({
       setNotice(`Rejected ${count} finding${count === 1 ? '' : 's'}.`)
       setError('')
       setSelectionModel(emptySelection())
-      setConceptSelectionModel(emptySelection())
       await loadFindings()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reject selected findings')
@@ -556,24 +535,10 @@ export default function DataQualityPanel({
         <ConceptsTabContent
           generating={generating}
           generateProgress={generateProgress}
-          bulkBusy={bulkBusy}
-          conceptSelectedOpen={conceptSelectedOpen}
-          conceptIssueView={conceptIssueView}
-          conceptFindingRows={conceptFindingRows}
           conceptRows={conceptRows}
-          findingColumns={findingColumns}
           conceptColumns={conceptColumns}
-          conceptSelectionModel={conceptSelectionModel}
-          loading={loading}
           savingConceptId={savingConceptId}
           onGenerate={() => void handleGenerateDescriptions()}
-          onApproveSelected={() => void handleApproveSelected(conceptSelectedOpen)}
-          onRejectSelected={() => void handleRejectSelected(conceptSelectedOpen)}
-          onIssueViewChange={(next) => {
-            setConceptIssueView(next)
-            setConceptSelectionModel(emptySelection())
-          }}
-          onSelectionChange={setConceptSelectionModel}
           onProcessRowUpdate={handleConceptRowUpdate}
           setError={setError}
         />
@@ -636,11 +601,10 @@ function WordsTabContent({
           <IssueViewToggle value={wordIssueView} onChange={onIssueViewChange} />
         </Stack>
         <Box sx={{ height: { xs: 420, md: 'calc(100vh - 360px)' }, minHeight: 320, width: '100%' }}>
-          <DataGridPro
+          <DataGrid
             rows={wordRows}
             columns={findingColumns}
             checkboxSelection
-            disableRowSelectionExcludeModel
             disableRowSelectionOnClick
             rowSelectionModel={selectionModel}
             onRowSelectionModelChange={onSelectionChange}
@@ -651,7 +615,6 @@ function WordsTabContent({
             initialState={{
               pagination: { paginationModel: { pageSize: 25 } },
               sorting: { sortModel: [{ field: 'confidence', sort: 'desc' }] },
-              pinnedColumns: { right: ['actions'] },
             }}
             slots={{ toolbar: FindingsToolbar }}
             slotProps={{
@@ -681,21 +644,10 @@ function WordsTabContent({
 function ConceptsTabContent({
   generating,
   generateProgress,
-  bulkBusy,
-  conceptSelectedOpen,
-  conceptIssueView,
-  conceptFindingRows,
   conceptRows,
-  findingColumns,
   conceptColumns,
-  conceptSelectionModel,
-  loading,
   savingConceptId,
   onGenerate,
-  onApproveSelected,
-  onRejectSelected,
-  onIssueViewChange,
-  onSelectionChange,
   onProcessRowUpdate,
   setError,
 }) {
@@ -711,21 +663,6 @@ function ConceptsTabContent({
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
             <Button variant="contained" onClick={onGenerate} disabled={generating}>
               {generating ? 'Generating…' : 'Generate OG Descriptions'}
-            </Button>
-            <Button
-              variant="outlined"
-              disabled={bulkBusy || conceptSelectedOpen.length < 1}
-              onClick={onApproveSelected}
-            >
-              {bulkBusy ? 'Working…' : 'Approve Selected'}
-            </Button>
-            <Button
-              color="error"
-              variant="outlined"
-              disabled={bulkBusy || conceptSelectedOpen.length < 1}
-              onClick={onRejectSelected}
-            >
-              Reject Selected
             </Button>
             <Typography variant="body2" color="text.secondary">
               Generates OG rules in batches of {DESCRIPTION_BATCH_SIZE} and overwrites existing
@@ -743,52 +680,9 @@ function ConceptsTabContent({
           ) : null}
         </Stack>
       </Paper>
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
-          <IssueViewToggle value={conceptIssueView} onChange={onIssueViewChange} />
-        </Stack>
-        <Box sx={{ height: { xs: 280, md: 320 }, minHeight: 240, width: '100%' }}>
-          <DataGridPro
-            rows={conceptFindingRows}
-            columns={findingColumns}
-            checkboxSelection
-            disableRowSelectionExcludeModel
-            disableRowSelectionOnClick
-            rowSelectionModel={conceptSelectionModel}
-            onRowSelectionModelChange={onSelectionChange}
-            isRowSelectable={(params) => statusOf(params.row) === 'OPEN'}
-            loading={loading}
-            pagination
-            pageSizeOptions={[25, 50, 100]}
-            initialState={{
-              pagination: { paginationModel: { pageSize: 25 } },
-              sorting: { sortModel: [{ field: 'confidence', sort: 'desc' }] },
-              pinnedColumns: { right: ['actions'] },
-            }}
-            slots={{ toolbar: FindingsToolbar }}
-            slotProps={{
-              toolbar: {
-                showQuickFilter: true,
-                quickFilterProps: { debounceMs: 300 },
-                selectedCount: conceptSelectedOpen.length,
-                onApproveSelected,
-                onRejectSelected,
-                busy: bulkBusy,
-              },
-            }}
-            density="compact"
-            localeText={{
-              noRowsLabel:
-                conceptIssueView === VIEW_HISTORY
-                  ? 'No approved or rejected concept-tag findings yet.'
-                  : 'No open concept-tag findings. Run Audit on the Words tab to generate suggestions.',
-            }}
-          />
-        </Box>
-      </Paper>
       <Paper sx={{ p: 2 }}>
-        <Box sx={{ height: { xs: 320, md: 'calc(100vh - 560px)' }, minHeight: 240, width: '100%' }}>
-          <DataGridPro
+        <Box sx={{ height: { xs: 420, md: 'calc(100vh - 280px)' }, minHeight: 320, width: '100%' }}>
+          <DataGrid
             rows={conceptRows}
             columns={conceptColumns}
             disableRowSelectionOnClick
@@ -798,6 +692,7 @@ function ConceptsTabContent({
             onProcessRowUpdateError={(err) => {
               setError(err instanceof Error ? err.message : 'Failed to save OG description')
             }}
+            getRowHeight={() => 'auto'}
             pagination
             pageSizeOptions={[25, 50, 100]}
             initialState={{
@@ -810,6 +705,16 @@ function ConceptsTabContent({
             }}
             density="compact"
             localeText={{ noRowsLabel: 'No concepts in the catalog yet.' }}
+            sx={{
+              '& .MuiDataGrid-cell': {
+                py: 1,
+                alignItems: 'flex-start',
+              },
+              '& .MuiDataGrid-cellContent': {
+                whiteSpace: 'normal',
+                lineHeight: 1.45,
+              },
+            }}
           />
         </Box>
       </Paper>

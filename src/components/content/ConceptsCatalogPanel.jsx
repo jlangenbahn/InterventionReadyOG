@@ -20,7 +20,7 @@ import {
   Typography,
 } from '@mui/material'
 import EditIcon from '@mui/icons-material/Edit'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import { client } from '../../lib/amplifyClient'
 import HelpTip from '../shared/HelpTip'
 import StudentContentExplainer from './StudentContentExplainer'
@@ -53,6 +53,7 @@ export default function ConceptsCatalogPanel({
           subcategory: concept.subcategory || '',
           level: concept.level || '',
           definition: concept.definition || '',
+          ogDescription: concept.ogDescription || '',
           wordCount: wordsByConceptId?.get(concept.id)?.length ?? 0,
         })),
     [concepts, wordsByConceptId],
@@ -64,6 +65,13 @@ export default function ConceptsCatalogPanel({
       { field: 'category', headerName: 'Category', flex: 1, minWidth: 120 },
       { field: 'subcategory', headerName: 'Subcategory', flex: 1, minWidth: 120 },
       { field: 'level', headerName: 'Level', width: 90 },
+      {
+        field: 'ogDescription',
+        headerName: 'OG description',
+        flex: 1,
+        minWidth: 400,
+        sortable: false,
+      },
       {
         field: 'wordCount',
         headerName: 'Words',
@@ -196,7 +204,7 @@ export default function ConceptsCatalogPanel({
             <HelpTip title="Click a concept to preview it. The row icon renames the label." />
           </Stack>
           <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
-            <DataGridPro
+            <DataGrid
               rows={rows}
               columns={columns}
               getRowId={(row) => row.id}
@@ -205,13 +213,13 @@ export default function ConceptsCatalogPanel({
                 setEditingWordRowId(null)
               }}
               getRowClassName={(params) => (params.id === selectedId ? 'Mui-selected' : '')}
+              getRowHeight={() => 'auto'}
               loading={loadingCatalog}
               pagination
               pageSizeOptions={[25, 50, 100]}
               initialState={{
                 pagination: { paginationModel: { pageSize: 25 } },
                 sorting: { sortModel: [{ field: 'concept', sort: 'asc' }] },
-                pinnedColumns: { right: ['actions'] },
               }}
               slots={{ toolbar: GridToolbar }}
               slotProps={{
@@ -219,6 +227,16 @@ export default function ConceptsCatalogPanel({
               }}
               density="compact"
               localeText={{ noRowsLabel: 'No concepts in the catalog yet.' }}
+              sx={{
+                '& .MuiDataGrid-cell': {
+                  py: 1,
+                  alignItems: 'flex-start',
+                },
+                '& .MuiDataGrid-cellContent': {
+                  whiteSpace: 'normal',
+                  lineHeight: 1.45,
+                },
+              }}
             />
           </Box>
         </Paper>
@@ -267,6 +285,11 @@ export default function ConceptsCatalogPanel({
                 {selectedConcept.definition}
               </Typography>
             ) : null}
+            {selectedConcept.ogDescription ? (
+              <Typography variant="body2" sx={{ mt: 1.5, whiteSpace: 'pre-wrap' }}>
+                {selectedConcept.ogDescription}
+              </Typography>
+            ) : null}
             <Chip
               size="small"
               variant="outlined"
@@ -274,7 +297,7 @@ export default function ConceptsCatalogPanel({
               sx={{ mt: 1.5, mb: 1.5 }}
             />
             <Box sx={{ height: { xs: 280, md: 'calc(100vh - 320px)' }, minHeight: 220, width: '100%' }}>
-              <DataGridPro
+              <DataGrid
                 rows={selectedWords}
                 columns={wordColumns}
                 getRowId={wordRowId}
@@ -284,7 +307,6 @@ export default function ConceptsCatalogPanel({
                 pageSizeOptions={[25, 50, 100]}
                 initialState={{
                   pagination: { paginationModel: { pageSize: 25 } },
-                  pinnedColumns: { right: ['editConcepts'] },
                 }}
                 density="compact"
                 localeText={{ noRowsLabel: 'No words tagged to this concept.' }}

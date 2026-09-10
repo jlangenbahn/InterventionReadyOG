@@ -3,7 +3,7 @@
  */
 import { useMemo, useState } from 'react'
 import { Box, CircularProgress, Paper, Stack } from '@mui/material'
-import { DataGridPro, GridToolbar } from '@mui/x-data-grid-pro'
+import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import HelpTip from '../shared/HelpTip'
 import { buildWordConceptColumns, wordConceptGridSx } from './WordConceptsEditor'
 import { uniqueCatalogWords } from '../../lib/wordConcepts'
@@ -56,7 +56,7 @@ export default function CatalogWordsPanel({
         <HelpTip title="This is the shared word catalog. Hover a row to edit which concepts are tagged to that word." />
       </Stack>
       <Box sx={{ height: { xs: 420, md: 'calc(100vh - 280px)' }, minHeight: 320, width: '100%' }}>
-        <DataGridPro
+        <DataGrid
           rows={rows}
           columns={columns}
           getRowId={wordRowId}
@@ -68,7 +68,6 @@ export default function CatalogWordsPanel({
           initialState={{
             pagination: { paginationModel: { pageSize: 25 } },
             sorting: { sortModel: [{ field: 'word', sort: 'asc' }] },
-            pinnedColumns: { right: ['editConcepts'] },
           }}
           slots={{ toolbar: GridToolbar }}
           slotProps={{
