@@ -8,7 +8,7 @@ import {
 
 const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 const SYSTEM_PROMPT =
-  'You write tutoring materials for one specific student. The student is a middle-school reader at about a 4th-grade level. Use the student history when it is provided: prefer familiar words and review/mastered concepts as the surrounding language, and weave in target practice words plus a little new practice. If a focus concept is new, keep almost all non-target words familiar. Keep non-target words very simple. Write coherent, easy-to-follow text. Use provided target words with their exact spelling, including nonsense or decodable practice words. When multiple concept word banks are provided, integrate words from across all of them rather than practicing only one concept. Prefer putting 2 or 3 target words in the same sentence when it still sounds natural. Do not copy previous sentences or passages. Return only the requested sentence or passage. Do not include a title, heading, markdown, hashtag, the concept name, labels, quotes, bullet points, or commentary. Start with the first sentence of the text.';
+  'You write tutoring materials for one specific student. Use simple or compound sentences under 12 words. Restrict vocabulary to high-frequency sight words, the provided target practice words, and the provided concept rules. Use the student history when it is provided: prefer familiar words and review/mastered concepts as the surrounding language, and weave in target practice words plus a little new practice. If a focus concept is new, keep almost all non-target words familiar. Keep non-target words very simple. Write coherent, easy-to-follow text. Use provided target words with their exact spelling, including nonsense or decodable practice words. When multiple concept word banks are provided, integrate words from across all of them rather than practicing only one concept. Prefer putting 2 or 3 target words in the same sentence when it still sounds natural. Do not copy previous sentences or passages. Return only the requested sentence or passage. Do not include a title, heading, markdown, hashtag, the concept name, labels, quotes, bullet points, or commentary. Start with the first sentence of the text.';
 
 const client = new BedrockRuntimeClient({
   maxAttempts: 5,
@@ -22,6 +22,7 @@ type GenerateEvent = {
     words?: string | null;
     studentContext?: string | null;
     instructorNotes?: string | null;
+    targetConceptDescriptions?: Array<string | null> | null;
   };
 };
 
@@ -136,7 +137,16 @@ function stripGeneratedHeading(text: string, conceptName: string) {
 function instructorNotesBlock(raw: string) {
   const notes = String(raw ?? '').trim();
   if (!notes) return '';
-  return `\nInstructor instructions (follow these if they do not conflict with decodability, exact target-word spelling, or the constraints above): ${notes}`;
+  return `\n<instructor_notes>\n${notes}\n</instructor_notes>`;
+}
+
+function conceptDescriptions(raw: Array<string | null> | null | undefined) {
+  return (raw ?? []).map((item) => String(item ?? '').trim()).filter(Boolean);
+}
+
+function conceptRulesBlock(descriptions: string[]) {
+  if (!descriptions.length) return '';
+  return `\n<concept_rules>\nThe text MUST adhere to these phonetic rules:\n${descriptions.join('\n')}\n</concept_rules>`;
 }
 
 function variationBlock() {
@@ -149,6 +159,7 @@ function passagePrompt(
   banks: WordBank[],
   historyBlock: string,
   notesBlock: string,
+  rulesBlock: string,
   variation: string,
 ) {
   const bankCount = Math.max(banks.length, 1);
@@ -168,7 +179,7 @@ Strict constraints:
 - Error on the side of being too simple.
 
 Concept word banks:
-${banksBlock}${historyBlock}${notesBlock}${variation}`;
+${banksBlock}${rulesBlock}${historyBlock}${notesBlock}${variation}`;
 }
 
 function sentencePrompt(
@@ -176,6 +187,7 @@ function sentencePrompt(
   banks: WordBank[],
   historyBlock: string,
   notesBlock: string,
+  rulesBlock: string,
   variation: string,
 ) {
   const bankCount = Math.max(banks.length, 1);
@@ -185,7 +197,7 @@ function sentencePrompt(
   return `Write one short simple sentence that practices these concept(s) for this student: ${conceptList}. Do not include a title, markdown, or the concept name as a label. Integrate target words from across ALL of the provided concept word banks in the same sentence when it still sounds natural. There are ${bankCount} concept bank(s); draw from each bank rather than using only one. Prefer 2 or 3 target words total when possible. Do not try to use every word.
 
 Concept word banks:
-${banksBlock}${historyBlock}${notesBlock}${variation}`;
+${banksBlock}${rulesBlock}${historyBlock}${notesBlock}${variation}`;
 }
 
 export const handler = async (event: GenerateEvent): Promise<string> => {
@@ -202,12 +214,13 @@ export const handler = async (event: GenerateEvent): Promise<string> => {
     ? `\nStudent history JSON. Use familiar words and review/mastered concepts as the surrounding language. If the focus concept is new, keep almost all non-target words familiar. Include a little new practice, but do not copy recentTexts. ${studentContext}`
     : '';
   const notesBlock = instructorNotesBlock(String(event.arguments?.instructorNotes || ''));
+  const rulesBlock = conceptRulesBlock(conceptDescriptions(event.arguments?.targetConceptDescriptions));
   const variation = variationBlock();
 
   const userText =
     kind === 'passage'
-      ? passagePrompt(conceptName, banks, historyBlock, notesBlock, variation)
-      : sentencePrompt(conceptName, banks, historyBlock, notesBlock, variation);
+      ? passagePrompt(conceptName, banks, historyBlock, notesBlock, rulesBlock, variation)
+      : sentencePrompt(conceptName, banks, historyBlock, notesBlock, rulesBlock, variation);
 
   try {
     const response = await client.send(

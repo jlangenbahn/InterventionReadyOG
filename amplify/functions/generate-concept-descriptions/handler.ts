@@ -27,8 +27,36 @@ For each concept, write a strict OG phonetic or orthographic rule definition:
 - Keep each description to 1-3 sentences.
 - Do not invent concept ids. Use only ids from the provided catalog.
 
-Return ONLY JSON with this exact shape and no markdown:
-{"descriptions":[{"conceptId":"","ogDescription":""}]}`;
+<examples>
+<example>c_soft: c says /s/ when followed immediately by e, i, or y.</example>
+<example>ff_ll_ss_zz: Double the f, l, s, or z at the end of a one-syllable base word right after a short vowel (FLOSS rule).</example>
+</examples>`;
+
+const RETURN_RESULT_TOOL = {
+  toolSpec: {
+    name: 'return_result',
+    description: 'Return OG rule descriptions for this concept batch.',
+    inputSchema: {
+      json: {
+        type: 'object',
+        properties: {
+          descriptions: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                conceptId: { type: 'string' },
+                ogDescription: { type: 'string' },
+              },
+              required: ['conceptId', 'ogDescription'],
+            },
+          },
+        },
+        required: ['descriptions'],
+      },
+    },
+  },
+};
 
 const bedrock = new BedrockRuntimeClient({
   maxAttempts: 5,
@@ -70,26 +98,12 @@ function attrString(item: Record<string, AttributeValue> | undefined, key: strin
   return String(item?.[key]?.S ?? '').trim();
 }
 
-function converseText(response: { output?: { message?: { content?: Array<{ text?: string }> } } }) {
-  return (response.output?.message?.content ?? [])
-    .map((block) => (typeof block.text === 'string' ? block.text : ''))
-    .join('')
-    .trim();
-}
-
-function parseJsonObject(text: string) {
-  const trimmed = String(text ?? '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  const start = trimmed.indexOf('{');
-  const end = trimmed.lastIndexOf('}');
-  if (start === -1 || end <= start) return null;
-  try {
-    const parsed = JSON.parse(trimmed.slice(start, end + 1)) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
+function toolUseInput(response: {
+  output?: { message?: { content?: Array<{ toolUse?: { input?: unknown } }> } };
+}): Record<string, unknown> | null {
+  const input = response.output?.message?.content?.find((block) => block.toolUse)?.toolUse?.input;
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  return input as Record<string, unknown>;
 }
 
 function projectionFor(fields: string[]) {
@@ -192,11 +206,9 @@ ${JSON.stringify(concepts.map((concept) => ({
   subcategory: concept.subcategory,
   level: concept.level,
   definition: concept.definition,
-})))}
+})))}`;
 
-Return JSON only.`;
-
-  let responseText = '';
+  let parsed: Record<string, unknown> | null = null;
   try {
     const response = await bedrock.send(
       new ConverseCommand({
@@ -207,18 +219,21 @@ Return JSON only.`;
           maxTokens: 4096,
           temperature: 0.2,
         },
+        toolConfig: {
+          tools: [RETURN_RESULT_TOOL],
+          toolChoice: { tool: { name: 'return_result' } },
+        },
       }),
     );
-    responseText = converseText(response);
+    parsed = toolUseInput(response);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Bedrock description generation failed';
     console.error('generateConceptDescriptions converse failed', err);
     throw new Error(message);
   }
 
-  const parsed = parseJsonObject(responseText);
   if (!parsed) {
-    throw new Error('The description model did not return valid JSON. Try again.');
+    throw new Error('The description model did not return a structured result. Try again.');
   }
 
   const descriptions = parseDescriptions(parsed, concepts);

@@ -413,6 +413,7 @@ const schema = a.schema({
       words: a.string().required(),
       studentContext: a.string(),
       instructorNotes: a.string(),
+      targetConceptDescriptions: a.string().array(),
     })
     .returns(a.string())
     .handler(a.handler.function(generateLessonTextFn))

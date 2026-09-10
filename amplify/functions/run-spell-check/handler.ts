@@ -18,16 +18,42 @@ const SCAN_CAP = 500;
 const WORD_BATCH_SIZE = 100;
 const TOTAL_SEGMENTS = 26;
 const SYSTEM_PROMPT = `You are an expert copy editor for an Orton-Gillingham word catalog.
+Review this specific batch of words.
 
 Flag only genuine English misspellings in real words:
 - Do not flag nonsense or decodable practice tokens (isNonsenseWord true).
 - Do not flag correctly spelled words, including uncommon but valid English words.
 - Do not flag capitalization, hyphenation, or punctuation unless the letters themselves are wrong.
 - Prefer precision. It is better to return fewer findings than false positives.
-- confidence is a number from 0 to 1.
+- confidence is a number from 0 to 1.`;
 
-Return ONLY JSON with this exact shape and no markdown:
-{"findings":[{"wordId":"","suggestedSpelling":"","reason":"","confidence":0.0}]}`;
+const RETURN_RESULT_TOOL = {
+  toolSpec: {
+    name: 'return_result',
+    description: 'Return spelling findings for this word batch.',
+    inputSchema: {
+      json: {
+        type: 'object',
+        properties: {
+          findings: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                wordId: { type: 'string' },
+                suggestedSpelling: { type: 'string' },
+                reason: { type: 'string' },
+                confidence: { type: 'number' },
+              },
+              required: ['wordId', 'suggestedSpelling', 'reason', 'confidence'],
+            },
+          },
+        },
+        required: ['findings'],
+      },
+    },
+  },
+};
 
 const bedrock = new BedrockRuntimeClient({
   maxAttempts: 5,
@@ -69,26 +95,12 @@ function attrString(item: Record<string, AttributeValue> | undefined, key: strin
   return String(item?.[key]?.S ?? '').trim();
 }
 
-function converseText(response: { output?: { message?: { content?: Array<{ text?: string }> } } }) {
-  return (response.output?.message?.content ?? [])
-    .map((block) => (typeof block.text === 'string' ? block.text : ''))
-    .join('')
-    .trim();
-}
-
-function parseJsonObject(text: string) {
-  const trimmed = String(text ?? '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  const start = trimmed.indexOf('{');
-  const end = trimmed.lastIndexOf('}');
-  if (start === -1 || end <= start) return null;
-  try {
-    const parsed = JSON.parse(trimmed.slice(start, end + 1)) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
+function toolUseInput(response: {
+  output?: { message?: { content?: Array<{ toolUse?: { input?: unknown } }> } };
+}): Record<string, unknown> | null {
+  const input = response.output?.message?.content?.find((block) => block.toolUse)?.toolUse?.input;
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  return input as Record<string, unknown>;
 }
 
 function projectionFor(fields: string[]) {
@@ -189,11 +201,9 @@ export const handler = async (): Promise<AuditResult> => {
   }
 
   const userText = `Check this word batch for genuine English misspellings:
-${JSON.stringify(wordRows.map((word) => ({ wordId: word.id, word: word.word })))}
+${JSON.stringify(wordRows.map((word) => ({ wordId: word.id, word: word.word })))}`;
 
-Return JSON only.`;
-
-  let responseText = '';
+  let parsed: Record<string, unknown> | null = null;
   try {
     const response = await bedrock.send(
       new ConverseCommand({
@@ -204,18 +214,21 @@ Return JSON only.`;
           maxTokens: 8192,
           temperature: 0.2,
         },
+        toolConfig: {
+          tools: [RETURN_RESULT_TOOL],
+          toolChoice: { tool: { name: 'return_result' } },
+        },
       }),
     );
-    responseText = converseText(response);
+    parsed = toolUseInput(response);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Bedrock spell check failed';
     console.error('runSpellCheck converse failed', err);
     throw new Error(message);
   }
 
-  const parsed = parseJsonObject(responseText);
   if (!parsed) {
-    throw new Error('The spell-check model did not return valid JSON. Try again.');
+    throw new Error('The spell-check model did not return a structured result. Try again.');
   }
 
   const findings = parseFindings(parsed, wordRows);

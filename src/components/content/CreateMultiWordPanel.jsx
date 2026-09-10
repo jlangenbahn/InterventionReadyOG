@@ -216,6 +216,14 @@ export default function CreateMultiWordPanel({
         studentLists: lists,
         wordsByConceptId,
         instructorNotes: andreaNotes,
+        targetConceptDescriptions: selected
+          .map((item) => {
+            const full =
+              concepts.find((concept) => concept.id === item.id) ||
+              (lessonConcepts ?? []).find((concept) => concept.id === item.id)
+            return String(full?.ogDescription ?? item.ogDescription ?? '').trim()
+          })
+          .filter(Boolean),
       })
       const cleaned = sanitizeGeneratedLessonText(draft, {
         conceptName,

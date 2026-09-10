@@ -9,19 +9,39 @@ import {
 const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 const SYSTEM_PROMPT = `You are Andrea, an Orton-Gillingham reading intervention assistant. You pick a small practice word set for one student.
 
-Return ONLY JSON with this shape:
-{"ids":["id1","id2"],"summary":"One short sentence about why these words fit this student."}
-
 Rules:
 - Choose only from the candidate list. Use each candidate's id exactly.
-- Choose exactly the requested count, or every candidate if there are fewer.
-- Always include every candidate whose priority is "missed" (the student got these wrong in data entry).
-- Strictly prefer candidates whose priority is "unseen" (they have not appeared in prior lesson plans).
-- If there are not enough unseen words, fill remaining slots with priority "recycle" in the given order (oldest lesson-plan exposure first).
+- 1. MAX COUNT: Never exceed the requested target count.
+- 2. MUST INCLUDE: Prioritize candidates marked 'missed'. If 'missed' words exceed the target count, select a subset up to the target count.
+- 3. FILLER: Fill any remaining slots with 'unseen' candidates.
 - Heavily prefer simpler words relative to the rest of the set: shorter, more common, fewer syllables, more regular spelling.
 - Heavily prefer words that share a topic or setting so they can later be woven into one simple story (home, school, animals, food, weather, play, and similar).
 - Prefer real words over nonsense words unless the concept clearly needs nonsense practice.
 - Do not pick a mixed bag of unrelated hard words.`;
+
+const RETURN_RESULT_TOOL = {
+  toolSpec: {
+    name: 'return_result',
+    description: 'Return the selected practice word ids and a short summary.',
+    inputSchema: {
+      json: {
+        type: 'object',
+        properties: {
+          ids: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Candidate ids chosen for this student.',
+          },
+          summary: {
+            type: 'string',
+            description: 'One short sentence about why these words fit this student.',
+          },
+        },
+        required: ['ids', 'summary'],
+      },
+    },
+  },
+};
 
 const client = new BedrockRuntimeClient({
   maxAttempts: 5,
@@ -50,24 +70,12 @@ type SelectEvent = {
   };
 };
 
-function converseText(response: { output?: { message?: { content?: Array<{ text?: string }> } } }) {
-  return (response.output?.message?.content ?? [])
-    .map((block) => (typeof block.text === 'string' ? block.text : ''))
-    .join('')
-    .trim();
-}
-
-function parseJsonObject(text: string) {
-  const trimmed = String(text ?? '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  const start = trimmed.indexOf('{');
-  const end = trimmed.lastIndexOf('}');
-  if (start === -1 || end <= start) return null;
-  try {
-    const parsed = JSON.parse(trimmed.slice(start, end + 1));
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
+function toolUseInput(response: {
+  output?: { message?: { content?: Array<{ toolUse?: { input?: unknown } }> } };
+}): Record<string, unknown> | null {
+  const input = response.output?.message?.content?.find((block) => block.toolUse)?.toolUse?.input;
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  return input as Record<string, unknown>;
 }
 
 function normalizeWord(value: unknown) {
@@ -211,7 +219,7 @@ export const handler = async (event: SelectEvent): Promise<string> => {
   const variationToken = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const userText = [
     `Pick the ${Math.min(count, candidates.length)} best practice words for this student.`,
-    'Prioritize unseen lesson-plan words. Always inject missed (incorrect) words. If the unseen bank is exhausted, recycle the oldest seen words.',
+    'Never exceed that target count. Prioritize missed words; if missed words exceed the count, choose a subset. Fill remaining slots with unseen candidates.',
     `Variation token: ${variationToken}`,
     'Student and concept context:',
     JSON.stringify({ ...payload, candidates: undefined }),
@@ -229,9 +237,13 @@ export const handler = async (event: SelectEvent): Promise<string> => {
           maxTokens: 600,
           temperature: 0.5,
         },
+        toolConfig: {
+          tools: [RETURN_RESULT_TOOL],
+          toolChoice: { tool: { name: 'return_result' } },
+        },
       }),
     );
-    const parsed = parseJsonObject(converseText(response));
+    const parsed = toolUseInput(response);
     const modelIds = resolveModelIds(parsed, ranked.ordered, Math.min(count, candidates.length));
     const ids = applySelectionPolicy(modelIds, ranked, Math.min(count, candidates.length));
     if (!ids.length) {
