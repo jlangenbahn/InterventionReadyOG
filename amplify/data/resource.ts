@@ -488,8 +488,8 @@ const schema = a.schema({
     .authorization((allow) => [allow.authenticated()]),
 
   /**
-   * Placeholder for a Bedrock catalog audit. Writes DataQualityFinding rows when
-   * the Lambda is hooked up; the handler currently returns a no-op result.
+   * Bedrock Converse catalog audit. Samples words, asks Claude 3.5 Haiku for
+   * ADD/REMOVE tags, and writes OPEN DataQualityFinding rows.
    */
   runDataQualityAudit: a
     .mutation()
