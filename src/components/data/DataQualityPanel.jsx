@@ -20,14 +20,16 @@ import CategoryIcon from '@mui/icons-material/Category'
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined'
 import ImportContactsIcon from '@mui/icons-material/ImportContacts'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
+import AutoStoriesIcon from '@mui/icons-material/AutoStories'
 import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import HelpTip from '../shared/HelpTip'
-import DictionaryWordTooltip from './DictionaryWordTooltip'
+import DictionaryWordTooltip, { DictionaryEntryCard } from './DictionaryWordTooltip'
 import { client } from '../../lib/amplifyClient'
 import {
   approveDataQualityFinding,
   approveDataQualityFindings,
   fetchDataQualityFindings,
+  fetchWordDictionaryEntries,
   generateConceptDescriptions,
   generateDictionaryDefinitions,
   rejectDataQualityFinding,
@@ -35,11 +37,12 @@ import {
   runDataQualityAudit,
   runSpellCheck,
 } from '../../lib/dataQuality'
-import { DICTIONARY_BATCH_LIMIT, wordsMissingDictionaryData } from '../../lib/dictionaryData'
+import { DICTIONARY_BATCH_LIMIT, parseDictionaryData, wordsMissingDictionaryData } from '../../lib/dictionaryData'
 import { assignedConcepts, wordLabelById } from '../../lib/wordConcepts'
 
 const TAB_WORDS = 'words'
 const TAB_CONCEPTS = 'concepts'
+const TAB_DEFINITIONS = 'definitions'
 const VIEW_OPEN = 'open'
 const VIEW_HISTORY = 'history'
 const DESCRIPTION_BATCH_SIZE = 25
@@ -160,6 +163,7 @@ export default function DataQualityPanel({
   const [spellChecking, setSpellChecking] = useState(false)
   const [writingDefinitions, setWritingDefinitions] = useState(false)
   const [dictionaryProgress, setDictionaryProgress] = useState(null)
+  const [generatedDefinitions, setGeneratedDefinitions] = useState(null)
   const [generating, setGenerating] = useState(false)
   const [generateProgress, setGenerateProgress] = useState(null)
   const [rowBusyId, setRowBusyId] = useState(null)
@@ -423,16 +427,26 @@ export default function DataQualityPanel({
       return
     }
     const total = batch.length
+    const batchIds = batch.map((word) => word.id)
     setWritingDefinitions(true)
     setDictionaryProgress({ processed: 0, total })
     setNotice(`Processed 0 of ${total} words`)
     try {
-      const result = await generateDictionaryDefinitions(batch.map((word) => word.id))
+      const result = await generateDictionaryDefinitions(batchIds)
       const processed = Number(result.createdCount ?? 0)
       setDictionaryProgress({ processed, total })
       setNotice(result.message || `Processed ${processed} of ${total} words`)
       setError('')
+      const entries = await fetchWordDictionaryEntries(batchIds)
+      setGeneratedDefinitions(
+        entries.map((item) => ({
+          id: item.id,
+          word: item.word || wordsById.get(item.id) || item.id,
+          dictionaryData: parseDictionaryData(item.dictionaryData),
+        })),
+      )
       await onCatalogReload?.()
+      setTab(TAB_DEFINITIONS)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to write dictionary definitions')
     } finally {
@@ -555,13 +569,23 @@ export default function DataQualityPanel({
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
         <FactCheckOutlinedIcon color="action" />
         <Typography variant="h5">Data Quality</Typography>
-        <HelpTip title="Audit word-concept tags, flag misspellings, write dictionary definitions, and generate Orton-Gillingham rule descriptions. Approve applies catalog changes; Reject only closes the finding." />
+        <HelpTip title="Audit word-concept tags, flag misspellings, write dictionary definitions, and generate Orton-Gillingham rule descriptions. After a dictionary batch, open the Definitions tab to review the LLM output. Approve applies catalog changes; Reject only closes the finding." />
         {notice ? <Chip size="small" color="success" label={notice} /> : null}
       </Stack>
       <Paper variant="outlined" sx={{ px: 1.5, pt: 0.5, mb: 2 }}>
         <Tabs value={tab} onChange={(_event, value) => setTab(value)}>
           <Tab value={TAB_WORDS} icon={<MenuBookIcon />} iconPosition="start" label="Words" />
           <Tab value={TAB_CONCEPTS} icon={<CategoryIcon />} iconPosition="start" label="Concepts" />
+          <Tab
+            value={TAB_DEFINITIONS}
+            icon={<AutoStoriesIcon />}
+            iconPosition="start"
+            label={
+              generatedDefinitions?.length
+                ? `Definitions (${generatedDefinitions.length})`
+                : 'Definitions'
+            }
+          />
         </Tabs>
       </Paper>
 
@@ -601,6 +625,13 @@ export default function DataQualityPanel({
           onGenerate={() => void handleGenerateDescriptions()}
           onProcessRowUpdate={handleConceptRowUpdate}
           setError={setError}
+        />
+      )}
+      {tab === TAB_DEFINITIONS && (
+        <DefinitionsTabContent
+          entries={generatedDefinitions}
+          wordsByConceptId={wordsByConceptId}
+          concepts={concepts}
         />
       )}
     </Box>
@@ -672,7 +703,7 @@ function WordsTabContent({
             <Typography variant="body2" color="text.secondary">
               Approve applies ADD/REMOVE tags or the suggested spelling. Reject closes the finding
               without changing the catalog. Dictionary writes at most {DICTIONARY_BATCH_LIMIT}{' '}
-              missing entries per run.
+              missing entries per run, then opens the Definitions tab for review.
             </Typography>
           </Stack>
           {dictionaryProgress ? (
@@ -816,5 +847,66 @@ function ConceptsTabContent({
         </Box>
       </Paper>
     </>
+  )
+}
+
+function DefinitionsTabContent({ entries, wordsByConceptId, concepts }) {
+  if (!entries) {
+    return (
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="h6" sx={{ mb: 1 }}>
+          Generated Definitions
+        </Typography>
+        <Typography color="text.secondary">
+          No definitions generated in this session. Run Write Dictionary Definitions on the Words tab
+          to review the latest batch here.
+        </Typography>
+      </Paper>
+    )
+  }
+
+  if (!entries.length) {
+    return (
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="h6" sx={{ mb: 1 }}>
+          Generated Definitions
+        </Typography>
+        <Typography color="text.secondary">
+          The last batch finished, but no dictionary entries were written.
+        </Typography>
+      </Paper>
+    )
+  }
+
+  return (
+    <Paper sx={{ p: 2 }}>
+      <Stack spacing={1.5} sx={{ mb: 2 }}>
+        <Typography variant="h6">Generated Definitions</Typography>
+        <Typography variant="body2" color="text.secondary">
+          Most recent batch in this session ({entries.length} word{entries.length === 1 ? '' : 's'}).
+          Review IPA, syllabication, and definitions before using them in lessons.
+        </Typography>
+      </Stack>
+      <Stack spacing={1.5}>
+        {entries.map((entry) => {
+          const tagged = assignedConcepts(entry.id, wordsByConceptId, concepts)
+          const data = parseDictionaryData(entry.dictionaryData)
+          return (
+            <Paper key={entry.id} variant="outlined" sx={{ p: 2, bgcolor: '#f7f4ee' }}>
+              {data ? (
+                <DictionaryEntryCard word={entry.word} data={data} taggedConcepts={tagged} />
+              ) : (
+                <Stack spacing={0.5}>
+                  <Typography sx={{ fontWeight: 700 }}>{entry.word}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    No dictionary data was stored for this word.
+                  </Typography>
+                </Stack>
+              )}
+            </Paper>
+          )
+        })}
+      </Stack>
+    </Paper>
   )
 }

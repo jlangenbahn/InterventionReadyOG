@@ -63,6 +63,28 @@ export async function generateDictionaryDefinitions(wordIds = []) {
   })
 }
 
+export async function fetchWordDictionaryEntries(wordIds = []) {
+  const ids = [...new Set((wordIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean))]
+  if (!ids.length) return []
+  if (!client.models.Word) {
+    throw new Error('The word catalog is still deploying. Wait for Amplify to finish, then try again.')
+  }
+  const results = await Promise.all(
+    ids.map((id) =>
+      client.models.Word.get({ id }, { selectionSet: ['id', 'word', 'dictionaryData'] }),
+    ),
+  )
+  for (const result of results) throwIfErrors(result)
+  return results
+    .map((result) => result?.data)
+    .filter((item) => item?.id)
+    .map((item) => ({
+      id: item.id,
+      word: item.word,
+      dictionaryData: item.dictionaryData,
+    }))
+}
+
 export async function approveDataQualityFinding(finding, wordsByConceptId) {
   if (!finding?.id) throw new Error('Finding is required')
   const wordId = finding.wordId

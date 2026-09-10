@@ -15,6 +15,12 @@ export type TaggedConcept = {
   concept?: string
 }
 
+export type GeneratedDictionaryEntry = {
+  id: string
+  word?: string
+  dictionaryData?: DictionaryData | unknown | null
+}
+
 export const DICTIONARY_BATCH_LIMIT = 10
 
 function parseJsonValue(raw: unknown): unknown {

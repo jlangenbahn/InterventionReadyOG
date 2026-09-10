@@ -103,9 +103,16 @@ export function buildWordConceptColumns({
   wordsByConceptId,
   setError,
   extraColumns = [],
+  renderWordCell,
 }) {
   return [
-    { field: 'word', headerName: 'Word', flex: 1, minWidth: 120 },
+    {
+      field: 'word',
+      headerName: 'Word',
+      flex: 1,
+      minWidth: 160,
+      ...(renderWordCell ? { renderCell: renderWordCell } : {}),
+    },
     ...extraColumns,
     {
       field: 'assignedConcepts',

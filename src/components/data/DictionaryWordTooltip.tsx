@@ -1,7 +1,8 @@
 /**
  * Data Quality dictionary hover card: classic entry plus tagged OG concepts.
  */
-import type { ReactNode } from 'react'
+import { memo, type ReactNode } from 'react'
+import AutoStoriesIcon from '@mui/icons-material/AutoStories'
 import { Box, Chip, Divider, Stack, Tooltip, Typography } from '@mui/material'
 import { parseDictionaryData, type DictionaryData, type TaggedConcept } from '../../lib/dictionaryData'
 
@@ -22,14 +23,14 @@ const tooltipSx = {
   boxShadow: '0 10px 28px rgba(28, 25, 23, 0.16)',
 }
 
-function DictionaryTooltipBody({
+export function DictionaryEntryCard({
   word,
   data,
-  taggedConcepts,
+  taggedConcepts = [],
 }: {
   word: string
   data: DictionaryData
-  taggedConcepts: TaggedConcept[]
+  taggedConcepts?: TaggedConcept[]
 }) {
   const concepts = (taggedConcepts ?? []).filter((concept) => String(concept?.concept ?? '').trim())
 
@@ -114,7 +115,7 @@ function DictionaryTooltipBody({
   )
 }
 
-export default function DictionaryWordTooltip({
+function DictionaryWordTooltip({
   word,
   dictionaryData,
   taggedConcepts = [],
@@ -131,7 +132,7 @@ export default function DictionaryWordTooltip({
       enterDelay={250}
       leaveDelay={120}
       describeChild
-      title={<DictionaryTooltipBody word={label} data={data} taggedConcepts={taggedConcepts} />}
+      title={<DictionaryEntryCard word={label} data={data} taggedConcepts={taggedConcepts} />}
       slotProps={{
         tooltip: { sx: tooltipSx },
         arrow: { sx: { color: '#f7f4ee' } },
@@ -140,7 +141,9 @@ export default function DictionaryWordTooltip({
       <Box
         component="span"
         sx={{
-          display: 'inline',
+          display: 'inline-flex',
+          alignItems: 'center',
+          minWidth: 0,
           borderBottom: '1px dotted rgba(28, 25, 23, 0.45)',
           cursor: 'help',
         }}
@@ -150,3 +153,36 @@ export default function DictionaryWordTooltip({
     </Tooltip>
   )
 }
+
+const MemoDictionaryWordTooltip = memo(DictionaryWordTooltip)
+export default MemoDictionaryWordTooltip
+
+export const DictionaryWordCell = memo(function DictionaryWordCell({
+  word,
+  dictionaryData,
+  taggedConcepts = [],
+}: {
+  word?: string
+  dictionaryData?: DictionaryData | unknown | null
+  taggedConcepts?: TaggedConcept[]
+}) {
+  const data = parseDictionaryData(dictionaryData)
+  const label = String(word ?? '').trim()
+  const content = (
+    <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0, py: 0.25 }}>
+      {data ? (
+        <AutoStoriesIcon fontSize="small" sx={{ color: 'text.secondary', flexShrink: 0 }} aria-hidden />
+      ) : null}
+      <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {label}
+      </Box>
+    </Stack>
+  )
+
+  if (!data) return content
+  return (
+    <MemoDictionaryWordTooltip word={label} dictionaryData={data} taggedConcepts={taggedConcepts}>
+      {content}
+    </MemoDictionaryWordTooltip>
+  )
+})

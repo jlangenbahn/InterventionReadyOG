@@ -100,17 +100,26 @@ export function uniqueCatalogWords(catalogWords = [], wordsByConceptId) {
       wordId: word.id,
       word: word.word,
       isNonsenseWord: Boolean(word.isNonsenseWord),
+      dictionaryData: word.dictionaryData ?? null,
     })
   }
   for (const rows of wordsByConceptId?.values?.() ?? []) {
     for (const row of rows ?? []) {
       const id = row?.wordId || row?.id
-      if (!id || byId.has(id)) continue
+      if (!id) continue
+      const existing = byId.get(id)
+      if (existing) {
+        if (existing.dictionaryData == null && row.dictionaryData != null) {
+          existing.dictionaryData = row.dictionaryData
+        }
+        continue
+      }
       byId.set(id, {
         id,
         wordId: id,
         word: row.word,
         isNonsenseWord: Boolean(row.isNonsenseWord),
+        dictionaryData: row.dictionaryData ?? null,
       })
     }
   }
