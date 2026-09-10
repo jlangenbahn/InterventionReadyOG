@@ -1,6 +1,7 @@
 /**
- * Bedrock Converse OG descriptions: scan every concept, generate a strict
- * phonetic rule from name + category + subcategory, then overwrite ogDescription.
+ * Bedrock Converse OG descriptions: process one concept-id batch, generate a
+ * strict phonetic rule from name + category + subcategory, then overwrite
+ * ogDescription.
  */
 import {
   BedrockRuntimeClient,
@@ -8,12 +9,13 @@ import {
 } from '@aws-sdk/client-bedrock-runtime';
 import {
   DynamoDBClient,
-  ScanCommand,
+  GetItemCommand,
   UpdateItemCommand,
   type AttributeValue,
 } from '@aws-sdk/client-dynamodb';
 
 const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+const MAX_BATCH = 25;
 const SYSTEM_PROMPT = `You are an expert Orton-Gillingham trainer writing instructor-facing concept rules.
 
 For each concept, write a strict OG phonetic or orthographic rule definition:
@@ -51,6 +53,12 @@ type CatalogConcept = {
 type ModelDescription = {
   conceptId: string;
   ogDescription: string;
+};
+
+type GenerateEvent = {
+  arguments?: {
+    conceptIds?: Array<string | null> | null;
+  };
 };
 
 function envVar(name: string) {
@@ -97,34 +105,47 @@ function projectionFor(fields: string[]) {
   };
 }
 
-async function scanConcepts(tableName: string): Promise<CatalogConcept[]> {
+function uniqueIds(raw: Array<string | null> | null | undefined) {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const value of raw ?? []) {
+    const id = String(value ?? '').trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+async function loadConceptsByIds(tableName: string, ids: string[]): Promise<CatalogConcept[]> {
   const projection = projectionFor(['id', 'concept', 'category', 'subcategory', 'level', 'definition']);
+  const items = await Promise.all(
+    ids.map((id) =>
+      dynamo.send(
+        new GetItemCommand({
+          TableName: tableName,
+          Key: { id: { S: id } },
+          ProjectionExpression: projection.ProjectionExpression,
+          ExpressionAttributeNames: projection.ExpressionAttributeNames,
+        }),
+      ),
+    ),
+  );
   const concepts: CatalogConcept[] = [];
-  let exclusiveStartKey: Record<string, AttributeValue> | undefined;
-  do {
-    const result = await dynamo.send(
-      new ScanCommand({
-        TableName: tableName,
-        ProjectionExpression: projection.ProjectionExpression,
-        ExpressionAttributeNames: projection.ExpressionAttributeNames,
-        ExclusiveStartKey: exclusiveStartKey,
-      }),
-    );
-    for (const item of result.Items ?? []) {
-      const id = attrString(item, 'id');
-      const concept = attrString(item, 'concept');
-      if (!id || !concept) continue;
-      concepts.push({
-        id,
-        concept,
-        category: attrString(item, 'category'),
-        subcategory: attrString(item, 'subcategory'),
-        level: attrString(item, 'level'),
-        definition: attrString(item, 'definition'),
-      });
-    }
-    exclusiveStartKey = result.LastEvaluatedKey;
-  } while (exclusiveStartKey);
+  for (const result of items) {
+    const item = result.Item;
+    const id = attrString(item, 'id');
+    const concept = attrString(item, 'concept');
+    if (!id || !concept) continue;
+    concepts.push({
+      id,
+      concept,
+      category: attrString(item, 'category'),
+      subcategory: attrString(item, 'subcategory'),
+      level: attrString(item, 'level'),
+      definition: attrString(item, 'definition'),
+    });
+  }
   return concepts;
 }
 
@@ -144,18 +165,26 @@ function parseDescriptions(raw: Record<string, unknown> | null, concepts: Catalo
   return descriptions;
 }
 
-export const handler = async (): Promise<AuditResult> => {
+export const handler = async (event: GenerateEvent): Promise<AuditResult> => {
   const conceptTable = envVar('CONCEPT_TABLE_NAME');
   if (!conceptTable) {
     throw new Error('Concept description generation is not configured in this environment.');
   }
 
-  const concepts = await scanConcepts(conceptTable);
-  if (!concepts.length) {
-    return { createdCount: 0, message: 'No catalog concepts were available to describe.' };
+  const conceptIds = uniqueIds(event.arguments?.conceptIds);
+  if (!conceptIds.length) {
+    return { createdCount: 0, message: 'No concept ids were provided.' };
+  }
+  if (conceptIds.length > MAX_BATCH) {
+    throw new Error(`Send at most ${MAX_BATCH} concept ids per request.`);
   }
 
-  const userText = `Write OG rule descriptions for every concept below. Use each concept's name, category, and subcategory together:
+  const concepts = await loadConceptsByIds(conceptTable, conceptIds);
+  if (!concepts.length) {
+    return { createdCount: 0, message: 'None of the requested concepts were found.' };
+  }
+
+  const userText = `Write OG rule descriptions for this concept batch. Use each concept's name, category, and subcategory together:
 ${JSON.stringify(concepts.map((concept) => ({
   conceptId: concept.id,
   concept: concept.concept,
@@ -175,7 +204,7 @@ Return JSON only.`;
         system: [{ text: SYSTEM_PROMPT }],
         messages: [{ role: 'user', content: [{ text: userText }] }],
         inferenceConfig: {
-          maxTokens: 8192,
+          maxTokens: 4096,
           temperature: 0.2,
         },
       }),

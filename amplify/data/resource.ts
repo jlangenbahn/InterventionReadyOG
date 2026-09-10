@@ -514,11 +514,14 @@ const schema = a.schema({
     .authorization((allow) => [allow.authenticated()]),
 
   /**
-   * Bedrock Converse OG rule writer. Samples concepts and overwrites
-   * Concept.ogDescription in place so prompt iterations can replace prior text.
+   * Bedrock Converse OG rule writer. Processes one concept-id batch per invocation
+   * so AppSync stays under its 30-second timeout.
    */
   generateConceptDescriptions: a
     .mutation()
+    .arguments({
+      conceptIds: a.id().array().required(),
+    })
     .returns(a.ref('DataQualityAuditResult'))
     .handler(a.handler.function(generateConceptDescriptionsFn))
     .authorization((allow) => [allow.authenticated()]),

@@ -6,6 +6,7 @@ import {
   Box,
   Button,
   Chip,
+  LinearProgress,
   Paper,
   Stack,
   Tab,
@@ -32,10 +33,11 @@ import {
 } from '../../lib/dataQuality'
 import { wordLabelById } from '../../lib/wordConcepts'
 
-const TAB_WORDS = 0
-const TAB_CONCEPTS = 1
+const TAB_WORDS = 'words'
+const TAB_CONCEPTS = 'concepts'
 const VIEW_OPEN = 'open'
 const VIEW_HISTORY = 'history'
+const DESCRIPTION_BATCH_SIZE = 25
 
 function emptySelection() {
   return { type: 'include', ids: new Set() }
@@ -70,6 +72,12 @@ function matchesIssueView(row, view) {
 
 function openRows(rows, selectedIds) {
   return rows.filter((row) => selectedIds.includes(row.id) && statusOf(row) === 'OPEN')
+}
+
+function chunkIds(ids, size) {
+  const batches = []
+  for (let i = 0; i < ids.length; i += size) batches.push(ids.slice(i, i + size))
+  return batches
 }
 
 function IssueViewToggle({ value, onChange }) {
@@ -146,6 +154,7 @@ export default function DataQualityPanel({
   const [auditing, setAuditing] = useState(false)
   const [spellChecking, setSpellChecking] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [generateProgress, setGenerateProgress] = useState(null)
   const [rowBusyId, setRowBusyId] = useState(null)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [notice, setNotice] = useState('')
@@ -395,16 +404,47 @@ export default function DataQualityPanel({
   }
 
   async function handleGenerateDescriptions() {
+    const ids = (concepts ?? []).map((concept) => concept?.id).filter(Boolean)
+    if (!ids.length) {
+      setNotice('No catalog concepts were available to describe.')
+      return
+    }
+    const batches = chunkIds(ids, DESCRIPTION_BATCH_SIZE)
     setGenerating(true)
+    setGenerateProgress({
+      batch: 1,
+      batchCount: batches.length,
+      processed: 0,
+      total: ids.length,
+    })
+    let written = 0
     try {
-      const result = await generateConceptDescriptions()
-      setNotice(result.message || 'OG descriptions updated.')
+      for (let index = 0; index < batches.length; index += 1) {
+        const processed = Math.min(index * DESCRIPTION_BATCH_SIZE, ids.length)
+        setGenerateProgress({
+          batch: index + 1,
+          batchCount: batches.length,
+          processed,
+          total: ids.length,
+        })
+        const result = await generateConceptDescriptions(batches[index])
+        written += Number(result.createdCount ?? 0)
+        setGenerateProgress({
+          batch: index + 1,
+          batchCount: batches.length,
+          processed: Math.min((index + 1) * DESCRIPTION_BATCH_SIZE, ids.length),
+          total: ids.length,
+        })
+      }
+      setNotice(`Wrote OG descriptions for ${written} concept${written === 1 ? '' : 's'}.`)
       setError('')
       await onCatalogReload?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate OG descriptions')
+      await onCatalogReload?.()
     } finally {
       setGenerating(false)
+      setGenerateProgress(null)
     }
   }
 
@@ -484,202 +524,295 @@ export default function DataQualityPanel({
       </Stack>
       <Paper variant="outlined" sx={{ px: 1.5, pt: 0.5, mb: 2 }}>
         <Tabs value={tab} onChange={(_event, value) => setTab(value)}>
-          <Tab icon={<MenuBookIcon />} iconPosition="start" label="Words" />
-          <Tab icon={<CategoryIcon />} iconPosition="start" label="Concepts" />
+          <Tab value={TAB_WORDS} icon={<MenuBookIcon />} iconPosition="start" label="Words" />
+          <Tab value={TAB_CONCEPTS} icon={<CategoryIcon />} iconPosition="start" label="Concepts" />
         </Tabs>
       </Paper>
 
-      {tab === TAB_CONCEPTS ? (
-        <>
-          <Paper sx={{ p: 2, mb: 2 }}>
-            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-              <Button
-                variant="contained"
-                onClick={() => void handleGenerateDescriptions()}
-                disabled={generating}
-              >
-                {generating ? 'Generating…' : 'Generate OG Descriptions'}
-              </Button>
-              <Button
-                variant="outlined"
-                disabled={bulkBusy || conceptSelectedOpen.length < 1}
-                onClick={() => void handleApproveSelected(conceptSelectedOpen)}
-              >
-                {bulkBusy ? 'Working…' : 'Approve Selected'}
-              </Button>
-              <Button
-                color="error"
-                variant="outlined"
-                disabled={bulkBusy || conceptSelectedOpen.length < 1}
-                onClick={() => void handleRejectSelected(conceptSelectedOpen)}
-              >
-                Reject Selected
-              </Button>
-              <Typography variant="body2" color="text.secondary">
-                Generates OG rules for every concept and overwrites existing descriptions. Tag
-                findings below can be approved or rejected. Double-click a description cell to edit.
-              </Typography>
-            </Stack>
-          </Paper>
-          <Paper sx={{ p: 2, mb: 2 }}>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
-              <IssueViewToggle
-                value={conceptIssueView}
-                onChange={(next) => {
-                  setConceptIssueView(next)
-                  setConceptSelectionModel(emptySelection())
-                }}
-              />
-            </Stack>
-            <Box sx={{ height: { xs: 280, md: 320 }, minHeight: 240, width: '100%' }}>
-              <DataGridPro
-                rows={conceptFindingRows}
-                columns={findingColumns}
-                checkboxSelection
-                disableRowSelectionExcludeModel
-                disableRowSelectionOnClick
-                rowSelectionModel={conceptSelectionModel}
-                onRowSelectionModelChange={(model) => setConceptSelectionModel(model)}
-                isRowSelectable={(params) => statusOf(params.row) === 'OPEN'}
-                loading={loading}
-                pagination
-                pageSizeOptions={[25, 50, 100]}
-                initialState={{
-                  pagination: { paginationModel: { pageSize: 25 } },
-                  sorting: { sortModel: [{ field: 'confidence', sort: 'desc' }] },
-                  pinnedColumns: { right: ['actions'] },
-                }}
-                slots={{ toolbar: FindingsToolbar }}
-                slotProps={{
-                  toolbar: {
-                    showQuickFilter: true,
-                    quickFilterProps: { debounceMs: 300 },
-                    selectedCount: conceptSelectedOpen.length,
-                    onApproveSelected: () => void handleApproveSelected(conceptSelectedOpen),
-                    onRejectSelected: () => void handleRejectSelected(conceptSelectedOpen),
-                    busy: bulkBusy,
-                  },
-                }}
-                density="compact"
-                localeText={{
-                  noRowsLabel:
-                    conceptIssueView === VIEW_HISTORY
-                      ? 'No approved or rejected concept-tag findings yet.'
-                      : 'No open concept-tag findings. Run Audit on the Words tab to generate suggestions.',
-                }}
-              />
-            </Box>
-          </Paper>
-          <Paper sx={{ p: 2 }}>
-            <Box sx={{ height: { xs: 320, md: 'calc(100vh - 560px)' }, minHeight: 240, width: '100%' }}>
-              <DataGridPro
-                rows={conceptRows}
-                columns={conceptColumns}
-                disableRowSelectionOnClick
-                loading={generating || Boolean(savingConceptId)}
-                editMode="cell"
-                processRowUpdate={handleConceptRowUpdate}
-                onProcessRowUpdateError={(err) => {
-                  setError(err instanceof Error ? err.message : 'Failed to save OG description')
-                }}
-                pagination
-                pageSizeOptions={[25, 50, 100]}
-                initialState={{
-                  pagination: { paginationModel: { pageSize: 25 } },
-                  sorting: { sortModel: [{ field: 'concept', sort: 'asc' }] },
-                }}
-                slots={{ toolbar: GridToolbar }}
-                slotProps={{
-                  toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 300 } },
-                }}
-                density="compact"
-                localeText={{ noRowsLabel: 'No concepts in the catalog yet.' }}
-              />
-            </Box>
-          </Paper>
-        </>
-      ) : (
-        <>
-          <Paper sx={{ p: 2, mb: 2 }}>
-            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-              <Button variant="contained" onClick={() => void handleRunAudit()} disabled={running}>
-                {auditing ? 'Running audit…' : 'Run Audit'}
-              </Button>
-              <Button variant="outlined" onClick={() => void handleRunSpellCheck()} disabled={running}>
-                {spellChecking ? 'Checking spelling…' : 'Run Spell Check'}
-              </Button>
-              <Button
-                variant="outlined"
-                disabled={bulkBusy || selectedOpen.length < 1}
-                onClick={() => void handleApproveSelected(selectedOpen)}
-              >
-                {bulkBusy ? 'Working…' : 'Approve Selected'}
-              </Button>
-              <Button
-                color="error"
-                variant="outlined"
-                disabled={bulkBusy || selectedOpen.length < 1}
-                onClick={() => void handleRejectSelected(selectedOpen)}
-              >
-                Reject Selected
-              </Button>
-              <Typography variant="body2" color="text.secondary">
-                Approve applies ADD/REMOVE tags or the suggested spelling. Reject closes the finding
-                without changing the catalog.
-              </Typography>
-            </Stack>
-          </Paper>
-          <Paper sx={{ p: 2 }}>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
-              <IssueViewToggle
-                value={wordIssueView}
-                onChange={(next) => {
-                  setWordIssueView(next)
-                  setSelectionModel(emptySelection())
-                }}
-              />
-            </Stack>
-            <Box sx={{ height: { xs: 420, md: 'calc(100vh - 360px)' }, minHeight: 320, width: '100%' }}>
-              <DataGridPro
-                rows={wordRows}
-                columns={findingColumns}
-                checkboxSelection
-                disableRowSelectionExcludeModel
-                disableRowSelectionOnClick
-                rowSelectionModel={selectionModel}
-                onRowSelectionModelChange={(model) => setSelectionModel(model)}
-                isRowSelectable={(params) => statusOf(params.row) === 'OPEN'}
-                loading={loading}
-                pagination
-                pageSizeOptions={[25, 50, 100]}
-                initialState={{
-                  pagination: { paginationModel: { pageSize: 25 } },
-                  sorting: { sortModel: [{ field: 'confidence', sort: 'desc' }] },
-                  pinnedColumns: { right: ['actions'] },
-                }}
-                slots={{ toolbar: FindingsToolbar }}
-                slotProps={{
-                  toolbar: {
-                    showQuickFilter: true,
-                    quickFilterProps: { debounceMs: 300 },
-                    selectedCount: selectedOpen.length,
-                    onApproveSelected: () => void handleApproveSelected(selectedOpen),
-                    onRejectSelected: () => void handleRejectSelected(selectedOpen),
-                    busy: bulkBusy,
-                  },
-                }}
-                density="compact"
-                localeText={{
-                  noRowsLabel:
-                    wordIssueView === VIEW_HISTORY
-                      ? 'No approved or rejected findings yet.'
-                      : 'No open findings. Run Audit or Spell Check to generate suggestions.',
-                }}
-              />
-            </Box>
-          </Paper>
-        </>
+      {tab === TAB_WORDS && (
+        <WordsTabContent
+          auditing={auditing}
+          spellChecking={spellChecking}
+          running={running}
+          bulkBusy={bulkBusy}
+          selectedOpen={selectedOpen}
+          wordIssueView={wordIssueView}
+          wordRows={wordRows}
+          findingColumns={findingColumns}
+          selectionModel={selectionModel}
+          loading={loading}
+          onRunAudit={() => void handleRunAudit()}
+          onRunSpellCheck={() => void handleRunSpellCheck()}
+          onApproveSelected={() => void handleApproveSelected(selectedOpen)}
+          onRejectSelected={() => void handleRejectSelected(selectedOpen)}
+          onIssueViewChange={(next) => {
+            setWordIssueView(next)
+            setSelectionModel(emptySelection())
+          }}
+          onSelectionChange={setSelectionModel}
+        />
+      )}
+      {tab === TAB_CONCEPTS && (
+        <ConceptsTabContent
+          generating={generating}
+          generateProgress={generateProgress}
+          bulkBusy={bulkBusy}
+          conceptSelectedOpen={conceptSelectedOpen}
+          conceptIssueView={conceptIssueView}
+          conceptFindingRows={conceptFindingRows}
+          conceptRows={conceptRows}
+          findingColumns={findingColumns}
+          conceptColumns={conceptColumns}
+          conceptSelectionModel={conceptSelectionModel}
+          loading={loading}
+          savingConceptId={savingConceptId}
+          onGenerate={() => void handleGenerateDescriptions()}
+          onApproveSelected={() => void handleApproveSelected(conceptSelectedOpen)}
+          onRejectSelected={() => void handleRejectSelected(conceptSelectedOpen)}
+          onIssueViewChange={(next) => {
+            setConceptIssueView(next)
+            setConceptSelectionModel(emptySelection())
+          }}
+          onSelectionChange={setConceptSelectionModel}
+          onProcessRowUpdate={handleConceptRowUpdate}
+          setError={setError}
+        />
       )}
     </Box>
+  )
+}
+
+function WordsTabContent({
+  auditing,
+  spellChecking,
+  running,
+  bulkBusy,
+  selectedOpen,
+  wordIssueView,
+  wordRows,
+  findingColumns,
+  selectionModel,
+  loading,
+  onRunAudit,
+  onRunSpellCheck,
+  onApproveSelected,
+  onRejectSelected,
+  onIssueViewChange,
+  onSelectionChange,
+}) {
+  return (
+    <>
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+          <Button variant="contained" onClick={onRunAudit} disabled={running}>
+            {auditing ? 'Running audit…' : 'Run Audit'}
+          </Button>
+          <Button variant="outlined" onClick={onRunSpellCheck} disabled={running}>
+            {spellChecking ? 'Checking spelling…' : 'Run Spell Check'}
+          </Button>
+          <Button
+            variant="outlined"
+            disabled={bulkBusy || selectedOpen.length < 1}
+            onClick={onApproveSelected}
+          >
+            {bulkBusy ? 'Working…' : 'Approve Selected'}
+          </Button>
+          <Button
+            color="error"
+            variant="outlined"
+            disabled={bulkBusy || selectedOpen.length < 1}
+            onClick={onRejectSelected}
+          >
+            Reject Selected
+          </Button>
+          <Typography variant="body2" color="text.secondary">
+            Approve applies ADD/REMOVE tags or the suggested spelling. Reject closes the finding
+            without changing the catalog.
+          </Typography>
+        </Stack>
+      </Paper>
+      <Paper sx={{ p: 2 }}>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
+          <IssueViewToggle value={wordIssueView} onChange={onIssueViewChange} />
+        </Stack>
+        <Box sx={{ height: { xs: 420, md: 'calc(100vh - 360px)' }, minHeight: 320, width: '100%' }}>
+          <DataGridPro
+            rows={wordRows}
+            columns={findingColumns}
+            checkboxSelection
+            disableRowSelectionExcludeModel
+            disableRowSelectionOnClick
+            rowSelectionModel={selectionModel}
+            onRowSelectionModelChange={onSelectionChange}
+            isRowSelectable={(params) => statusOf(params.row) === 'OPEN'}
+            loading={loading}
+            pagination
+            pageSizeOptions={[25, 50, 100]}
+            initialState={{
+              pagination: { paginationModel: { pageSize: 25 } },
+              sorting: { sortModel: [{ field: 'confidence', sort: 'desc' }] },
+              pinnedColumns: { right: ['actions'] },
+            }}
+            slots={{ toolbar: FindingsToolbar }}
+            slotProps={{
+              toolbar: {
+                showQuickFilter: true,
+                quickFilterProps: { debounceMs: 300 },
+                selectedCount: selectedOpen.length,
+                onApproveSelected,
+                onRejectSelected,
+                busy: bulkBusy,
+              },
+            }}
+            density="compact"
+            localeText={{
+              noRowsLabel:
+                wordIssueView === VIEW_HISTORY
+                  ? 'No approved or rejected findings yet.'
+                  : 'No open findings. Run Audit or Spell Check to generate suggestions.',
+            }}
+          />
+        </Box>
+      </Paper>
+    </>
+  )
+}
+
+function ConceptsTabContent({
+  generating,
+  generateProgress,
+  bulkBusy,
+  conceptSelectedOpen,
+  conceptIssueView,
+  conceptFindingRows,
+  conceptRows,
+  findingColumns,
+  conceptColumns,
+  conceptSelectionModel,
+  loading,
+  savingConceptId,
+  onGenerate,
+  onApproveSelected,
+  onRejectSelected,
+  onIssueViewChange,
+  onSelectionChange,
+  onProcessRowUpdate,
+  setError,
+}) {
+  const progressValue =
+    generateProgress?.total > 0
+      ? Math.round((generateProgress.processed / generateProgress.total) * 100)
+      : 0
+
+  return (
+    <>
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Stack spacing={1.5}>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Button variant="contained" onClick={onGenerate} disabled={generating}>
+              {generating ? 'Generating…' : 'Generate OG Descriptions'}
+            </Button>
+            <Button
+              variant="outlined"
+              disabled={bulkBusy || conceptSelectedOpen.length < 1}
+              onClick={onApproveSelected}
+            >
+              {bulkBusy ? 'Working…' : 'Approve Selected'}
+            </Button>
+            <Button
+              color="error"
+              variant="outlined"
+              disabled={bulkBusy || conceptSelectedOpen.length < 1}
+              onClick={onRejectSelected}
+            >
+              Reject Selected
+            </Button>
+            <Typography variant="body2" color="text.secondary">
+              Generates OG rules in batches of {DESCRIPTION_BATCH_SIZE} and overwrites existing
+              descriptions. Double-click a description cell to edit.
+            </Typography>
+          </Stack>
+          {generateProgress ? (
+            <Box>
+              <Typography variant="body2" sx={{ mb: 0.75 }}>
+                Processing batch {generateProgress.batch} of {generateProgress.batchCount} (
+                {generateProgress.processed}/{generateProgress.total})...
+              </Typography>
+              <LinearProgress variant="determinate" value={progressValue} />
+            </Box>
+          ) : null}
+        </Stack>
+      </Paper>
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
+          <IssueViewToggle value={conceptIssueView} onChange={onIssueViewChange} />
+        </Stack>
+        <Box sx={{ height: { xs: 280, md: 320 }, minHeight: 240, width: '100%' }}>
+          <DataGridPro
+            rows={conceptFindingRows}
+            columns={findingColumns}
+            checkboxSelection
+            disableRowSelectionExcludeModel
+            disableRowSelectionOnClick
+            rowSelectionModel={conceptSelectionModel}
+            onRowSelectionModelChange={onSelectionChange}
+            isRowSelectable={(params) => statusOf(params.row) === 'OPEN'}
+            loading={loading}
+            pagination
+            pageSizeOptions={[25, 50, 100]}
+            initialState={{
+              pagination: { paginationModel: { pageSize: 25 } },
+              sorting: { sortModel: [{ field: 'confidence', sort: 'desc' }] },
+              pinnedColumns: { right: ['actions'] },
+            }}
+            slots={{ toolbar: FindingsToolbar }}
+            slotProps={{
+              toolbar: {
+                showQuickFilter: true,
+                quickFilterProps: { debounceMs: 300 },
+                selectedCount: conceptSelectedOpen.length,
+                onApproveSelected,
+                onRejectSelected,
+                busy: bulkBusy,
+              },
+            }}
+            density="compact"
+            localeText={{
+              noRowsLabel:
+                conceptIssueView === VIEW_HISTORY
+                  ? 'No approved or rejected concept-tag findings yet.'
+                  : 'No open concept-tag findings. Run Audit on the Words tab to generate suggestions.',
+            }}
+          />
+        </Box>
+      </Paper>
+      <Paper sx={{ p: 2 }}>
+        <Box sx={{ height: { xs: 320, md: 'calc(100vh - 560px)' }, minHeight: 240, width: '100%' }}>
+          <DataGridPro
+            rows={conceptRows}
+            columns={conceptColumns}
+            disableRowSelectionOnClick
+            loading={generating || Boolean(savingConceptId)}
+            editMode="cell"
+            processRowUpdate={onProcessRowUpdate}
+            onProcessRowUpdateError={(err) => {
+              setError(err instanceof Error ? err.message : 'Failed to save OG description')
+            }}
+            pagination
+            pageSizeOptions={[25, 50, 100]}
+            initialState={{
+              pagination: { paginationModel: { pageSize: 25 } },
+              sorting: { sortModel: [{ field: 'concept', sort: 'asc' }] },
+            }}
+            slots={{ toolbar: GridToolbar }}
+            slotProps={{
+              toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 300 } },
+            }}
+            density="compact"
+            localeText={{ noRowsLabel: 'No concepts in the catalog yet.' }}
+          />
+        </Box>
+      </Paper>
+    </>
   )
 }

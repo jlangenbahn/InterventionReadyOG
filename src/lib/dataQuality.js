@@ -19,12 +19,12 @@ function findingsModel() {
   return model
 }
 
-async function runNamedMutation(name, fallbackMessage) {
+async function runNamedMutation(name, fallbackMessage, args = {}) {
   const run = client.mutations?.[name]
   if (typeof run !== 'function') {
     throw new Error(`${fallbackMessage} is still deploying. Wait for Amplify to finish, then try again.`)
   }
-  const result = await run({})
+  const result = await run(args)
   throwIfErrors(result)
   const data = result?.data ?? {}
   return {
@@ -45,8 +45,11 @@ export async function runSpellCheck() {
   return runNamedMutation('runSpellCheck', 'Spell check')
 }
 
-export async function generateConceptDescriptions() {
-  return runNamedMutation('generateConceptDescriptions', 'OG description generation')
+export async function generateConceptDescriptions(conceptIds = []) {
+  const ids = (conceptIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean)
+  return runNamedMutation('generateConceptDescriptions', 'OG description generation', {
+    conceptIds: ids,
+  })
 }
 
 export async function approveDataQualityFinding(finding, wordsByConceptId) {
