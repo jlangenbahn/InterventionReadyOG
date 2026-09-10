@@ -1,6 +1,6 @@
 /**
- * Bedrock Converse OG descriptions: sample concepts, generate a strict
- * phonetic rule, then overwrite Concept.ogDescription in place.
+ * Bedrock Converse OG descriptions: scan every concept, generate a strict
+ * phonetic rule from name + category + subcategory, then overwrite ogDescription.
  */
 import {
   BedrockRuntimeClient,
@@ -14,11 +14,12 @@ import {
 } from '@aws-sdk/client-dynamodb';
 
 const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
-const CONCEPT_BATCH_SIZE = 10;
 const SYSTEM_PROMPT = `You are an expert Orton-Gillingham trainer writing instructor-facing concept rules.
 
 For each concept, write a strict OG phonetic or orthographic rule definition:
-- Base the rule on the concept name, category, subcategory, and level.
+- Use the concept name together with its category and subcategory as the primary context. Do not write the rule from the name alone.
+- category and subcategory locate the pattern in the OG sequence (for example phonograms, syllable types, or morphology).
+- Also consider level when it is provided.
 - Describe the grapheme, phonogram, morpheme, or syllable pattern, how it is taught, and typical constraints (position, voiced/unvoiced, syllable type, common exceptions).
 - Do not write a dictionary definition of an example word. Write the teaching rule.
 - Keep each description to 1-3 sentences.
@@ -96,7 +97,7 @@ function projectionFor(fields: string[]) {
   };
 }
 
-async function scanConcepts(tableName: string, limit: number): Promise<CatalogConcept[]> {
+async function scanConcepts(tableName: string): Promise<CatalogConcept[]> {
   const projection = projectionFor(['id', 'concept', 'category', 'subcategory', 'level', 'definition']);
   const concepts: CatalogConcept[] = [];
   let exclusiveStartKey: Record<string, AttributeValue> | undefined;
@@ -107,7 +108,6 @@ async function scanConcepts(tableName: string, limit: number): Promise<CatalogCo
         ProjectionExpression: projection.ProjectionExpression,
         ExpressionAttributeNames: projection.ExpressionAttributeNames,
         ExclusiveStartKey: exclusiveStartKey,
-        Limit: Math.max(limit - concepts.length, 1) * 2,
       }),
     );
     for (const item of result.Items ?? []) {
@@ -122,7 +122,6 @@ async function scanConcepts(tableName: string, limit: number): Promise<CatalogCo
         level: attrString(item, 'level'),
         definition: attrString(item, 'definition'),
       });
-      if (concepts.length >= limit) return concepts;
     }
     exclusiveStartKey = result.LastEvaluatedKey;
   } while (exclusiveStartKey);
@@ -151,12 +150,12 @@ export const handler = async (): Promise<AuditResult> => {
     throw new Error('Concept description generation is not configured in this environment.');
   }
 
-  const concepts = await scanConcepts(conceptTable, CONCEPT_BATCH_SIZE);
+  const concepts = await scanConcepts(conceptTable);
   if (!concepts.length) {
     return { createdCount: 0, message: 'No catalog concepts were available to describe.' };
   }
 
-  const userText = `Write OG rule descriptions for this concept batch:
+  const userText = `Write OG rule descriptions for every concept below. Use each concept's name, category, and subcategory together:
 ${JSON.stringify(concepts.map((concept) => ({
   conceptId: concept.id,
   concept: concept.concept,
@@ -176,7 +175,7 @@ Return JSON only.`;
         system: [{ text: SYSTEM_PROMPT }],
         messages: [{ role: 'user', content: [{ text: userText }] }],
         inferenceConfig: {
-          maxTokens: 2048,
+          maxTokens: 8192,
           temperature: 0.2,
         },
       }),

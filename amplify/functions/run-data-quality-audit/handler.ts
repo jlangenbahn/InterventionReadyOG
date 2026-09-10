@@ -14,7 +14,9 @@ import {
 } from '@aws-sdk/client-dynamodb';
 
 const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
-const WORD_BATCH_SIZE = 10;
+const SCAN_CAP = 500;
+const WORD_BATCH_SIZE = 100;
+const TOTAL_SEGMENTS = 26;
 const SYSTEM_PROMPT = `You are an expert Orton-Gillingham practitioner and catalog editor.
 You review word-to-concept tags in a shared intervention word bank.
 
@@ -115,6 +117,21 @@ function projectionFor(fields: string[]) {
   };
 }
 
+function shuffle<T>(items: T[]) {
+  const next = items.slice();
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const current = next[i];
+    next[i] = next[j];
+    next[j] = current;
+  }
+  return next;
+}
+
+function randomSegment() {
+  return Math.floor(Math.random() * TOTAL_SEGMENTS);
+}
+
 async function scanAll(
   tableName: string,
   fields: string[],
@@ -152,6 +169,7 @@ async function scanAll(
 
 async function scanWords(tableName: string, limit: number): Promise<CatalogWord[]> {
   const projection = projectionFor(['id', 'word', 'isNonsenseWord']);
+  const segment = randomSegment();
   const words: CatalogWord[] = [];
   let exclusiveStartKey: Record<string, AttributeValue> | undefined;
   do {
@@ -161,7 +179,9 @@ async function scanWords(tableName: string, limit: number): Promise<CatalogWord[
         ProjectionExpression: projection.ProjectionExpression,
         ExpressionAttributeNames: projection.ExpressionAttributeNames,
         ExclusiveStartKey: exclusiveStartKey,
-        Limit: Math.max(limit - words.length, 1) * 2,
+        Limit: 500,
+        TotalSegments: TOTAL_SEGMENTS,
+        Segment: segment,
       }),
     );
     for (const item of result.Items ?? []) {
@@ -253,10 +273,11 @@ export const handler = async (): Promise<AuditResult> => {
     throw new Error('Data quality audit is not configured in this environment.');
   }
 
-  const [wordRows, conceptItems] = await Promise.all([
-    scanWords(wordTable, WORD_BATCH_SIZE),
+  const [scannedWords, conceptItems] = await Promise.all([
+    scanWords(wordTable, SCAN_CAP),
     scanAll(conceptTable, ['id', 'concept', 'category', 'subcategory', 'level']),
   ]);
+  const wordRows = shuffle(scannedWords).slice(0, WORD_BATCH_SIZE);
   const concepts = parseConcepts(conceptItems);
   const conceptsById = new Map(concepts.map((concept) => [concept.id, concept]));
 
@@ -314,7 +335,7 @@ Return JSON only.`;
         system: [{ text: SYSTEM_PROMPT }],
         messages: [{ role: 'user', content: [{ text: userText }] }],
         inferenceConfig: {
-          maxTokens: 2048,
+          maxTokens: 8192,
           temperature: 0.2,
         },
       }),

@@ -10,6 +10,8 @@ import {
   Stack,
   Tab,
   Tabs,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import CategoryIcon from '@mui/icons-material/Category'
@@ -32,6 +34,8 @@ import { wordLabelById } from '../../lib/wordConcepts'
 
 const TAB_WORDS = 0
 const TAB_CONCEPTS = 1
+const VIEW_OPEN = 'open'
+const VIEW_HISTORY = 'history'
 
 function emptySelection() {
   return { type: 'include', ids: new Set() }
@@ -54,9 +58,34 @@ function formatConfidence(value) {
   return number.toFixed(2)
 }
 
+function statusOf(row) {
+  return String(row?.status || '').toUpperCase()
+}
+
+function matchesIssueView(row, view) {
+  const status = statusOf(row)
+  if (view === VIEW_HISTORY) return status === 'APPROVED' || status === 'REJECTED'
+  return status === 'OPEN'
+}
+
 function openRows(rows, selectedIds) {
-  return rows.filter(
-    (row) => selectedIds.includes(row.id) && String(row.status || '').toUpperCase() === 'OPEN',
+  return rows.filter((row) => selectedIds.includes(row.id) && statusOf(row) === 'OPEN')
+}
+
+function IssueViewToggle({ value, onChange }) {
+  return (
+    <ToggleButtonGroup
+      exclusive
+      size="small"
+      value={value}
+      onChange={(_event, next) => {
+        if (next) onChange(next)
+      }}
+      aria-label="Issue view"
+    >
+      <ToggleButton value={VIEW_OPEN}>Open Issues</ToggleButton>
+      <ToggleButton value={VIEW_HISTORY}>History</ToggleButton>
+    </ToggleButtonGroup>
   )
 }
 
@@ -121,7 +150,10 @@ export default function DataQualityPanel({
   const [bulkBusy, setBulkBusy] = useState(false)
   const [notice, setNotice] = useState('')
   const [selectionModel, setSelectionModel] = useState(emptySelection)
+  const [conceptSelectionModel, setConceptSelectionModel] = useState(emptySelection)
   const [savingConceptId, setSavingConceptId] = useState(null)
+  const [wordIssueView, setWordIssueView] = useState(VIEW_OPEN)
+  const [conceptIssueView, setConceptIssueView] = useState(VIEW_OPEN)
 
   const conceptById = useMemo(
     () => new Map((concepts ?? []).map((concept) => [concept.id, concept])),
@@ -173,6 +205,20 @@ export default function DataQualityPanel({
     [findings, wordsById, conceptById],
   )
 
+  const wordRows = useMemo(
+    () => rows.filter((row) => matchesIssueView(row, wordIssueView)),
+    [rows, wordIssueView],
+  )
+
+  const conceptFindingRows = useMemo(
+    () =>
+      rows.filter((row) => {
+        const action = String(row.actionType || '').toUpperCase()
+        return (action === 'ADD' || action === 'REMOVE') && matchesIssueView(row, conceptIssueView)
+      }),
+    [rows, conceptIssueView],
+  )
+
   const conceptRows = useMemo(
     () =>
       (concepts ?? [])
@@ -189,10 +235,18 @@ export default function DataQualityPanel({
   )
 
   const selectedIds = useMemo(
-    () => selectedRowIds(selectionModel, rows.map((row) => row.id)),
-    [selectionModel, rows],
+    () => selectedRowIds(selectionModel, wordRows.map((row) => row.id)),
+    [selectionModel, wordRows],
   )
-  const selectedOpen = useMemo(() => openRows(rows, selectedIds), [rows, selectedIds])
+  const selectedOpen = useMemo(() => openRows(wordRows, selectedIds), [wordRows, selectedIds])
+  const conceptSelectedIds = useMemo(
+    () => selectedRowIds(conceptSelectionModel, conceptFindingRows.map((row) => row.id)),
+    [conceptSelectionModel, conceptFindingRows],
+  )
+  const conceptSelectedOpen = useMemo(
+    () => openRows(conceptFindingRows, conceptSelectedIds),
+    [conceptFindingRows, conceptSelectedIds],
+  )
 
   const handleApproveOne = useCallback(
     async (finding) => {
@@ -354,8 +408,8 @@ export default function DataQualityPanel({
     }
   }
 
-  async function handleApproveSelected() {
-    const selected = selectedOpen.map((row) => row.finding)
+  async function handleApproveSelected(selectedFindings) {
+    const selected = (selectedFindings ?? selectedOpen).map((row) => row.finding ?? row).filter((item) => item?.id)
     if (!selected.length) return
     setBulkBusy(true)
     try {
@@ -363,6 +417,7 @@ export default function DataQualityPanel({
       setNotice(`Approved ${count} finding${count === 1 ? '' : 's'}.`)
       setError('')
       setSelectionModel(emptySelection())
+      setConceptSelectionModel(emptySelection())
       await onCatalogReload?.()
       await loadFindings()
     } catch (err) {
@@ -372,8 +427,8 @@ export default function DataQualityPanel({
     }
   }
 
-  async function handleRejectSelected() {
-    const selected = selectedOpen.map((row) => row.finding)
+  async function handleRejectSelected(selectedFindings) {
+    const selected = (selectedFindings ?? selectedOpen).map((row) => row.finding ?? row).filter((item) => item?.id)
     if (!selected.length) return
     setBulkBusy(true)
     try {
@@ -381,6 +436,7 @@ export default function DataQualityPanel({
       setNotice(`Rejected ${count} finding${count === 1 ? '' : 's'}.`)
       setError('')
       setSelectionModel(emptySelection())
+      setConceptSelectionModel(emptySelection())
       await loadFindings()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reject selected findings')
@@ -444,14 +500,78 @@ export default function DataQualityPanel({
               >
                 {generating ? 'Generating…' : 'Generate OG Descriptions'}
               </Button>
+              <Button
+                variant="outlined"
+                disabled={bulkBusy || conceptSelectedOpen.length < 1}
+                onClick={() => void handleApproveSelected(conceptSelectedOpen)}
+              >
+                {bulkBusy ? 'Working…' : 'Approve Selected'}
+              </Button>
+              <Button
+                color="error"
+                variant="outlined"
+                disabled={bulkBusy || conceptSelectedOpen.length < 1}
+                onClick={() => void handleRejectSelected(conceptSelectedOpen)}
+              >
+                Reject Selected
+              </Button>
               <Typography variant="body2" color="text.secondary">
-                Generates rules for 10 concepts and overwrites existing OG descriptions. Double-click a
-                cell to edit a rule by hand.
+                Generates OG rules for every concept and overwrites existing descriptions. Tag
+                findings below can be approved or rejected. Double-click a description cell to edit.
               </Typography>
             </Stack>
           </Paper>
+          <Paper sx={{ p: 2, mb: 2 }}>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
+              <IssueViewToggle
+                value={conceptIssueView}
+                onChange={(next) => {
+                  setConceptIssueView(next)
+                  setConceptSelectionModel(emptySelection())
+                }}
+              />
+            </Stack>
+            <Box sx={{ height: { xs: 280, md: 320 }, minHeight: 240, width: '100%' }}>
+              <DataGridPro
+                rows={conceptFindingRows}
+                columns={findingColumns}
+                checkboxSelection
+                disableRowSelectionExcludeModel
+                disableRowSelectionOnClick
+                rowSelectionModel={conceptSelectionModel}
+                onRowSelectionModelChange={(model) => setConceptSelectionModel(model)}
+                isRowSelectable={(params) => statusOf(params.row) === 'OPEN'}
+                loading={loading}
+                pagination
+                pageSizeOptions={[25, 50, 100]}
+                initialState={{
+                  pagination: { paginationModel: { pageSize: 25 } },
+                  sorting: { sortModel: [{ field: 'confidence', sort: 'desc' }] },
+                  pinnedColumns: { right: ['actions'] },
+                }}
+                slots={{ toolbar: FindingsToolbar }}
+                slotProps={{
+                  toolbar: {
+                    showQuickFilter: true,
+                    quickFilterProps: { debounceMs: 300 },
+                    selectedCount: conceptSelectedOpen.length,
+                    onApproveSelected: () => void handleApproveSelected(conceptSelectedOpen),
+                    onRejectSelected: () => void handleRejectSelected(conceptSelectedOpen),
+                    busy: bulkBusy,
+                  },
+                }}
+                density="compact"
+                localeText={{
+                  noRowsLabel:
+                    conceptIssueView === VIEW_HISTORY
+                      ? 'No approved or rejected concept-tag findings yet.'
+                      : 'No open concept-tag findings. Run Audit on the Words tab to generate suggestions.',
+                }}
+              />
+            </Box>
+          </Paper>
           <Paper sx={{ p: 2 }}>
-            <Box sx={{ height: { xs: 420, md: 'calc(100vh - 320px)' }, minHeight: 320, width: '100%' }}>
+            <Box sx={{ height: { xs: 320, md: 'calc(100vh - 560px)' }, minHeight: 240, width: '100%' }}>
               <DataGridPro
                 rows={conceptRows}
                 columns={conceptColumns}
@@ -491,7 +611,7 @@ export default function DataQualityPanel({
               <Button
                 variant="outlined"
                 disabled={bulkBusy || selectedOpen.length < 1}
-                onClick={() => void handleApproveSelected()}
+                onClick={() => void handleApproveSelected(selectedOpen)}
               >
                 {bulkBusy ? 'Working…' : 'Approve Selected'}
               </Button>
@@ -499,7 +619,7 @@ export default function DataQualityPanel({
                 color="error"
                 variant="outlined"
                 disabled={bulkBusy || selectedOpen.length < 1}
-                onClick={() => void handleRejectSelected()}
+                onClick={() => void handleRejectSelected(selectedOpen)}
               >
                 Reject Selected
               </Button>
@@ -510,25 +630,31 @@ export default function DataQualityPanel({
             </Stack>
           </Paper>
           <Paper sx={{ p: 2 }}>
-            <Box sx={{ height: { xs: 420, md: 'calc(100vh - 320px)' }, minHeight: 320, width: '100%' }}>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
+              <IssueViewToggle
+                value={wordIssueView}
+                onChange={(next) => {
+                  setWordIssueView(next)
+                  setSelectionModel(emptySelection())
+                }}
+              />
+            </Stack>
+            <Box sx={{ height: { xs: 420, md: 'calc(100vh - 360px)' }, minHeight: 320, width: '100%' }}>
               <DataGridPro
-                rows={rows}
+                rows={wordRows}
                 columns={findingColumns}
                 checkboxSelection
                 disableRowSelectionExcludeModel
                 disableRowSelectionOnClick
                 rowSelectionModel={selectionModel}
                 onRowSelectionModelChange={(model) => setSelectionModel(model)}
-                isRowSelectable={(params) => String(params.row.status || '').toUpperCase() === 'OPEN'}
+                isRowSelectable={(params) => statusOf(params.row) === 'OPEN'}
                 loading={loading}
                 pagination
                 pageSizeOptions={[25, 50, 100]}
                 initialState={{
                   pagination: { paginationModel: { pageSize: 25 } },
                   sorting: { sortModel: [{ field: 'confidence', sort: 'desc' }] },
-                  filter: {
-                    filterModel: { items: [{ field: 'status', operator: 'equals', value: 'OPEN' }] },
-                  },
                   pinnedColumns: { right: ['actions'] },
                 }}
                 slots={{ toolbar: FindingsToolbar }}
@@ -537,14 +663,17 @@ export default function DataQualityPanel({
                     showQuickFilter: true,
                     quickFilterProps: { debounceMs: 300 },
                     selectedCount: selectedOpen.length,
-                    onApproveSelected: () => void handleApproveSelected(),
-                    onRejectSelected: () => void handleRejectSelected(),
+                    onApproveSelected: () => void handleApproveSelected(selectedOpen),
+                    onRejectSelected: () => void handleRejectSelected(selectedOpen),
                     busy: bulkBusy,
                   },
                 }}
                 density="compact"
                 localeText={{
-                  noRowsLabel: 'No data quality findings yet. Run Audit or Spell Check to generate suggestions.',
+                  noRowsLabel:
+                    wordIssueView === VIEW_HISTORY
+                      ? 'No approved or rejected findings yet.'
+                      : 'No open findings. Run Audit or Spell Check to generate suggestions.',
                 }}
               />
             </Box>

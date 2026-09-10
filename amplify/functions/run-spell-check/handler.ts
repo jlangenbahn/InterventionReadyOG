@@ -14,7 +14,9 @@ import {
 } from '@aws-sdk/client-dynamodb';
 
 const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
-const WORD_BATCH_SIZE = 10;
+const SCAN_CAP = 500;
+const WORD_BATCH_SIZE = 100;
+const TOTAL_SEGMENTS = 26;
 const SYSTEM_PROMPT = `You are an expert copy editor for an Orton-Gillingham word catalog.
 
 Flag only genuine English misspellings in real words:
@@ -102,6 +104,21 @@ function projectionFor(fields: string[]) {
   };
 }
 
+function shuffle<T>(items: T[]) {
+  const next = items.slice();
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const current = next[i];
+    next[i] = next[j];
+    next[j] = current;
+  }
+  return next;
+}
+
+function randomSegment() {
+  return Math.floor(Math.random() * TOTAL_SEGMENTS);
+}
+
 function normalizeConfidence(value: unknown) {
   const number = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(number)) return null;
@@ -111,6 +128,7 @@ function normalizeConfidence(value: unknown) {
 
 async function scanRealWords(tableName: string, limit: number): Promise<CatalogWord[]> {
   const projection = projectionFor(['id', 'word', 'isNonsenseWord']);
+  const segment = randomSegment();
   const words: CatalogWord[] = [];
   let exclusiveStartKey: Record<string, AttributeValue> | undefined;
   do {
@@ -120,7 +138,9 @@ async function scanRealWords(tableName: string, limit: number): Promise<CatalogW
         ProjectionExpression: projection.ProjectionExpression,
         ExpressionAttributeNames: projection.ExpressionAttributeNames,
         ExclusiveStartKey: exclusiveStartKey,
-        Limit: Math.max(limit - words.length, 1) * 4,
+        Limit: 500,
+        TotalSegments: TOTAL_SEGMENTS,
+        Segment: segment,
       }),
     );
     for (const item of result.Items ?? []) {
@@ -163,7 +183,7 @@ export const handler = async (): Promise<AuditResult> => {
     throw new Error('Spell check is not configured in this environment.');
   }
 
-  const wordRows = await scanRealWords(wordTable, WORD_BATCH_SIZE);
+  const wordRows = shuffle(await scanRealWords(wordTable, SCAN_CAP)).slice(0, WORD_BATCH_SIZE);
   if (!wordRows.length) {
     return { createdCount: 0, message: 'No real catalog words were available to spell-check.' };
   }
@@ -181,7 +201,7 @@ Return JSON only.`;
         system: [{ text: SYSTEM_PROMPT }],
         messages: [{ role: 'user', content: [{ text: userText }] }],
         inferenceConfig: {
-          maxTokens: 2048,
+          maxTokens: 8192,
           temperature: 0.2,
         },
       }),
