@@ -1,5 +1,5 @@
 /**
- * Data-quality audit client: placeholder mutation plus sequential approve.
+ * Data-quality audit client: run catalog mutations and sequential approve/reject.
  */
 import { client } from './amplifyClient'
 import { listAll } from './paginate'
@@ -19,33 +19,62 @@ function findingsModel() {
   return model
 }
 
+async function runNamedMutation(name, fallbackMessage) {
+  const run = client.mutations?.[name]
+  if (typeof run !== 'function') {
+    throw new Error(`${fallbackMessage} is still deploying. Wait for Amplify to finish, then try again.`)
+  }
+  const result = await run({})
+  throwIfErrors(result)
+  const data = result?.data ?? {}
+  return {
+    createdCount: Number(data.createdCount ?? 0),
+    message: String(data.message || fallbackMessage),
+  }
+}
+
 export async function fetchDataQualityFindings() {
   return listAll(findingsModel())
 }
 
 export async function runDataQualityAudit() {
-  const runAudit = client.mutations?.runDataQualityAudit
-  if (typeof runAudit !== 'function') {
-    throw new Error('Data quality audit is still deploying. Wait for Amplify to finish, then try again.')
-  }
-  const result = await runAudit({})
-  throwIfErrors(result)
-  const data = result?.data ?? {}
-  return {
-    createdCount: Number(data.createdCount ?? 0),
-    message: String(data.message || 'Audit finished.'),
-  }
+  return runNamedMutation('runDataQualityAudit', 'Data quality audit')
+}
+
+export async function runSpellCheck() {
+  return runNamedMutation('runSpellCheck', 'Spell check')
+}
+
+export async function generateConceptDescriptions() {
+  return runNamedMutation('generateConceptDescriptions', 'OG description generation')
 }
 
 export async function approveDataQualityFinding(finding, wordsByConceptId) {
   if (!finding?.id) throw new Error('Finding is required')
   const wordId = finding.wordId
+  const action = String(finding.actionType || '').toUpperCase()
+
+  if (action === 'SPELLING') {
+    const next = String(finding.suggestedSpelling || '').trim()
+    if (!wordId || !next) throw new Error('Finding is missing a word or suggested spelling.')
+    if (!client.models.Word) {
+      throw new Error('The word catalog is still deploying. Wait for Amplify to finish, then try again.')
+    }
+    throwIfErrors(await client.models.Word.update({ id: wordId, word: next }))
+    throwIfErrors(
+      await findingsModel().update({
+        id: finding.id,
+        status: 'APPROVED',
+      }),
+    )
+    return
+  }
+
   const conceptId = finding.recommendedConceptId
   if (!wordId || !conceptId) throw new Error('Finding is missing a word or concept.')
 
   const links = assignedConceptLinks(wordId, wordsByConceptId)
   const hasConcept = links.some((link) => link.conceptId === conceptId)
-  const action = String(finding.actionType || '').toUpperCase()
 
   if (action === 'ADD' && !hasConcept) {
     await saveWordConcepts({
@@ -73,6 +102,24 @@ export async function approveDataQualityFindings(findings, wordsByConceptId) {
   const rows = (findings ?? []).filter((item) => item?.id)
   for (const finding of rows) {
     await approveDataQualityFinding(finding, wordsByConceptId)
+  }
+  return rows.length
+}
+
+export async function rejectDataQualityFinding(finding) {
+  if (!finding?.id) throw new Error('Finding is required')
+  throwIfErrors(
+    await findingsModel().update({
+      id: finding.id,
+      status: 'REJECTED',
+    }),
+  )
+}
+
+export async function rejectDataQualityFindings(findings) {
+  const rows = (findings ?? []).filter((item) => item?.id)
+  for (const finding of rows) {
+    await rejectDataQualityFinding(finding)
   }
   return rows.length
 }

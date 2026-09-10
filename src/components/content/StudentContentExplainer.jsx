@@ -39,8 +39,7 @@ const COPY = {
   catalog: {
     title: () => 'Shared concept catalog',
     body: () => [
-      'This tab is the shared word-concept catalog for your account, not one student’s lists.',
-      'Lists, sentences, and passages you create on the other tabs are saved to the selected student only.',
+      'This is the shared word-concept catalog for your account, not one student’s lists.',
       'Select a concept to preview its labeled words. Renaming a concept updates the label everywhere it is used.',
     ],
     emptyHint: () => 'Select a concept on the left to preview its details and tagged words.',

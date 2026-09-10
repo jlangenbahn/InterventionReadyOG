@@ -41,6 +41,7 @@ import Groups3Icon from '@mui/icons-material/Groups3'
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary'
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
 import LessonPlanPanel from '../lesson-plan/LessonPlanPanel'
 import DataPanel from '../data/DataPanel'
 import ContentPanel from '../content/ContentPanel'
@@ -72,8 +73,7 @@ const DRAWER_WIDTH = 300
 const HEADER_BRAND_SIZE = 48
 const TAB_LESSON_PLAN = 0
 const TAB_SCOPE = 1
-const TAB_CONTENT = 2
-const TAB_DATA = 3
+const TAB_DATA = 2
 
 function buildWordsByConceptId(conceptWords, wordsById) {
   const map = new Map()
@@ -102,6 +102,7 @@ export default function AppShell({ user, signOut }) {
   const [mainTab, setMainTab] = useState(0)
   const [concepts, setConcepts] = useState([])
   const [wordsByConceptId, setWordsByConceptId] = useState(() => new Map())
+  const [catalogWords, setCatalogWords] = useState([])
   const [loadingStudents, setLoadingStudents] = useState(true)
   const [loadingCatalog, setLoadingCatalog] = useState(true)
   const [catalogStatus, setCatalogStatus] = useState('Loading concept/word catalog…')
@@ -133,6 +134,7 @@ export default function AppShell({ user, signOut }) {
   const [viewingResources, setViewingResources] = useState(false)
   const [viewingDataQuality, setViewingDataQuality] = useState(false)
   const [viewingParadigmSettings, setViewingParadigmSettings] = useState(false)
+  const [viewingContent, setViewingContent] = useState(false)
   const [studentsNavOpen, setStudentsNavOpen] = useState(true)
   const [groupsNavOpen, setGroupsNavOpen] = useState(true)
   const [scheduleCreateNonce, setScheduleCreateNonce] = useState(0)
@@ -155,7 +157,8 @@ export default function AppShell({ user, signOut }) {
     !viewingSchedule &&
     !viewingResources &&
     !viewingDataQuality &&
-    !viewingParadigmSettings
+    !viewingParadigmSettings &&
+    !viewingContent
 
   function setAppView(view) {
     setViewingHome(view === 'home')
@@ -163,6 +166,7 @@ export default function AppShell({ user, signOut }) {
     setViewingResources(view === 'resources')
     setViewingDataQuality(view === 'dataQuality')
     setViewingParadigmSettings(view === 'paradigmSettings')
+    setViewingContent(view === 'content')
     setError('')
   }
 
@@ -220,8 +224,10 @@ export default function AppShell({ user, signOut }) {
       )
       const wordsById = new Map(wordItems.map((w) => [w.id, w]))
       const indexed = buildWordsByConceptId(linkItems, wordsById)
+      wordItems.sort((a, b) => String(a.word ?? '').localeCompare(String(b.word ?? '')))
 
       setConcepts(conceptItems)
+      setCatalogWords(wordItems)
       setWordsByConceptId(indexed)
       setCatalogStatus(
         `${conceptItems.length} concepts · ${wordItems.length} words · ${linkItems.length} mappings`,
@@ -413,6 +419,17 @@ export default function AppShell({ user, signOut }) {
     if (viewingParadigmSettings) return
     requestNavigation(() => {
       setAppView('paradigmSettings')
+      setSelectedStudentId(null)
+      setSelectedGroupId(null)
+      setCreatingGroup(false)
+      setScopeLocked(true)
+    })
+  }
+
+  function handleSelectContent() {
+    if (viewingContent) return
+    requestNavigation(() => {
+      setAppView('content')
       setSelectedStudentId(null)
       setSelectedGroupId(null)
       setCreatingGroup(false)
@@ -839,6 +856,15 @@ export default function AppShell({ user, signOut }) {
           </Collapse>
           <Divider />
           <NavSectionHeader
+            title="Content"
+            selected={viewingContent}
+            onSelect={handleSelectContent}
+            icon={
+              <MenuBookIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+            }
+          />
+          <Divider />
+          <NavSectionHeader
             title="Data Quality"
             selected={viewingDataQuality}
             onSelect={handleSelectDataQuality}
@@ -890,18 +916,31 @@ export default function AppShell({ user, signOut }) {
           !viewingSchedule &&
           !viewingResources &&
           !viewingDataQuality &&
-          !viewingParadigmSettings) ? (
+          !viewingParadigmSettings &&
+          !viewingContent) ? (
           <HomePanel
             instructor={user?.signInDetails?.loginId ?? user?.username ?? ''}
             onAddStudent={openCreateStudent}
             onOpenSchedule={handleSelectSchedule}
             onOpenResources={handleSelectResources}
           />
+        ) : viewingContent ? (
+          <ContentPanel
+            concepts={concepts}
+            wordsByConceptId={wordsByConceptId}
+            catalogWords={catalogWords}
+            loadingCatalog={loadingCatalog}
+            onCatalogReload={loadCatalog}
+            setError={setError}
+            onConceptUpdated={handleConceptUpdated}
+          />
         ) : viewingDataQuality ? (
           <DataQualityPanel
             concepts={concepts}
             wordsByConceptId={wordsByConceptId}
+            catalogWords={catalogWords}
             onCatalogReload={loadCatalog}
+            onConceptUpdated={handleConceptUpdated}
             setError={setError}
           />
         ) : viewingParadigmSettings ? (
@@ -983,10 +1022,9 @@ export default function AppShell({ user, signOut }) {
               </Button>
             </Stack>
 
-            <Tabs value={mainTab} onChange={handleMainTabChange} sx={{ mb: 2 }}>
+            <Tabs value={mainTab > TAB_DATA ? TAB_DATA : mainTab} onChange={handleMainTabChange} sx={{ mb: 2 }}>
               <Tab label="Lesson Plan" />
               <Tab label="Scope & Sequence" />
-              <Tab label="Content" />
               <Tab label="Data" />
             </Tabs>
 
@@ -1022,19 +1060,6 @@ export default function AppShell({ user, signOut }) {
                 locked={scopeLocked}
                 onLockedChange={setScopeLocked}
                 saveRef={scopeSaveRef}
-              />
-            ) : mainTab === TAB_CONTENT ? (
-              <ContentPanel
-                student={selectedStudent}
-                concepts={concepts}
-                wordsByConceptId={wordsByConceptId}
-                loadingCatalog={loadingCatalog}
-                studentLists={studentLists}
-                loadingLists={loadingLists}
-                onReloadLists={loadStudentLists}
-                setError={setError}
-                onConceptUpdated={handleConceptUpdated}
-                onCatalogReload={loadCatalog}
               />
             ) : mainTab === TAB_DATA ? (
               <DataPanel

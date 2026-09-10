@@ -74,8 +74,13 @@ export async function saveWordConcepts({ wordId, nextConceptIds, currentLinks = 
   }
 }
 
-export function wordLabelById(wordsByConceptId) {
+export function wordLabelById(wordsByConceptId, catalogWords = []) {
   const map = new Map()
+  for (const word of catalogWords ?? []) {
+    const id = word?.id
+    const label = String(word?.word ?? '').trim()
+    if (id && label) map.set(id, label)
+  }
   for (const rows of wordsByConceptId?.values?.() ?? []) {
     for (const row of rows ?? []) {
       const id = row?.wordId || row?.id
@@ -84,4 +89,32 @@ export function wordLabelById(wordsByConceptId) {
     }
   }
   return map
+}
+
+export function uniqueCatalogWords(catalogWords = [], wordsByConceptId) {
+  const byId = new Map()
+  for (const word of catalogWords ?? []) {
+    if (!word?.id) continue
+    byId.set(word.id, {
+      id: word.id,
+      wordId: word.id,
+      word: word.word,
+      isNonsenseWord: Boolean(word.isNonsenseWord),
+    })
+  }
+  for (const rows of wordsByConceptId?.values?.() ?? []) {
+    for (const row of rows ?? []) {
+      const id = row?.wordId || row?.id
+      if (!id || byId.has(id)) continue
+      byId.set(id, {
+        id,
+        wordId: id,
+        word: row.word,
+        isNonsenseWord: Boolean(row.isNonsenseWord),
+      })
+    }
+  }
+  return [...byId.values()].sort((a, b) =>
+    String(a.word ?? '').localeCompare(String(b.word ?? '')),
+  )
 }
