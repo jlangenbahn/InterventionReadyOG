@@ -249,7 +249,7 @@ export default function ParadigmSettingsPanel({ concepts = [], setError }) {
     <Box>
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
         <AccountTreeIcon color="action" />
-        <Typography variant="h5">Paradigm Settings</Typography>
+        <Typography variant="h5">Pedagogy</Typography>
         <HelpTip title="Base concepts are the shared catalog used by lessons and Scope & Sequence. A paradigm is an alternate naming overlay — it does not create new catalog concepts." />
         {notice ? <Chip size="small" color="success" label={notice} /> : null}
         <Box sx={{ flexGrow: 1 }} />

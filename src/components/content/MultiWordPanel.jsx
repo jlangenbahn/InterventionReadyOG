@@ -27,6 +27,7 @@ import ConfirmDeleteDialog from '../shared/ConfirmDeleteDialog'
 import HelpTip from '../shared/HelpTip'
 import StudentContentExplainer from './StudentContentExplainer'
 import {
+  fetchCatalogSentencesAndPassages,
   fetchStudentSentencesAndPassages,
   parseListData,
   parseScopeAndSequence,
@@ -81,6 +82,7 @@ function ConceptFilterAutocomplete({
   multiple = false,
   required = false,
   disabledIds = [],
+  groupByScope = true,
 }) {
   const disabled = new Set(disabledIds)
   return (
@@ -92,7 +94,7 @@ function ConceptFilterAutocomplete({
       options={options}
       value={value}
       onChange={(_event, next) => onChange(next)}
-      groupBy={(option) => (option.inScope ? 'In scope' : 'Not in scope')}
+      groupBy={groupByScope ? (option) => (option.inScope ? 'In scope' : 'Not in scope') : undefined}
       getOptionLabel={(option) => option?.concept || ''}
       isOptionEqualToValue={(option, selected) => option.id === selected.id}
       getOptionDisabled={(option) => disabled.has(option.id)}
@@ -165,6 +167,7 @@ function ConceptFilterAutocomplete({
 
 export default function MultiWordPanel({
   student,
+  catalogMode = false,
   concepts = [],
   wordsByConceptId,
   loadingCatalog = false,
@@ -187,14 +190,16 @@ export default function MultiWordPanel({
   const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
-    if (!student?.id) {
+    if (!catalogMode && !student?.id) {
       setSentences([])
       setPassages([])
       return { sentences: [], passages: [] }
     }
     setLoading(true)
     try {
-      const data = await fetchStudentSentencesAndPassages(student.id)
+      const data = catalogMode
+        ? await fetchCatalogSentencesAndPassages()
+        : await fetchStudentSentencesAndPassages(student.id)
       setSentences(data.sentences ?? [])
       setPassages(data.passages ?? [])
       setError('')
@@ -205,7 +210,7 @@ export default function MultiWordPanel({
     } finally {
       setLoading(false)
     }
-  }, [student?.id, setError])
+  }, [catalogMode, student?.id, setError])
 
   useEffect(() => {
     void load()
@@ -234,6 +239,18 @@ export default function MultiWordPanel({
   )
 
   const conceptOptions = useMemo(() => {
+    if (catalogMode) {
+      return (concepts ?? [])
+        .filter((concept) => concept?.id)
+        .map((concept) => ({
+          id: concept.id,
+          concept: concept.concept || 'Untitled concept',
+          masteryStatus: 'unknown',
+          inScope: true,
+          sequence: null,
+        }))
+        .sort((a, b) => a.concept.localeCompare(b.concept))
+    }
     const inventory = parseScopeAndSequence(student?.scopeAndSequence)
     const byConceptId = new Map((inventory ?? []).map((entry) => [entry.conceptId, entry]))
     return (concepts ?? [])
@@ -258,11 +275,16 @@ export default function MultiWordPanel({
         if (seqA !== seqB) return seqA - seqB
         return a.concept.localeCompare(b.concept)
       })
-  }, [concepts, student?.scopeAndSequence])
+  }, [catalogMode, concepts, student?.scopeAndSequence])
 
   const lessonConcepts = useMemo(
-    () => lessonConceptsFromScope(concepts, parseScopeAndSequence(student?.scopeAndSequence)),
-    [concepts, student?.scopeAndSequence],
+    () =>
+      catalogMode
+        ? (concepts ?? [])
+            .filter((concept) => concept?.id)
+            .map((concept) => ({ ...concept, role: 'review' }))
+        : lessonConceptsFromScope(concepts, parseScopeAndSequence(student?.scopeAndSequence)),
+    [catalogMode, concepts, student?.scopeAndSequence],
   )
 
   const browseItems = useMemo(() => {
@@ -529,7 +551,7 @@ export default function MultiWordPanel({
     }
   }
 
-  if (!student) {
+  if (!catalogMode && !student) {
     return (
       <Typography color="text.secondary">
         Select a student to browse or create sentences and passages.
@@ -595,7 +617,9 @@ export default function MultiWordPanel({
                 title={
                   browseItems.length
                     ? `Click a ${kind} to preview tagging. Row icons edit or delete.`
-                    : `${kind === 'passage' ? 'Passages' : 'Sentences'} on this tab belong to this student only. Create the first one to get started.`
+                    : catalogMode
+                      ? `${kind === 'passage' ? 'Passages' : 'Sentences'} on this tab are shared catalog items, not assigned to a student. Create the first one to get started.`
+                      : `${kind === 'passage' ? 'Passages' : 'Sentences'} on this tab belong to this student only. Create the first one to get started.`
                 }
               />
               {notice ? <Chip size="small" color="success" label={notice} /> : null}
@@ -628,14 +652,19 @@ export default function MultiWordPanel({
               >
                 <Stack spacing={1.5} alignItems="center" textAlign="center" sx={{ maxWidth: 440 }}>
                   <Typography variant="h6">
-                    {studentDisplayName(student)} doesn’t have any {kind}s yet
+                    {catalogMode
+                      ? `No shared ${kind}s yet`
+                      : `${studentDisplayName(student)} doesn’t have any ${kind}s yet`}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Create the first {kind} for this student. {kind === 'passage' ? 'Passages' : 'Sentences'}{' '}
-                    on this tab belong to {studentDisplayName(student)} only.
+                    {catalogMode
+                      ? `Create a catalog ${kind} here. Student-specific ${kind}s stay on each student’s page.`
+                      : `Create the first ${kind} for this student. ${kind === 'passage' ? 'Passages' : 'Sentences'} on this tab belong to ${studentDisplayName(student)} only.`}
                   </Typography>
                   <Button variant="contained" startIcon={<AddIcon />} onClick={handleNew}>
-                    Create {studentDisplayName(student)}’s first {kind}
+                    {catalogMode
+                      ? `Create first catalog ${kind}`
+                      : `Create ${studentDisplayName(student)}’s first ${kind}`}
                   </Button>
                 </Stack>
               </Box>
@@ -659,6 +688,7 @@ export default function MultiWordPanel({
                   value={focusValue}
                   onChange={handleFocusChange}
                   helperText="Absolutely match this focus concept. Leave empty to browse all."
+                  groupByScope={!catalogMode}
                 />
                 <ConceptFilterAutocomplete
                   multiple
@@ -668,6 +698,7 @@ export default function MultiWordPanel({
                   onChange={handleAlsoChange}
                   disabledIds={focusConceptId ? [focusConceptId] : []}
                   helperText="Optional. Keep items that also include every selected concept."
+                  groupByScope={!catalogMode}
                 />
               </Stack>
               <Box sx={{ height: { xs: 360, md: 'calc(100vh - 420px)' }, minHeight: 280, width: '100%' }}>
@@ -705,6 +736,7 @@ export default function MultiWordPanel({
             <>
               <CreateMultiWordPanel
                 student={student}
+                catalogMode={catalogMode}
                 concepts={concepts}
                 wordsByConceptId={wordsByConceptId}
                 loadingCatalog={loadingCatalog}
@@ -736,7 +768,15 @@ export default function MultiWordPanel({
         {mode === MODE_VIEW && !selectedItem ? (
           <Paper variant="outlined" sx={{ p: 2 }}>
             <StudentContentExplainer
-              kind={kind === 'passage' ? 'passage' : 'sentence'}
+              kind={
+                catalogMode
+                  ? kind === 'passage'
+                    ? 'catalogPassage'
+                    : 'catalogSentence'
+                  : kind === 'passage'
+                    ? 'passage'
+                    : 'sentence'
+              }
               student={student}
               empty={browseItems.length === 0}
               selectHint={

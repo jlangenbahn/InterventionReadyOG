@@ -39,12 +39,18 @@ export async function fetchDataQualityFindings() {
   return listAll(findingsModel())
 }
 
-export async function runDataQualityAudit() {
-  return runNamedMutation('runDataQualityAudit', 'Data quality audit')
+export async function runDataQualityAudit(sampleSize) {
+  const size = Number(sampleSize)
+  return runNamedMutation('runDataQualityAudit', 'Data quality audit', {
+    sampleSize: size === 10 || size === 25 || size === 100 ? size : 25,
+  })
 }
 
-export async function runSpellCheck() {
-  return runNamedMutation('runSpellCheck', 'Spell check')
+export async function runSpellCheck(wordIds = []) {
+  const ids = [...new Set((wordIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean))]
+  return runNamedMutation('runSpellCheck', 'Spell check', {
+    wordIds: ids,
+  })
 }
 
 export async function generateConceptDescriptions(conceptIds = []) {

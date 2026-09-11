@@ -15,10 +15,14 @@ import {
 
 const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 const SCAN_CAP = 500;
-const WORD_BATCH_SIZE = 100;
+const AUDIT_SIZES = new Set([10, 25, 100]);
+const DEFAULT_SAMPLE_SIZE = 25;
+const OG_DESCRIPTION_MAX = 500;
 const TOTAL_SEGMENTS = 26;
 const SYSTEM_PROMPT = `You are an expert Orton-Gillingham practitioner and catalog editor.
 Review this specific batch of words and their current concept tags.
+
+Each catalog concept may include an ogDescription. That field is the program's definition of the concept — what the grapheme, phonogram, morpheme, or syllable pattern means in this catalog. Use ogDescription whenever it is present so you judge tags against how this program defines the concept, not a generic reading of the concept name.
 
 Recommend only high-confidence corrections:
 - ADD a concept when the word clearly practices that grapheme, phonogram, morpheme, or syllable pattern and it is missing.
@@ -68,12 +72,19 @@ type AuditResult = {
   message: string;
 };
 
+type AuditEvent = {
+  arguments?: {
+    sampleSize?: number | null;
+  };
+};
+
 type CatalogConcept = {
   id: string;
   concept: string;
   category: string;
   subcategory: string;
   level: string;
+  ogDescription: string;
 };
 
 type CatalogWord = {
@@ -142,6 +153,17 @@ function shuffle<T>(items: T[]) {
 
 function randomSegment() {
   return Math.floor(Math.random() * TOTAL_SEGMENTS);
+}
+
+function resolveSampleSize(raw: unknown) {
+  const number = Number(raw);
+  return AUDIT_SIZES.has(number) ? number : DEFAULT_SAMPLE_SIZE;
+}
+
+function truncateOgDescription(value: string) {
+  const text = value.trim();
+  if (text.length <= OG_DESCRIPTION_MAX) return text;
+  return `${text.slice(0, OG_DESCRIPTION_MAX - 1)}…`;
 }
 
 async function scanAll(
@@ -221,6 +243,7 @@ function parseConcepts(items: Record<string, AttributeValue>[]): CatalogConcept[
       category: attrString(item, 'category'),
       subcategory: attrString(item, 'subcategory'),
       level: attrString(item, 'level'),
+      ogDescription: truncateOgDescription(attrString(item, 'ogDescription')),
     }))
     .filter((concept) => concept.id)
     .sort((a, b) => a.concept.localeCompare(b.concept));
@@ -276,7 +299,7 @@ function parseFindings(raw: Record<string, unknown> | null, words: CatalogWord[]
   return findings;
 }
 
-export const handler = async (): Promise<AuditResult> => {
+export const handler = async (event: AuditEvent = {}): Promise<AuditResult> => {
   const wordTable = envVar('WORD_TABLE_NAME');
   const conceptTable = envVar('CONCEPT_TABLE_NAME');
   const conceptWordTable = envVar('CONCEPT_WORD_TABLE_NAME');
@@ -285,11 +308,12 @@ export const handler = async (): Promise<AuditResult> => {
     throw new Error('Data quality audit is not configured in this environment.');
   }
 
+  const sampleSize = resolveSampleSize(event.arguments?.sampleSize);
   const [scannedWords, conceptItems] = await Promise.all([
-    scanWords(wordTable, SCAN_CAP),
-    scanAll(conceptTable, ['id', 'concept', 'category', 'subcategory', 'level']),
+    scanWords(wordTable, Math.max(SCAN_CAP, sampleSize)),
+    scanAll(conceptTable, ['id', 'concept', 'category', 'subcategory', 'level', 'ogDescription']),
   ]);
-  const wordRows = shuffle(scannedWords).slice(0, WORD_BATCH_SIZE);
+  const wordRows = shuffle(scannedWords).slice(0, sampleSize);
   const concepts = parseConcepts(conceptItems);
   const conceptsById = new Map(concepts.map((concept) => [concept.id, concept]));
 
@@ -315,13 +339,14 @@ export const handler = async (): Promise<AuditResult> => {
     word.taggedConcepts.push(concept);
   }
 
-  const userText = `Catalog concepts (use these ids only):
+  const userText = `Catalog concepts (use these ids only; ogDescription is this program's definition of the concept):
 ${JSON.stringify(concepts.map((concept) => ({
   id: concept.id,
   concept: concept.concept,
   category: concept.category,
   subcategory: concept.subcategory,
   level: concept.level,
+  ogDescription: concept.ogDescription || undefined,
 })))}
 
 Word batch with current tags:
@@ -334,6 +359,7 @@ ${JSON.stringify(wordRows.map((word) => ({
     concept: concept.concept,
     category: concept.category,
     level: concept.level,
+    ogDescription: concept.ogDescription || undefined,
   })),
 })))}`;
 

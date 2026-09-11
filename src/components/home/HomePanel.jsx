@@ -14,6 +14,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 import Groups3Icon from '@mui/icons-material/Groups3'
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
 import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt'
 import PlayCircleFilledIcon from '@mui/icons-material/PlayCircleFilled'
 import PrintOutlinedIcon from '@mui/icons-material/PrintOutlined'
@@ -22,6 +23,9 @@ import VideoLibraryIcon from '@mui/icons-material/VideoLibrary'
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined'
 import { BRAND } from '../../theme'
 import readyOgLogo from '../../assets/readyog-logo.png'
+import { DictionaryEntryCard } from '../data/DictionaryWordTooltip'
+import { pickWordOfTheDay } from '../../lib/dictionaryData'
+import { assignedConcepts } from '../../lib/wordConcepts'
 
 const PILLARS = [
   {
@@ -224,12 +228,97 @@ function PillarCard({ pillar }) {
   )
 }
 
+function WordOfTheDayCard({ word, data, taggedConcepts }) {
+  const today = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  }).format(new Date())
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        position: 'relative',
+        overflow: 'hidden',
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: BRAND.goldBorder,
+        bgcolor: BRAND.navy,
+        color: '#fff',
+      }}
+    >
+      <Box
+        aria-hidden
+        sx={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: `
+            radial-gradient(ellipse at 8% 0%, rgba(212,175,55,0.28) 0%, transparent 42%),
+            radial-gradient(ellipse at 92% 80%, rgba(168,198,250,0.2) 0%, transparent 46%),
+            linear-gradient(180deg, ${BRAND.navy} 0%, ${BRAND.navyDark} 100%)
+          `,
+        }}
+      />
+      <Box sx={{ position: 'relative', p: { xs: 2.5, md: 3 } }}>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
+          <Box
+            sx={{
+              width: 40,
+              height: 40,
+              borderRadius: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: BRAND.goldHover,
+              color: BRAND.navy,
+              flexShrink: 0,
+            }}
+          >
+            <MenuBookIcon fontSize="small" />
+          </Box>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              variant="caption"
+              sx={{ fontWeight: 800, letterSpacing: '0.08em', color: BRAND.goldMid, display: 'block' }}
+            >
+              WORD OF THE DAY
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.78)' }}>
+              {today}
+            </Typography>
+          </Box>
+        </Stack>
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2.25,
+            borderRadius: 1.5,
+            bgcolor: '#f7f4ee',
+            border: '1px solid rgba(212,175,55,0.35)',
+          }}
+        >
+          <DictionaryEntryCard word={word} data={data} taggedConcepts={taggedConcepts} />
+        </Paper>
+      </Box>
+    </Paper>
+  )
+}
+
 export default function HomePanel({
   instructor = '',
+  catalogWords = [],
+  wordsByConceptId,
+  concepts = [],
+  loadingCatalog = false,
   onAddStudent,
   onOpenSchedule,
   onOpenResources,
 }) {
+  const featured = pickWordOfTheDay(catalogWords)
+  const featuredConcepts = featured?.id
+    ? assignedConcepts(featured.id, wordsByConceptId, concepts)
+    : []
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, pb: 5 }}>
       <Paper
@@ -356,6 +445,32 @@ export default function HomePanel({
           </Box>
         </Stack>
       </Paper>
+
+      {featured?.dictionaryData ? (
+        <WordOfTheDayCard
+          word={featured.word}
+          data={featured.dictionaryData}
+          taggedConcepts={featuredConcepts}
+        />
+      ) : loadingCatalog ? (
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2.5,
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+          }}
+        >
+          <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 0.5 }}>
+            Word of the Day
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Loading today’s featured word from the catalog…
+          </Typography>
+        </Paper>
+      ) : null}
 
       <Box
         sx={{

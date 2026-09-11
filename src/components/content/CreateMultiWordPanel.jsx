@@ -37,6 +37,7 @@ function conceptButtonLabel(concept) {
 
 export default function CreateMultiWordPanel({
   student,
+  catalogMode = false,
   concepts = [],
   wordsByConceptId,
   loadingCatalog = false,
@@ -245,7 +246,7 @@ export default function CreateMultiWordPanel({
   }
 
   async function handleSave() {
-    if (!student?.id) {
+    if (!catalogMode && !student?.id) {
       setError('Select a student before saving.')
       return
     }
@@ -284,17 +285,18 @@ export default function CreateMultiWordPanel({
           savedId = editItem.id
           setNotice('Passage updated.')
         } else {
-          const { data, errors } = await client.models.Passage.create({
+          const passagePayload = {
             title: title.trim() || focusName || 'Untitled passage',
             text: trimmed,
             wordCount: taggedForSave.tokenCount,
-            studentID: student.id,
             conceptID: focusConceptId,
             passageData: JSON.stringify({
               tags: payload,
               focusConceptId,
             }),
-          })
+          }
+          if (student?.id) passagePayload.studentID = student.id
+          const { data, errors } = await client.models.Passage.create(passagePayload)
           if (errors?.length) throw new Error(errors.map((item) => item.message).join(', '))
           if (!data?.id) throw new Error('Failed to save passage')
           savedId = data.id
@@ -314,12 +316,12 @@ export default function CreateMultiWordPanel({
         const sentencePayload = {
           text: trimmed,
           wordCount: taggedForSave.tokenCount,
-          studentID: student.id,
           sentenceData: JSON.stringify({
             tags: payload,
             focusConceptId,
           }),
         }
+        if (student?.id) sentencePayload.studentID = student.id
         let created = await client.models.Sentence.create({
           ...sentencePayload,
           conceptID: focusConceptId,
@@ -354,7 +356,7 @@ export default function CreateMultiWordPanel({
     }
   }
 
-  if (!student) {
+  if (!catalogMode && !student) {
     return (
       <Typography color="text.secondary">
         Select a student to create and tag sentences or passages.

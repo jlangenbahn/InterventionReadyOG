@@ -353,6 +353,51 @@ async function listStudentSentences(studentId) {
   }
 }
 
+/**
+ * Load lists that are not assigned to a student (shared catalog).
+ */
+export async function fetchCatalogLists() {
+  const items = await listAll(client.models.List, { selectionSet: LIST_SELECTION }).catch(() => [])
+  return (items ?? []).filter((item) => item?.id && !item.studentID)
+}
+
+async function listCatalogPassages() {
+  const core = ['id', 'title', 'text', 'wordCount', 'conceptID', 'createdAt', 'studentID']
+  try {
+    return await listAll(client.models.Passage, {
+      selectionSet: [...core, 'passageData'],
+    })
+  } catch {
+    return listAll(client.models.Passage, { selectionSet: core }).catch(() => [])
+  }
+}
+
+async function listCatalogSentences() {
+  const core = ['id', 'text', 'wordCount', 'createdAt', 'studentID', 'sentenceData']
+  try {
+    return await listAll(client.models.Sentence, {
+      selectionSet: [...core, 'conceptID'],
+    })
+  } catch {
+    return listAll(client.models.Sentence, { selectionSet: core }).catch(() => [])
+  }
+}
+
+/**
+ * Load sentences and passages that are not assigned to a student (shared catalog).
+ */
+export async function fetchCatalogSentencesAndPassages() {
+  const [sentences, passages] = await Promise.all([
+    listCatalogSentences(),
+    listCatalogPassages(),
+  ])
+  const catalogSentences = (sentences ?? []).filter((item) => item?.id && !item.studentID)
+  const catalogPassages = (passages ?? []).filter((item) => item?.id && !item.studentID)
+  catalogSentences.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
+  catalogPassages.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
+  return { sentences: catalogSentences, passages: catalogPassages }
+}
+
 export async function fetchStudentSentencesAndPassages(studentId) {
   if (!studentId) return { sentences: [], passages: [] }
   const [sentences, passages] = await Promise.all([

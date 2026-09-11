@@ -39,7 +39,6 @@ import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
 import Groups3Icon from '@mui/icons-material/Groups3'
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary'
-import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import LessonPlanPanel from '../lesson-plan/LessonPlanPanel'
@@ -50,7 +49,6 @@ import HomePanel from '../home/HomePanel'
 import SchedulePanel from '../schedule/SchedulePanel'
 import ScopeAndSequencePanel from '../scope/ScopeAndSequencePanel'
 import ResourcesPanel from '../resources/ResourcesPanel'
-import DataQualityPanel from '../data/DataQualityPanel'
 import ParadigmSettingsPanel from '../paradigm/ParadigmSettingsPanel'
 import ConfirmDeleteDialog from '../shared/ConfirmDeleteDialog'
 import NavSectionHeader from './NavSectionHeader'
@@ -132,7 +130,6 @@ export default function AppShell({ user, signOut }) {
   const [viewingHome, setViewingHome] = useState(true)
   const [viewingSchedule, setViewingSchedule] = useState(false)
   const [viewingResources, setViewingResources] = useState(false)
-  const [viewingDataQuality, setViewingDataQuality] = useState(false)
   const [viewingParadigmSettings, setViewingParadigmSettings] = useState(false)
   const [viewingContent, setViewingContent] = useState(false)
   const [studentsNavOpen, setStudentsNavOpen] = useState(true)
@@ -156,7 +153,6 @@ export default function AppShell({ user, signOut }) {
     !viewingHome &&
     !viewingSchedule &&
     !viewingResources &&
-    !viewingDataQuality &&
     !viewingParadigmSettings &&
     !viewingContent
 
@@ -164,7 +160,6 @@ export default function AppShell({ user, signOut }) {
     setViewingHome(view === 'home')
     setViewingSchedule(view === 'schedule')
     setViewingResources(view === 'resources')
-    setViewingDataQuality(view === 'dataQuality')
     setViewingParadigmSettings(view === 'paradigmSettings')
     setViewingContent(view === 'content')
     setError('')
@@ -401,17 +396,6 @@ export default function AppShell({ user, signOut }) {
     if (viewingResources) return
     requestNavigation(() => {
       setAppView('resources')
-      setSelectedStudentId(null)
-      setSelectedGroupId(null)
-      setCreatingGroup(false)
-      setScopeLocked(true)
-    })
-  }
-
-  function handleSelectDataQuality() {
-    if (viewingDataQuality) return
-    requestNavigation(() => {
-      setAppView('dataQuality')
       setSelectedStudentId(null)
       setSelectedGroupId(null)
       setCreatingGroup(false)
@@ -869,16 +853,7 @@ export default function AppShell({ user, signOut }) {
           />
           <Divider />
           <NavSectionHeader
-            title="Data Operations"
-            selected={viewingDataQuality}
-            onSelect={handleSelectDataQuality}
-            icon={
-              <FactCheckOutlinedIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-            }
-          />
-          <Divider />
-          <NavSectionHeader
-            title="Paradigm Settings"
+            title="Pedagogy"
             selected={viewingParadigmSettings}
             onSelect={handleSelectParadigmSettings}
             icon={
@@ -919,11 +894,14 @@ export default function AppShell({ user, signOut }) {
           !selectedGroup &&
           !viewingSchedule &&
           !viewingResources &&
-          !viewingDataQuality &&
           !viewingParadigmSettings &&
           !viewingContent) ? (
           <HomePanel
             instructor={user?.signInDetails?.loginId ?? user?.username ?? ''}
+            catalogWords={catalogWords}
+            wordsByConceptId={wordsByConceptId}
+            concepts={concepts}
+            loadingCatalog={loadingCatalog}
             onAddStudent={openCreateStudent}
             onOpenSchedule={handleSelectSchedule}
             onOpenResources={handleSelectResources}
@@ -937,15 +915,11 @@ export default function AppShell({ user, signOut }) {
             onCatalogReload={loadCatalog}
             setError={setError}
             onConceptUpdated={handleConceptUpdated}
-          />
-        ) : viewingDataQuality ? (
-          <DataQualityPanel
-            concepts={concepts}
-            wordsByConceptId={wordsByConceptId}
-            catalogWords={catalogWords}
-            onCatalogReload={loadCatalog}
-            onConceptUpdated={handleConceptUpdated}
-            setError={setError}
+            username={[
+              user?.username,
+              user?.userId,
+              user?.signInDetails?.loginId,
+            ].filter(Boolean)}
           />
         ) : viewingParadigmSettings ? (
           <ParadigmSettingsPanel concepts={concepts} setError={setError} />

@@ -44,6 +44,34 @@ const COPY = {
     ],
     emptyHint: () => 'Select a concept on the left to preview its details and tagged words.',
   },
+  catalogList: {
+    title: () => 'Shared word lists',
+    body: () => [
+      'Lists on this tab belong to the shared catalog, not a specific student.',
+      'A list is a set of practice words tied to one concept. After you create one, it can be used in any student’s lesson plan.',
+      'Use Create list to pick a concept from the catalog, choose words, and save them here.',
+    ],
+    emptyHint: () =>
+      'No shared lists yet. Create the first catalog list so it is available account-wide.',
+  },
+  catalogSentence: {
+    title: () => 'Shared sentences',
+    body: () => [
+      'Sentences on this tab belong to the shared catalog, not a specific student.',
+      'Each sentence is tagged to a focus concept so you can pull it into a lesson when that concept is new or in review.',
+      'Create a sentence to start the catalog collection. Tagging and concept weight show up here once you select one.',
+    ],
+    emptyHint: () => 'No shared sentences yet. Create one to fill the catalog sentence bank.',
+  },
+  catalogPassage: {
+    title: () => 'Shared passages',
+    body: () => [
+      'Passages on this tab belong to the shared catalog, not a specific student.',
+      'A passage is longer connected text with a focus concept. Save it here, then attach it to any student’s lesson plan.',
+      'Create a passage to start the catalog collection. Preview, tagging, and concept weight appear here after you select one.',
+    ],
+    emptyHint: () => 'No shared passages yet. Create one to fill the catalog passage bank.',
+  },
 }
 
 export default function StudentContentExplainer({
@@ -61,7 +89,7 @@ export default function StudentContentExplainer({
   return (
     <Box>
       <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 1.25 }} flexWrap="wrap" useFlexGap>
-        {kind === 'catalog' ? (
+        {kind === 'catalog' || String(kind).startsWith('catalog') ? (
           <Chip size="small" variant="outlined" label="Shared catalog" />
         ) : (
           <Chip size="small" color="primary" label={`${name} only`} />

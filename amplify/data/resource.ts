@@ -263,7 +263,8 @@ const schema = a.schema({
       words: a.hasMany('WordList', 'listId'),
       Lessons: a.hasMany('ListLesson', 'listId'),
       listData: a.json(),
-      studentID: a.id().required(),
+      // Optional so catalog lists remain shared; set when assigning to a student.
+      studentID: a.id(),
       student: a.belongsTo('Student', 'studentID'),
     })
     .secondaryIndexes((index) => [
@@ -507,19 +508,27 @@ const schema = a.schema({
   /**
    * Bedrock Converse catalog audit. Samples words, asks Claude Haiku 4.5 for
    * ADD/REMOVE tags, and writes OPEN DataQualityFinding rows.
+   * sampleSize: 10 (small), 25 (medium), or 100 (large).
    */
   runDataQualityAudit: a
     .mutation()
+    .arguments({
+      sampleSize: a.integer(),
+    })
     .returns(a.ref('DataQualityAuditResult'))
     .handler(a.handler.function(runDataQualityAuditFn))
     .authorization((allow) => [allow.authenticated()]),
 
   /**
-   * Bedrock Converse spell check. Samples real catalog words, flags misspellings,
-   * and writes OPEN DataQualityFinding rows with actionType SPELLING.
+   * Bedrock Converse spell check. Checks a real-word id batch (max 100),
+   * flags misspellings, and writes OPEN DataQualityFinding rows with
+   * actionType SPELLING. The client walks the full catalog in batches.
    */
   runSpellCheck: a
     .mutation()
+    .arguments({
+      wordIds: a.id().array(),
+    })
     .returns(a.ref('DataQualityAuditResult'))
     .handler(a.handler.function(runSpellCheckFn))
     .authorization((allow) => [allow.authenticated()]),

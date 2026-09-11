@@ -24,7 +24,12 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import EditIcon from '@mui/icons-material/Edit'
 import { DataGrid, GridToolbar } from '@mui/x-data-grid'
-import { parseListData, resolveListWords, studentDisplayName } from '../../lib/fetchStudentLessonPlan'
+import {
+  fetchCatalogLists,
+  parseListData,
+  resolveListWords,
+  studentDisplayName,
+} from '../../lib/fetchStudentLessonPlan'
 import { client } from '../../lib/amplifyClient'
 import { deleteWordList, updateWordList } from '../../lib/crudRecords'
 import { emptyWordSelection, deselectWord, wordRowId } from '../../lib/wordSelection'
@@ -75,6 +80,7 @@ function listWordCount(list) {
 
 export default function WordListsPanel({
   student,
+  catalogMode = false,
   concepts = [],
   wordsByConceptId,
   loadingCatalog = false,
@@ -84,6 +90,8 @@ export default function WordListsPanel({
   onCatalogReload,
   setError,
 }) {
+  const [catalogLists, setCatalogLists] = useState([])
+  const [loadingCatalogLists, setLoadingCatalogLists] = useState(false)
   const [selectedConceptId, setSelectedConceptId] = useState(null)
   const [wordSelection, setWordSelection] = useState(emptyWordSelection)
   const [createListOpen, setCreateListOpen] = useState(false)
@@ -140,20 +148,23 @@ export default function WordListsPanel({
     [concepts],
   )
 
+  const visibleLists = catalogMode ? catalogLists : studentLists
+  const listsLoading = catalogMode ? loadingCatalogLists : loadingLists
+
   const myListRows = useMemo(
     () =>
-      studentLists.map((list) => ({
+      visibleLists.map((list) => ({
         id: list.id,
         name: list.name || 'Untitled list',
         concept: conceptById.get(list.conceptID)?.concept || 'Unknown concept',
         wordCount: listWordCount(list),
       })),
-    [studentLists, conceptById],
+    [visibleLists, conceptById],
   )
 
   const selectedList = useMemo(
-    () => studentLists.find((list) => list.id === selectedListId) ?? null,
-    [studentLists, selectedListId],
+    () => visibleLists.find((list) => list.id === selectedListId) ?? null,
+    [visibleLists, selectedListId],
   )
 
   const wordLookup = useMemo(() => {
@@ -243,9 +254,32 @@ export default function WordListsPanel({
     [],
   )
 
+  const loadCatalogLists = useCallback(async () => {
+    setLoadingCatalogLists(true)
+    try {
+      const items = await fetchCatalogLists()
+      setCatalogLists(items)
+      setError('')
+    } catch (err) {
+      setCatalogLists([])
+      setError(err instanceof Error ? err.message : 'Failed to load catalog lists')
+    } finally {
+      setLoadingCatalogLists(false)
+    }
+  }, [setError])
+
   const loadLists = useCallback(async () => {
+    if (catalogMode) {
+      await loadCatalogLists()
+      return
+    }
     if (onReloadLists) await onReloadLists()
-  }, [onReloadLists])
+  }, [catalogMode, loadCatalogLists, onReloadLists])
+
+  useEffect(() => {
+    if (!catalogMode) return undefined
+    void loadCatalogLists()
+  }, [catalogMode, loadCatalogLists])
 
   useEffect(() => {
     setWordSelection(emptyWordSelection())
@@ -302,22 +336,23 @@ export default function WordListsPanel({
   async function handleCreateList(event) {
     event.preventDefault()
     const name = listName.trim()
-    if (!student?.id || !selectedConcept || !name || selectedWordRows.length === 0) return
+    if ((!catalogMode && !student?.id) || !selectedConcept || !name || selectedWordRows.length === 0) return
 
     setCreatingList(true)
     try {
       const conceptWordIds = selectedWordRows.map((row) => row.conceptWordId).filter(Boolean)
       const wordIds = selectedWordRows.map((row) => row.wordId || row.id).filter(Boolean)
-      const { data, errors } = await client.models.List.create({
+      const payload = {
         name,
         conceptID: selectedConcept.id,
-        studentID: student.id,
         listData: JSON.stringify({
           conceptId: selectedConcept.id,
           conceptWordIds,
           wordIds,
         }),
-      })
+      }
+      if (student?.id) payload.studentID = student.id
+      const { data, errors } = await client.models.List.create(payload)
       if (errors?.length) throw new Error(errors.map((e) => e.message).join(', '))
       if (!data?.id) throw new Error('Failed to create list')
 
@@ -340,7 +375,7 @@ export default function WordListsPanel({
     }
   }
 
-  if (!student) {
+  if (!catalogMode && !student) {
     return (
       <Typography color="text.secondary">Select a student to build word lists.</Typography>
     )
@@ -399,10 +434,12 @@ export default function WordListsPanel({
                   title={
                     myListRows.length
                       ? 'Click a list to preview its words. Row icons rename or delete.'
-                      : 'Lists on this page belong to this student only. Create the first list to get started.'
+                      : catalogMode
+                        ? 'Lists on this page are shared catalog lists, not assigned to a student. Create the first list to get started.'
+                        : 'Lists on this page belong to this student only. Create the first list to get started.'
                   }
                 />
-                {loadingLists ? <CircularProgress size={16} /> : null}
+                {listsLoading ? <CircularProgress size={16} /> : null}
               </Stack>
             )}
 
@@ -431,7 +468,7 @@ export default function WordListsPanel({
                   />
                 </Box>
               </>
-            ) : loadingLists && myListRows.length === 0 ? (
+            ) : listsLoading && myListRows.length === 0 ? (
               <Box
                 sx={{
                   minHeight: { xs: 280, md: 'calc(100vh - 320px)' },
@@ -455,18 +492,23 @@ export default function WordListsPanel({
               >
                 <Stack spacing={1.5} alignItems="center" textAlign="center" sx={{ maxWidth: 420 }}>
                   <Typography variant="h6">
-                    {studentDisplayName(student)} doesn’t have any word lists yet
+                    {catalogMode
+                      ? 'No shared word lists yet'
+                      : `${studentDisplayName(student)} doesn’t have any word lists yet`}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Create the first list for this student. It will stay on this page — other
-                    students’ lists are not shown here.
+                    {catalogMode
+                      ? 'Create a catalog list here. Student-specific lists stay on each student’s page.'
+                      : 'Create the first list for this student. It will stay on this page — other students’ lists are not shown here.'}
                   </Typography>
                   <Button
                     variant="contained"
                     startIcon={<AddIcon />}
                     onClick={() => setMode(MODE_CREATE)}
                   >
-                    Create {studentDisplayName(student)}’s first list
+                    {catalogMode
+                      ? 'Create first catalog list'
+                      : `Create ${studentDisplayName(student)}’s first list`}
                   </Button>
                 </Stack>
               </Box>
@@ -478,7 +520,7 @@ export default function WordListsPanel({
                   getRowId={(row) => row.id}
                   onRowClick={(params) => setSelectedListId(params.id)}
                   getRowClassName={(params) => (params.id === selectedListId ? 'Mui-selected' : '')}
-                  loading={loadingLists}
+                  loading={listsLoading}
                   pagination
                   pageSizeOptions={[10, 25, 50]}
                   initialState={{
@@ -601,7 +643,7 @@ export default function WordListsPanel({
           ) : !selectedList ? (
             <Paper variant="outlined" sx={{ p: 2 }}>
               <StudentContentExplainer
-                kind="list"
+                kind={catalogMode ? 'catalogList' : 'list'}
                 student={student}
                 empty={myListRows.length === 0}
                 selectHint={
@@ -682,9 +724,9 @@ export default function WordListsPanel({
           <DialogContent sx={{ display: 'grid', gap: 2, pt: 1 }}>
             <DialogContentText>
               Save {selectedWordRows.length} word
-              {selectedWordRows.length === 1 ? '' : 's'} under {selectedConcept?.concept || 'this concept'} for{' '}
-              {studentDisplayName(student)}. The list will store this concept and the selected
-              concept-word links.
+              {selectedWordRows.length === 1 ? '' : 's'} under {selectedConcept?.concept || 'this concept'}
+              {catalogMode ? ' in the shared catalog' : ` for ${studentDisplayName(student)}`}. The list
+              will store this concept and the selected concept-word links.
             </DialogContentText>
             <TextField
               label="List name"

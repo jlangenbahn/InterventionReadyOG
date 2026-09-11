@@ -25,6 +25,7 @@ import ConfirmDeleteDialog from '../shared/ConfirmDeleteDialog'
 
 export default function LessonTemplateGallery({
   student,
+  catalogMode = false,
   concepts = [],
   username,
   setError,
@@ -93,8 +94,10 @@ export default function LessonTemplateGallery({
     event?.stopPropagation()
     const template = templates.find((item) => item.id === templateId)
     if (!template) return
-    if (!student?.id) {
-      setError('Select a student before applying a template.')
+    if (catalogMode || !student?.id) {
+      setError(catalogMode
+        ? 'Apply a lesson plan from a student’s Lesson Plan tab.'
+        : 'Select a student before applying a template.')
       return
     }
     setApplyingId(templateId)
@@ -134,20 +137,22 @@ export default function LessonTemplateGallery({
     {
       field: 'actions',
       headerName: '',
-      width: 196,
+      width: catalogMode ? 96 : 196,
       sortable: false,
       filterable: false,
       disableColumnMenu: true,
       renderCell: (params) => (
         <Stack direction="row" spacing={0.5} alignItems="center">
-          <Button
-            size="small"
-            variant="contained"
-            disabled={!student?.id || applyingId === params.id}
-            onClick={(event) => void handleApply(event, params.id)}
-          >
-            {applyingId === params.id ? 'Applying…' : 'Apply'}
-          </Button>
+          {catalogMode ? null : (
+            <Button
+              size="small"
+              variant="contained"
+              disabled={!student?.id || applyingId === params.id}
+              onClick={(event) => void handleApply(event, params.id)}
+            >
+              {applyingId === params.id ? 'Applying…' : 'Apply'}
+            </Button>
+          )}
           {params.row.mine ? (
             <Button
               size="small"
@@ -168,9 +173,9 @@ export default function LessonTemplateGallery({
   return (
     <>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-        Select a public template to preview it on the right. Apply copies the
-        materials onto this student as a new private plan, without scores or
-        student names.
+        {catalogMode
+          ? 'Shared lesson-plan templates for the whole catalog. Select one to inspect it. Apply a template from a student’s Lesson Plan tab.'
+          : 'Select a public template to preview it on the right. Apply copies the materials onto this student as a new private plan, without scores or student names.'}
       </Typography>
       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
         <FormControl size="small" sx={{ minWidth: 220, flexGrow: 1 }}>

@@ -1,12 +1,14 @@
 /**
- * Bedrock Converse spell check: sample real catalog words, flag misspellings,
- * then write OPEN DataQualityFinding rows with actionType SPELLING.
+ * Bedrock Converse spell check: check a real-word id batch (max 100),
+ * flag misspellings, then write OPEN DataQualityFinding rows with
+ * actionType SPELLING. The client walks the full catalog in batches.
  */
 import {
   BedrockRuntimeClient,
   ConverseCommand,
 } from '@aws-sdk/client-bedrock-runtime';
 import {
+  BatchGetItemCommand,
   DynamoDBClient,
   PutItemCommand,
   ScanCommand,
@@ -14,9 +16,7 @@ import {
 } from '@aws-sdk/client-dynamodb';
 
 const MODEL_ID = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
-const SCAN_CAP = 500;
-const WORD_BATCH_SIZE = 100;
-const TOTAL_SEGMENTS = 26;
+const SPELL_BATCH_LIMIT = 100;
 const SYSTEM_PROMPT = `You are an expert copy editor for an Orton-Gillingham word catalog.
 Review this specific batch of words.
 
@@ -61,6 +61,12 @@ const bedrock = new BedrockRuntimeClient({
 });
 const dynamo = new DynamoDBClient({});
 
+type SpellEvent = {
+  arguments?: {
+    wordIds?: Array<string | null> | null;
+  };
+};
+
 type AuditResult = {
   createdCount: number;
   message: string;
@@ -95,6 +101,10 @@ function attrString(item: Record<string, AttributeValue> | undefined, key: strin
   return String(item?.[key]?.S ?? '').trim();
 }
 
+function uniqueIds(ids: Array<string | null> | null | undefined) {
+  return [...new Set((ids ?? []).map((id) => String(id ?? '').trim()).filter(Boolean))];
+}
+
 function toolUseInput(response: {
   output?: { message?: { content?: Array<{ toolUse?: { input?: unknown } }> } };
 }): Record<string, unknown> | null {
@@ -116,21 +126,6 @@ function projectionFor(fields: string[]) {
   };
 }
 
-function shuffle<T>(items: T[]) {
-  const next = items.slice();
-  for (let i = next.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const current = next[i];
-    next[i] = next[j];
-    next[j] = current;
-  }
-  return next;
-}
-
-function randomSegment() {
-  return Math.floor(Math.random() * TOTAL_SEGMENTS);
-}
-
 function normalizeConfidence(value: unknown) {
   const number = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(number)) return null;
@@ -138,9 +133,43 @@ function normalizeConfidence(value: unknown) {
   return Math.min(1, Math.max(0, number));
 }
 
+function wordFromItem(item: Record<string, AttributeValue> | undefined): CatalogWord | null {
+  if (!item || item.isNonsenseWord?.BOOL === true) return null;
+  const id = attrString(item, 'id');
+  const word = attrString(item, 'word');
+  if (!id || !word) return null;
+  return { id, word };
+}
+
+async function loadWordsByIds(tableName: string, ids: string[]): Promise<CatalogWord[]> {
+  const projection = projectionFor(['id', 'word', 'isNonsenseWord']);
+  const words: CatalogWord[] = [];
+  let pending = ids.map((id) => ({ id: { S: id } }));
+  let attempts = 0;
+  while (pending.length && attempts < 4) {
+    attempts += 1;
+    const result = await dynamo.send(
+      new BatchGetItemCommand({
+        RequestItems: {
+          [tableName]: {
+            Keys: pending,
+            ProjectionExpression: projection.ProjectionExpression,
+            ExpressionAttributeNames: projection.ExpressionAttributeNames,
+          },
+        },
+      }),
+    );
+    for (const item of result.Responses?.[tableName] ?? []) {
+      const word = wordFromItem(item);
+      if (word) words.push(word);
+    }
+    pending = result.UnprocessedKeys?.[tableName]?.Keys ?? [];
+  }
+  return words;
+}
+
 async function scanRealWords(tableName: string, limit: number): Promise<CatalogWord[]> {
   const projection = projectionFor(['id', 'word', 'isNonsenseWord']);
-  const segment = randomSegment();
   const words: CatalogWord[] = [];
   let exclusiveStartKey: Record<string, AttributeValue> | undefined;
   do {
@@ -150,17 +179,12 @@ async function scanRealWords(tableName: string, limit: number): Promise<CatalogW
         ProjectionExpression: projection.ProjectionExpression,
         ExpressionAttributeNames: projection.ExpressionAttributeNames,
         ExclusiveStartKey: exclusiveStartKey,
-        Limit: 500,
-        TotalSegments: TOTAL_SEGMENTS,
-        Segment: segment,
       }),
     );
     for (const item of result.Items ?? []) {
-      if (item.isNonsenseWord?.BOOL === true) continue;
-      const id = attrString(item, 'id');
-      const word = attrString(item, 'word');
-      if (!id || !word) continue;
-      words.push({ id, word });
+      const word = wordFromItem(item);
+      if (!word) continue;
+      words.push(word);
       if (words.length >= limit) return words;
     }
     exclusiveStartKey = result.LastEvaluatedKey;
@@ -188,14 +212,17 @@ function parseFindings(raw: Record<string, unknown> | null, words: CatalogWord[]
   return findings;
 }
 
-export const handler = async (): Promise<AuditResult> => {
+export const handler = async (event: SpellEvent = {}): Promise<AuditResult> => {
   const wordTable = envVar('WORD_TABLE_NAME');
   const findingTable = envVar('FINDING_TABLE_NAME');
   if (!wordTable || !findingTable) {
     throw new Error('Spell check is not configured in this environment.');
   }
 
-  const wordRows = shuffle(await scanRealWords(wordTable, SCAN_CAP)).slice(0, WORD_BATCH_SIZE);
+  const requested = uniqueIds(event.arguments?.wordIds).slice(0, SPELL_BATCH_LIMIT);
+  const wordRows = requested.length
+    ? await loadWordsByIds(wordTable, requested)
+    : await scanRealWords(wordTable, SPELL_BATCH_LIMIT);
   if (!wordRows.length) {
     return { createdCount: 0, message: 'No real catalog words were available to spell-check.' };
   }
