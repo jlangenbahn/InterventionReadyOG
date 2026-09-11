@@ -144,7 +144,7 @@ function wordFromItem(item: Record<string, AttributeValue> | undefined): Catalog
 async function loadWordsByIds(tableName: string, ids: string[]): Promise<CatalogWord[]> {
   const projection = projectionFor(['id', 'word', 'isNonsenseWord']);
   const words: CatalogWord[] = [];
-  let pending = ids.map((id) => ({ id: { S: id } }));
+  let pending: Record<string, AttributeValue>[] = ids.map((id) => ({ id: { S: id } }));
   let attempts = 0;
   while (pending.length && attempts < 4) {
     attempts += 1;
