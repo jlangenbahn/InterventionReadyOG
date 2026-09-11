@@ -2,7 +2,10 @@
  * Amplify Gen 2 backend entry: auth, data, and Bedrock-backed Lambdas.
  */
 import { defineBackend } from '@aws-amplify/backend';
+import { Duration } from 'aws-cdk-lib';
 import { Effect, PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { generateLessonTextFn } from './functions/generate-lesson-text/resource';
@@ -12,6 +15,8 @@ import { runDataQualityAuditFn } from './functions/run-data-quality-audit/resour
 import { runSpellCheckFn } from './functions/run-spell-check/resource';
 import { generateConceptDescriptionsFn } from './functions/generate-concept-descriptions/resource';
 import { generateDictionaryDefinitionsFn } from './functions/generate-dictionary-definitions/resource';
+import { startDictionaryMegaBatchFn } from './functions/start-dictionary-mega-batch/resource';
+import { dictionaryWorkerFn } from './functions/dictionary-worker/resource';
 
 const backend = defineBackend({
   auth,
@@ -23,6 +28,8 @@ const backend = defineBackend({
   runSpellCheckFn,
   generateConceptDescriptionsFn,
   generateDictionaryDefinitionsFn,
+  startDictionaryMegaBatchFn,
+  dictionaryWorkerFn,
 });
 
 const HAIKU_45_MODEL = 'anthropic.claude-haiku-4-5-20251001-v1:0';
@@ -102,3 +109,36 @@ backend.generateConceptDescriptionsFn.addEnvironment('CONCEPT_TABLE_NAME', conce
 
 wordTable.grantReadWriteData(backend.generateDictionaryDefinitionsFn.resources.lambda);
 backend.generateDictionaryDefinitionsFn.addEnvironment('WORD_TABLE_NAME', wordTable.tableName);
+
+const batchJobTable = backend.data.resources.tables['BatchJob'];
+const dictionaryMegaBatchDlq = new Queue(backend.data.stack, 'DictionaryMegaBatchDlq', {
+  retentionPeriod: Duration.days(14),
+});
+const dictionaryMegaBatchQueue = new Queue(backend.data.stack, 'DictionaryMegaBatchQueue', {
+  visibilityTimeout: Duration.seconds(90),
+  deadLetterQueue: {
+    queue: dictionaryMegaBatchDlq,
+    maxReceiveCount: 3,
+  },
+});
+
+wordTable.grantReadData(backend.startDictionaryMegaBatchFn.resources.lambda);
+batchJobTable.grantReadWriteData(backend.startDictionaryMegaBatchFn.resources.lambda);
+dictionaryMegaBatchQueue.grantSendMessages(backend.startDictionaryMegaBatchFn.resources.lambda);
+backend.startDictionaryMegaBatchFn.addEnvironment('WORD_TABLE_NAME', wordTable.tableName);
+backend.startDictionaryMegaBatchFn.addEnvironment('BATCH_JOB_TABLE_NAME', batchJobTable.tableName);
+backend.startDictionaryMegaBatchFn.addEnvironment('DICTIONARY_QUEUE_URL', dictionaryMegaBatchQueue.queueUrl);
+
+grantHaikuUsInvoke(backend.dictionaryWorkerFn.resources.lambda);
+wordTable.grantReadWriteData(backend.dictionaryWorkerFn.resources.lambda);
+batchJobTable.grantReadWriteData(backend.dictionaryWorkerFn.resources.lambda);
+dictionaryMegaBatchQueue.grantConsumeMessages(backend.dictionaryWorkerFn.resources.lambda);
+backend.dictionaryWorkerFn.addEnvironment('WORD_TABLE_NAME', wordTable.tableName);
+backend.dictionaryWorkerFn.addEnvironment('BATCH_JOB_TABLE_NAME', batchJobTable.tableName);
+backend.dictionaryWorkerFn.resources.lambda.addEventSource(
+  new SqsEventSource(dictionaryMegaBatchQueue, {
+    batchSize: 1,
+    maxConcurrency: 5,
+    reportBatchItemFailures: true,
+  }),
+);

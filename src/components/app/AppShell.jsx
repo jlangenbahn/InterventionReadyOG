@@ -869,7 +869,7 @@ export default function AppShell({ user, signOut }) {
           />
           <Divider />
           <NavSectionHeader
-            title="Data Quality"
+            title="Data Operations"
             selected={viewingDataQuality}
             onSelect={handleSelectDataQuality}
             icon={

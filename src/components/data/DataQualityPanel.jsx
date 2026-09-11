@@ -1,7 +1,7 @@
 /**
  * Shared catalog audit queue: tag audit, spell check, OG descriptions, approve/reject.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Box,
   Button,
@@ -21,6 +21,7 @@ import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined'
 import ImportContactsIcon from '@mui/icons-material/ImportContacts'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import AutoStoriesIcon from '@mui/icons-material/AutoStories'
+import AllInclusiveIcon from '@mui/icons-material/AllInclusive'
 import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import HelpTip from '../shared/HelpTip'
 import DictionaryWordTooltip, { DictionaryEntryCard } from './DictionaryWordTooltip'
@@ -28,14 +29,19 @@ import { client } from '../../lib/amplifyClient'
 import {
   approveDataQualityFinding,
   approveDataQualityFindings,
+  fetchActiveDictionaryMegaBatch,
   fetchDataQualityFindings,
+  fetchDictionaryMegaBatch,
   fetchWordDictionaryEntries,
+  formatEstimatedRemaining,
   generateConceptDescriptions,
   generateDictionaryDefinitions,
   rejectDataQualityFinding,
   rejectDataQualityFindings,
   runDataQualityAudit,
   runSpellCheck,
+  startDictionaryMegaBatch,
+  subscribeDictionaryMegaBatch,
 } from '../../lib/dataQuality'
 import { DICTIONARY_BATCH_LIMIT, parseDictionaryData, wordsMissingDictionaryData } from '../../lib/dictionaryData'
 import { assignedConcepts, wordLabelById } from '../../lib/wordConcepts'
@@ -164,6 +170,10 @@ export default function DataQualityPanel({
   const [writingDefinitions, setWritingDefinitions] = useState(false)
   const [dictionaryProgress, setDictionaryProgress] = useState(null)
   const [generatedDefinitions, setGeneratedDefinitions] = useState(null)
+  const [megaJob, setMegaJob] = useState(null)
+  const [megaStarting, setMegaStarting] = useState(false)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  const completedMegaJobIdRef = useRef(null)
   const [generating, setGenerating] = useState(false)
   const [generateProgress, setGenerateProgress] = useState(null)
   const [rowBusyId, setRowBusyId] = useState(null)
@@ -206,6 +216,67 @@ export default function DataQualityPanel({
   useEffect(() => {
     void loadFindings()
   }, [loadFindings])
+
+  useEffect(() => {
+    let cancelled = false
+    void fetchActiveDictionaryMegaBatch()
+      .then((job) => {
+        if (!cancelled && job) setMegaJob(job)
+      })
+      .catch((err) => {
+        console.error('Failed to load dictionary mega batch', err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    return subscribeDictionaryMegaBatch((job) => {
+      setMegaJob((current) => {
+        if (job.status === 'IN_PROGRESS') return job
+        if (current?.id === job.id) return job
+        return current
+      })
+    })
+  }, [])
+
+  const megaJobId = megaJob?.id
+  const megaJobStatus = megaJob?.status
+
+  useEffect(() => {
+    if (!megaJobId || megaJobStatus !== 'IN_PROGRESS') return undefined
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const latest = await fetchDictionaryMegaBatch(megaJobId)
+        if (!cancelled && latest) setMegaJob(latest)
+      } catch (err) {
+        console.error('Failed to poll dictionary mega batch', err)
+      }
+    }
+    const timer = setInterval(() => {
+      void poll()
+    }, 2000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [megaJobId, megaJobStatus])
+
+  useEffect(() => {
+    if (megaJobStatus !== 'IN_PROGRESS') return undefined
+    const timer = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [megaJobStatus])
+
+  useEffect(() => {
+    if (megaJob?.status !== 'COMPLETED' || !megaJob.processedCount) return
+    if (completedMegaJobIdRef.current === megaJob.id) return
+    completedMegaJobIdRef.current = megaJob.id
+    setNotice(`Processed ${megaJob.processedCount} of ${megaJob.totalCount} words`)
+    void onCatalogReload?.()
+  }, [megaJob?.id, megaJob?.status, megaJob?.processedCount, megaJob?.totalCount, onCatalogReload])
 
   const rows = useMemo(
     () =>
@@ -458,6 +529,29 @@ export default function DataQualityPanel({
     }
   }
 
+  async function handleStartDictionaryMegaBatch() {
+    setMegaStarting(true)
+    try {
+      const job = await startDictionaryMegaBatch()
+      setMegaJob(job)
+      setNowMs(Date.now())
+      if (job.status === 'COMPLETED') {
+        setNotice(
+          job.totalCount
+            ? `Processed ${job.processedCount} of ${job.totalCount} words`
+            : 'No catalog words still need dictionary data.',
+        )
+      } else {
+        setNotice(`Queued dictionary mega batch for ${job.totalCount} words.`)
+      }
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start dictionary mega batch')
+    } finally {
+      setMegaStarting(false)
+    }
+  }
+
   async function handleGenerateDescriptions() {
     const ids = (concepts ?? []).map((concept) => concept?.id).filter(Boolean)
     if (!ids.length) {
@@ -571,8 +665,8 @@ export default function DataQualityPanel({
     <Box>
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
         <FactCheckOutlinedIcon color="action" />
-        <Typography variant="h5">Data Quality</Typography>
-        <HelpTip title="Audit word-concept tags, flag misspellings, write dictionary definitions, and generate Orton-Gillingham rule descriptions. After a dictionary batch, open the Definitions tab to review the LLM output. Approve applies catalog changes; Reject only closes the finding." />
+        <Typography variant="h5">Data Operations</Typography>
+        <HelpTip title="Run catalog audits, write dictionary definitions, and generate Orton-Gillingham rule descriptions. After a dictionary batch, open the Definitions tab to review the LLM output. Approve applies catalog changes; Reject only closes the finding." />
         {notice ? <Chip size="small" color="success" label={notice} /> : null}
       </Stack>
       <Paper variant="outlined" sx={{ px: 1.5, pt: 0.5, mb: 2 }}>
@@ -598,6 +692,9 @@ export default function DataQualityPanel({
           spellChecking={spellChecking}
           writingDefinitions={writingDefinitions}
           dictionaryProgress={dictionaryProgress}
+          megaJob={megaJob}
+          megaStarting={megaStarting}
+          nowMs={nowMs}
           running={running}
           bulkBusy={bulkBusy}
           selectedOpen={selectedOpen}
@@ -609,6 +706,7 @@ export default function DataQualityPanel({
           onRunAudit={() => void handleRunAudit()}
           onRunSpellCheck={() => void handleRunSpellCheck()}
           onWriteDictionaryDefinitions={() => void handleWriteDictionaryDefinitions()}
+          onStartDictionaryMegaBatch={() => void handleStartDictionaryMegaBatch()}
           onApproveSelected={() => void handleApproveSelected(selectedOpen)}
           onRejectSelected={() => void handleRejectSelected(selectedOpen)}
           onIssueViewChange={(next) => {
@@ -646,6 +744,9 @@ function WordsTabContent({
   spellChecking,
   writingDefinitions,
   dictionaryProgress,
+  megaJob,
+  megaStarting,
+  nowMs,
   running,
   bulkBusy,
   selectedOpen,
@@ -657,6 +758,7 @@ function WordsTabContent({
   onRunAudit,
   onRunSpellCheck,
   onWriteDictionaryDefinitions,
+  onStartDictionaryMegaBatch,
   onApproveSelected,
   onRejectSelected,
   onIssueViewChange,
@@ -666,6 +768,12 @@ function WordsTabContent({
     dictionaryProgress?.total > 0
       ? Math.round((dictionaryProgress.processed / dictionaryProgress.total) * 100)
       : 0
+  const megaTotal = Number(megaJob?.totalCount ?? 0)
+  const megaProcessed = Number(megaJob?.processedCount ?? 0)
+  const megaProgressValue =
+    megaTotal > 0 ? Math.min(100, Math.round((megaProcessed / megaTotal) * 100)) : 0
+  const megaInProgress = megaJob?.status === 'IN_PROGRESS'
+  const megaEta = formatEstimatedRemaining(megaJob, nowMs)
 
   return (
     <>
@@ -690,6 +798,18 @@ function WordsTabContent({
             </Button>
             <Button
               variant="outlined"
+              startIcon={
+                megaStarting ? <CircularProgress size={16} color="inherit" /> : <AllInclusiveIcon />
+              }
+              onClick={onStartDictionaryMegaBatch}
+              disabled={megaStarting || megaInProgress}
+            >
+              {megaStarting
+                ? 'Starting mega batch…'
+                : 'Generate All Dictionary Definitions (Mega Batch)'}
+            </Button>
+            <Button
+              variant="outlined"
               disabled={bulkBusy || selectedOpen.length < 1}
               onClick={onApproveSelected}
             >
@@ -706,7 +826,8 @@ function WordsTabContent({
             <Typography variant="body2" color="text.secondary">
               Approve applies ADD/REMOVE tags or the suggested spelling. Reject closes the finding
               without changing the catalog. Dictionary writes at most {DICTIONARY_BATCH_LIMIT}{' '}
-              missing entries per run, then opens the Definitions tab for review.
+              missing entries per run, then opens the Definitions tab for review. Mega batch
+              generates definitions for the full catalog in the background.
             </Typography>
           </Stack>
           {dictionaryProgress ? (
@@ -718,6 +839,27 @@ function WordsTabContent({
                 variant={dictionaryProgress.processed === 0 ? 'indeterminate' : 'determinate'}
                 value={dictionaryProgressValue}
               />
+            </Box>
+          ) : null}
+          {megaJob ? (
+            <Box>
+              <Typography variant="body2" sx={{ mb: 0.75 }}>
+                {megaJob.status === 'FAILED'
+                  ? `Dictionary mega batch failed after ${megaProcessed} of ${megaTotal} words.`
+                  : `Processed ${megaProcessed} of ${megaTotal} words`}
+              </Typography>
+              <LinearProgress
+                variant={megaInProgress && megaProcessed === 0 ? 'indeterminate' : 'determinate'}
+                value={megaProgressValue}
+                color={megaJob.status === 'FAILED' ? 'error' : 'primary'}
+              />
+              {megaInProgress ? (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                  {megaEta
+                    ? `Estimated time remaining: ${megaEta}`
+                    : 'Estimated time remaining: estimating…'}
+                </Typography>
+              ) : null}
             </Box>
           ) : null}
         </Stack>
@@ -792,7 +934,7 @@ function ConceptsTabContent({
       <Paper sx={{ p: 2, mb: 2 }}>
         <Stack spacing={1.5}>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-            <Button variant="contained" onClick={onGenerate} disabled={generating}>
+            <Button variant="contained" onClick={onGenerate} disabled={true}>
               {generating ? 'Generating…' : 'Generate OG Descriptions'}
             </Button>
             <Typography variant="body2" color="text.secondary">

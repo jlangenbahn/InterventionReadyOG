@@ -103,6 +103,128 @@ function parseDictionaryEntries(raw) {
   }
 }
 
+export const DICTIONARY_MEGA_BATCH_TYPE = 'DICTIONARY_MEGA_BATCH'
+
+const BATCH_JOB_SELECTION = ['id', 'type', 'status', 'totalCount', 'processedCount', 'startTime']
+
+function batchJobModel() {
+  return client.models.BatchJob
+}
+
+export function formatDurationMs(ms) {
+  const totalSeconds = Math.max(0, Math.round(Number(ms) / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
+}
+
+export function formatEstimatedRemaining(job, now = Date.now()) {
+  const processed = Number(job?.processedCount ?? 0)
+  const total = Number(job?.totalCount ?? 0)
+  if (!job?.startTime || processed <= 0 || total <= processed) return null
+  const start = new Date(job.startTime).getTime()
+  if (!Number.isFinite(start)) return null
+  const elapsed = Math.max(0, now - start)
+  return formatDurationMs((elapsed / processed) * (total - processed))
+}
+
+function normalizeBatchJob(item) {
+  if (!item?.id) return null
+  return {
+    id: item.id,
+    type: String(item.type || ''),
+    status: String(item.status || ''),
+    totalCount: Number(item.totalCount ?? 0),
+    processedCount: Number(item.processedCount ?? 0),
+    startTime: item.startTime || null,
+  }
+}
+
+function pickActiveDictionaryJob(items = []) {
+  const jobs = (items ?? [])
+    .map(normalizeBatchJob)
+    .filter((job) => job && job.type === DICTIONARY_MEGA_BATCH_TYPE)
+  const inProgress = jobs
+    .filter((job) => job.status === 'IN_PROGRESS')
+    .sort((a, b) => String(b.startTime || '').localeCompare(String(a.startTime || '')))
+  return inProgress[0] ?? null
+}
+
+export async function fetchActiveDictionaryMegaBatch() {
+  const model = batchJobModel()
+  if (!model) return null
+  let items = []
+  if (typeof model.listBatchJobByType === 'function') {
+    let nextToken
+    do {
+      const result = await model.listBatchJobByType(
+        { type: DICTIONARY_MEGA_BATCH_TYPE },
+        { limit: 1000, nextToken, selectionSet: BATCH_JOB_SELECTION },
+      )
+      throwIfErrors(result)
+      items.push(...(result.data ?? []))
+      nextToken = result.nextToken
+    } while (nextToken)
+  } else {
+    items = await listAll(model, { selectionSet: BATCH_JOB_SELECTION })
+  }
+  return pickActiveDictionaryJob(items)
+}
+
+export async function fetchDictionaryMegaBatch(id) {
+  const jobId = String(id ?? '').trim()
+  const model = batchJobModel()
+  if (!jobId || !model) return null
+  const result = await model.get({ id: jobId }, { selectionSet: BATCH_JOB_SELECTION })
+  throwIfErrors(result)
+  return normalizeBatchJob(result.data)
+}
+
+export async function startDictionaryMegaBatch() {
+  const run = client.mutations?.startDictionaryMegaBatch
+  if (typeof run !== 'function') {
+    throw new Error('Dictionary mega batch is still deploying. Wait for Amplify to finish, then try again.')
+  }
+  let result
+  try {
+    result = await run({}, { selectionSet: BATCH_JOB_SELECTION })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : ''
+    if (!/selectionSet|startTime|processedCount/i.test(message)) throw err
+    result = await run({})
+  }
+  throwIfErrors(result)
+  const job = normalizeBatchJob(result.data)
+  if (!job) throw new Error('Dictionary mega batch did not return a job record.')
+  return job
+}
+
+export function subscribeDictionaryMegaBatch(onJob) {
+  const model = batchJobModel()
+  if (!model?.onCreate || !model?.onUpdate) return () => {}
+  const handle = (payload) => {
+    const record = payload?.id ? payload : payload?.data
+    const job = normalizeBatchJob(record)
+    if (!job || job.type !== DICTIONARY_MEGA_BATCH_TYPE) return
+    onJob(job)
+  }
+  const createSub = model.onCreate().subscribe({
+    next: handle,
+    error: (err) => console.error('BatchJob onCreate failed', err),
+  })
+  const updateSub = model.onUpdate().subscribe({
+    next: handle,
+    error: (err) => console.error('BatchJob onUpdate failed', err),
+  })
+  return () => {
+    createSub.unsubscribe()
+    updateSub.unsubscribe()
+  }
+}
+
 export async function fetchWordDictionaryEntries(wordIds = []) {
   const ids = [...new Set((wordIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean))]
   if (!ids.length) return []

@@ -9,6 +9,7 @@ import { runDataQualityAuditFn } from '../functions/run-data-quality-audit/resou
 import { runSpellCheckFn } from '../functions/run-spell-check/resource';
 import { generateConceptDescriptionsFn } from '../functions/generate-concept-descriptions/resource';
 import { generateDictionaryDefinitionsFn } from '../functions/generate-dictionary-definitions/resource';
+import { startDictionaryMegaBatchFn } from '../functions/start-dictionary-mega-batch/resource';
 
 /**
  * Ported from ready-og Gen1 schema.graphql (app 6cvcpcvgbjdq3evrmqh4zyw4oi).
@@ -547,6 +548,33 @@ const schema = a.schema({
     })
     .returns(a.ref('DataQualityAuditResult'))
     .handler(a.handler.function(generateDictionaryDefinitionsFn))
+    .authorization((allow) => [allow.authenticated()]),
+
+  /**
+   * Background catalog dictionary backfill. Instructors listen to BatchJob
+   * subscriptions; Lambdas write the record through DynamoDB.
+   */
+  BatchJob: a
+    .model({
+      type: a.string().required(),
+      status: a.string().required(),
+      totalCount: a.integer().required(),
+      processedCount: a.integer().required(),
+      startTime: a.datetime().required(),
+    })
+    .secondaryIndexes((index) => [
+      index('type').sortKeys(['status']).queryField('listBatchJobByType'),
+    ])
+    .authorization((allow) => [allow.authenticated().to(['read'])]),
+
+  /**
+   * Scan words missing dictionaryData, create a BatchJob, and enqueue id
+   * batches of 10 onto DictionaryMegaBatchQueue.
+   */
+  startDictionaryMegaBatch: a
+    .mutation()
+    .returns(a.ref('BatchJob'))
+    .handler(a.handler.function(startDictionaryMegaBatchFn))
     .authorization((allow) => [allow.authenticated()]),
 
   /**
