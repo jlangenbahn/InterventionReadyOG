@@ -393,8 +393,15 @@ export default function DataQualityPanel({
   async function handleAddWords() {
     setAddingWords(true)
     try {
-      const result = await addCatalogWords(addWordSize)
-      setNotice(result.message || 'Added catalog words.')
+      let added = 0
+      let lastMessage = 'Added catalog words.'
+      for (let attempt = 0; attempt < 3 && added < 1; attempt += 1) {
+        const result = await addCatalogWords(addWordSize)
+        added = Number(result.createdCount ?? 0)
+        lastMessage = result.message || lastMessage
+        if (added > 0) break
+      }
+      setNotice(lastMessage)
       setError('')
       await onCatalogReload?.()
     } catch (err) {
