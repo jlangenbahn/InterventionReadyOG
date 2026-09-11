@@ -26,6 +26,7 @@ import MultiWordPreview from './MultiWordPreview'
 import ConfirmDeleteDialog from '../shared/ConfirmDeleteDialog'
 import HelpTip from '../shared/HelpTip'
 import StudentContentExplainer from './StudentContentExplainer'
+import ConceptChip from './ConceptTooltip'
 import {
   fetchCatalogSentencesAndPassages,
   fetchStudentSentencesAndPassages,
@@ -105,11 +106,10 @@ function ConceptFilterAutocomplete({
           const { key, ...tagProps } = getTagProps({ index })
           const colors = masteryColors(option.masteryStatus)
           return (
-            <Chip
+            <ConceptChip
               key={key}
+              concept={option}
               {...tagProps}
-              size="small"
-              label={option.concept}
               sx={{
                 bgcolor: colors.bg,
                 color: colors.color,

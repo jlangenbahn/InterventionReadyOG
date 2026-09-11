@@ -24,6 +24,7 @@ import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import { client } from '../../lib/amplifyClient'
 import HelpTip from '../shared/HelpTip'
 import StudentContentExplainer from './StudentContentExplainer'
+import ConceptChip from './ConceptTooltip'
 import { buildWordConceptColumns, wordConceptGridSx } from './WordConceptsEditor'
 import { wordRowId } from '../../lib/wordSelection'
 
@@ -61,7 +62,13 @@ export default function ConceptsCatalogPanel({
 
   const columns = useMemo(
     () => [
-      { field: 'concept', headerName: 'Concept', flex: 1.4, minWidth: 180 },
+      {
+        field: 'concept',
+        headerName: 'Concept',
+        flex: 1.4,
+        minWidth: 180,
+        renderCell: (params) => <ConceptChip concept={params.row} />,
+      },
       { field: 'category', headerName: 'Category', flex: 1, minWidth: 120 },
       { field: 'subcategory', headerName: 'Subcategory', flex: 1, minWidth: 120 },
       { field: 'level', headerName: 'Level', width: 90 },
@@ -231,6 +238,7 @@ export default function ConceptsCatalogPanel({
                 '& .MuiDataGrid-cell': {
                   py: 1,
                   alignItems: 'flex-start',
+                  overflow: 'visible',
                 },
                 '& .MuiDataGrid-cellContent': {
                   whiteSpace: 'normal',
@@ -310,7 +318,10 @@ export default function ConceptsCatalogPanel({
                 }}
                 density="compact"
                 localeText={{ noRowsLabel: 'No words tagged to this concept.' }}
-                sx={wordConceptGridSx}
+                sx={{
+                  ...wordConceptGridSx,
+                  '& .MuiDataGrid-cell': { overflow: 'visible' },
+                }}
               />
             </Box>
           </Paper>

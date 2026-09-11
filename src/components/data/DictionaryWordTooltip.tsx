@@ -3,8 +3,9 @@
  */
 import { memo, type ReactNode } from 'react'
 import AutoStoriesIcon from '@mui/icons-material/AutoStories'
-import { Box, Chip, Divider, Stack, Tooltip, Typography } from '@mui/material'
+import { Box, Divider, Stack, Tooltip, Typography } from '@mui/material'
 import { parseDictionaryData, type DictionaryData, type TaggedConcept } from '../../lib/dictionaryData'
+import ConceptChip from '../content/ConceptTooltip'
 
 type DictionaryWordTooltipProps = {
   word?: string
@@ -27,10 +28,12 @@ export function DictionaryEntryCard({
   word,
   data,
   taggedConcepts = [],
+  conceptTooltip = true,
 }: {
   word: string
   data: DictionaryData
   taggedConcepts?: TaggedConcept[]
+  conceptTooltip?: boolean
 }) {
   const concepts = (taggedConcepts ?? []).filter((concept) => String(concept?.concept ?? '').trim())
 
@@ -92,11 +95,11 @@ export function DictionaryEntryCard({
         {concepts.length ? (
           <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap">
             {concepts.map((concept, index) => (
-              <Chip
+              <ConceptChip
                 key={concept.id || `${concept.concept}-${index}`}
-                size="small"
+                concept={concept}
+                tooltip={conceptTooltip}
                 variant="outlined"
-                label={concept.concept}
                 sx={{
                   height: 22,
                   bgcolor: 'transparent',
@@ -132,7 +135,7 @@ function DictionaryWordTooltip({
       enterDelay={250}
       leaveDelay={120}
       describeChild
-      title={<DictionaryEntryCard word={label} data={data} taggedConcepts={taggedConcepts} />}
+      title={<DictionaryEntryCard word={label} data={data} taggedConcepts={taggedConcepts} conceptTooltip={false} />}
       slotProps={{
         tooltip: { sx: tooltipSx },
         arrow: { sx: { color: '#f7f4ee' } },

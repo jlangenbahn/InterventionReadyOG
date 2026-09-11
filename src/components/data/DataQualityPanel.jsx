@@ -19,12 +19,18 @@ import {
   Typography,
 } from '@mui/material'
 import ImportContactsIcon from '@mui/icons-material/ImportContacts'
+import NotesIcon from '@mui/icons-material/Notes'
 import { DataGrid } from '@mui/x-data-grid'
 import DictionaryWordTooltip from './DictionaryWordTooltip'
+import ConceptChip from '../content/ConceptTooltip'
 import {
   approveDataQualityFinding,
   approveDataQualityFindings,
+  conceptOgCoverage,
+  conceptsMissingOgDescription,
+  DESCRIPTION_BATCH_SIZE,
   fetchDataQualityFindings,
+  generateConceptDescriptions,
   generateDictionaryDefinitions,
   rejectDataQualityFinding,
   rejectDataQualityFindings,
@@ -141,6 +147,7 @@ function FindingsToolbar({
 }
 
 export default function DataQualityPanel({
+  scope = 'words',
   concepts = [],
   wordsByConceptId,
   catalogWords = [],
@@ -155,6 +162,8 @@ export default function DataQualityPanel({
   const [spellProgress, setSpellProgress] = useState(null)
   const [writingDefinitions, setWritingDefinitions] = useState(false)
   const [dictionaryProgress, setDictionaryProgress] = useState(null)
+  const [generatingDescriptions, setGeneratingDescriptions] = useState(false)
+  const [descriptionProgress, setDescriptionProgress] = useState(null)
   const [rowBusyId, setRowBusyId] = useState(null)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [notice, setNotice] = useState('')
@@ -178,6 +187,7 @@ export default function DataQualityPanel({
   }, [catalogWords])
 
   const coverage = useMemo(() => dictionaryCoverage(catalogWords), [catalogWords])
+  const ogCoverage = useMemo(() => conceptOgCoverage(concepts), [concepts])
 
   const loadFindings = useCallback(async () => {
     setLoading(true)
@@ -194,8 +204,13 @@ export default function DataQualityPanel({
   }, [setError])
 
   useEffect(() => {
+    setNotice('')
+  }, [scope])
+
+  useEffect(() => {
+    if (scope !== 'words') return
     void loadFindings()
-  }, [loadFindings])
+  }, [loadFindings, scope])
 
   const rows = useMemo(
     () =>
@@ -299,7 +314,13 @@ export default function DataQualityPanel({
           )
         },
       },
-      { field: 'concept', headerName: 'Recommended concept', flex: 1, minWidth: 140 },
+      { field: 'concept', headerName: 'Recommended concept', flex: 1, minWidth: 140,
+        renderCell: (params) => {
+          const full = conceptById.get(params.row.recommendedConceptId)
+          if (!full) return params.row.concept
+          return <ConceptChip concept={full} />
+        },
+      },
       { field: 'suggestedSpelling', headerName: 'Suggested spelling', flex: 0.8, minWidth: 140 },
       { field: 'actionType', headerName: 'Action', width: 120 },
       { field: 'reason', headerName: 'Reason', flex: 1.4, minWidth: 180 },
@@ -347,7 +368,7 @@ export default function DataQualityPanel({
         },
       },
     ],
-    [rowBusyId, bulkBusy, handleApproveOne, handleRejectOne, catalogWordById, wordsByConceptId, concepts],
+    [rowBusyId, bulkBusy, handleApproveOne, handleRejectOne, catalogWordById, wordsByConceptId, concepts, conceptById],
   )
 
   async function handleRunAudit() {
@@ -469,7 +490,41 @@ export default function DataQualityPanel({
     }
   }
 
-  const running = auditing || spellChecking || writingDefinitions
+  async function handleGenerateOgDescriptions() {
+    const missing = conceptsMissingOgDescription(concepts)
+    if (!missing.length) {
+      setNotice('All catalog concepts already have OG descriptions.')
+      return
+    }
+    const batches = chunkIds(missing.map((concept) => concept.id), DESCRIPTION_BATCH_SIZE)
+    setGeneratingDescriptions(true)
+    setDescriptionProgress({ processed: 0, total: missing.length })
+    let written = 0
+    try {
+      for (let index = 0; index < batches.length; index += 1) {
+        const result = await generateConceptDescriptions(batches[index])
+        written += Number(result.createdCount ?? 0)
+        setDescriptionProgress({
+          processed: Math.min((index + 1) * DESCRIPTION_BATCH_SIZE, missing.length),
+          total: missing.length,
+        })
+        if (index < batches.length - 1) await wait(150)
+      }
+      await onCatalogReload?.()
+      setNotice(
+        `Wrote OG descriptions for ${written} of ${missing.length} concept${missing.length === 1 ? '' : 's'}.`,
+      )
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate OG descriptions')
+      await onCatalogReload?.()
+    } finally {
+      setGeneratingDescriptions(false)
+      setDescriptionProgress(null)
+    }
+  }
+
+  const running = auditing || spellChecking || writingDefinitions || generatingDescriptions
   const dictionaryProgressValue =
     dictionaryProgress?.total > 0
       ? Math.round((dictionaryProgress.processed / dictionaryProgress.total) * 100)
@@ -478,6 +533,83 @@ export default function DataQualityPanel({
     spellProgress?.total > 0
       ? Math.round((spellProgress.processed / spellProgress.total) * 100)
       : 0
+  const descriptionProgressValue =
+    descriptionProgress?.total > 0
+      ? Math.round((descriptionProgress.processed / descriptionProgress.total) * 100)
+      : 0
+
+  if (scope === 'none') {
+    return (
+      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+          Data operations
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+          No data operations currently.
+        </Typography>
+      </Paper>
+    )
+  }
+
+  if (scope === 'concepts') {
+    return (
+      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+        <Stack spacing={1.5}>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              Data operations
+            </Typography>
+            {notice ? <Chip size="small" color="success" label={notice} /> : null}
+          </Stack>
+
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Chip
+              size="small"
+              color="success"
+              variant="outlined"
+              label={`${ogCoverage.withDescriptions} with OG descriptions`}
+            />
+            <Chip
+              size="small"
+              color="warning"
+              variant="outlined"
+              label={`${ogCoverage.missingDescriptions} without OG descriptions`}
+            />
+          </Stack>
+
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Button
+              variant="contained"
+              startIcon={
+                generatingDescriptions ? <CircularProgress size={16} color="inherit" /> : <NotesIcon />
+              }
+              onClick={() => void handleGenerateOgDescriptions()}
+              disabled={running}
+            >
+              {generatingDescriptions ? 'Writing descriptions…' : 'Generate OG Descriptions'}
+            </Button>
+          </Stack>
+
+          <Typography variant="body2" color="text.secondary">
+            Generates OG rule descriptions for catalog concepts that are still missing one, in batches
+            of {DESCRIPTION_BATCH_SIZE}. Existing descriptions are left unchanged.
+          </Typography>
+
+          {descriptionProgress ? (
+            <Box>
+              <Typography variant="body2" sx={{ mb: 0.75 }}>
+                Processed {descriptionProgress.processed} of {descriptionProgress.total} concepts
+              </Typography>
+              <LinearProgress
+                variant={descriptionProgress.processed === 0 ? 'indeterminate' : 'determinate'}
+                value={descriptionProgressValue}
+              />
+            </Box>
+          ) : null}
+        </Stack>
+      </Paper>
+    )
+  }
 
   return (
     <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>

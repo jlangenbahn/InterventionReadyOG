@@ -72,6 +72,22 @@ const COPY = {
     ],
     emptyHint: () => 'No shared passages yet. Create one to fill the catalog passage bank.',
   },
+  catalogWord: {
+    title: () => 'Shared word catalog',
+    body: () => [
+      'This is the shared word catalog for your account. A book icon means a dictionary entry is already loaded.',
+      'Select a word to preview its dictionary entry and tagged concepts on this side.',
+    ],
+    emptyHint: () => 'Select a word on the left to preview its dictionary entry and tagged concepts.',
+  },
+  catalogLesson: {
+    title: () => 'Shared lesson plans',
+    body: () => [
+      'Lesson-plan templates on this tab belong to the shared catalog, not a specific student.',
+      'Select a template to preview the printable lesson document. Apply a template from a student’s Lesson Plan tab.',
+    ],
+    emptyHint: () => 'Select a lesson plan on the left to preview its document.',
+  },
 }
 
 export default function StudentContentExplainer({

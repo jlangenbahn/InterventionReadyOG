@@ -53,6 +53,26 @@ export async function runSpellCheck(wordIds = []) {
   })
 }
 
+/** Concept ids sent to OG-description generation per AppSync mutation. */
+export const DESCRIPTION_BATCH_SIZE = 25
+
+export function conceptsMissingOgDescription(concepts = []) {
+  return (concepts ?? []).filter(
+    (concept) => concept?.id && !String(concept.ogDescription ?? '').trim(),
+  )
+}
+
+export function conceptOgCoverage(concepts = []) {
+  let withDescriptions = 0
+  let missingDescriptions = 0
+  for (const concept of concepts ?? []) {
+    if (!concept?.id) continue
+    if (String(concept.ogDescription ?? '').trim()) withDescriptions += 1
+    else missingDescriptions += 1
+  }
+  return { withDescriptions, missingDescriptions, total: withDescriptions + missingDescriptions }
+}
+
 export async function generateConceptDescriptions(conceptIds = []) {
   const ids = (conceptIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean)
   return runNamedMutation('generateConceptDescriptions', 'OG description generation', {

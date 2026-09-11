@@ -35,6 +35,11 @@ const CONTENT_TAB_SENTENCES = 3
 const CONTENT_TAB_PASSAGES = 4
 const CONTENT_TAB_LESSON_PLANS = 5
 
+const DATA_OPS_SCOPE = {
+  [CONTENT_TAB_WORDS]: 'words',
+  [CONTENT_TAB_CONCEPTS]: 'concepts',
+}
+
 export default function ContentPanel({
   concepts = [],
   wordsByConceptId,
@@ -60,7 +65,7 @@ export default function ContentPanel({
       >
         <MenuBookIcon color="action" />
         <Typography variant="h5">Content</Typography>
-        <HelpTip title="The shared word, concept, list, sentence, passage, and lesson-plan catalogs used by every student. Edits here apply account-wide. Open Data Operations to audit tags, spell-check words, or write dictionary definitions." />
+        <HelpTip title="The shared word, concept, list, sentence, passage, and lesson-plan catalogs used by every student. Edits here apply account-wide. Open Data Operations for tools that match the tab you are on." />
         <Box sx={{ flexGrow: 1 }} />
         <FormControlLabel
           control={
@@ -76,6 +81,7 @@ export default function ContentPanel({
 
       <Collapse in={dataOpsOpen} timeout="auto" unmountOnExit>
         <DataQualityPanel
+          scope={DATA_OPS_SCOPE[subTab] || 'none'}
           concepts={concepts}
           wordsByConceptId={wordsByConceptId}
           catalogWords={catalogWords}
@@ -151,14 +157,12 @@ export default function ContentPanel({
         />
       ) : null}
       {subTab === CONTENT_TAB_LESSON_PLANS ? (
-        <Paper sx={{ p: 2 }}>
-          <LessonTemplateGallery
-            catalogMode
-            concepts={concepts}
-            username={username}
-            setError={setError}
-          />
-        </Paper>
+        <LessonTemplateGallery
+          catalogMode
+          concepts={concepts}
+          username={username}
+          setError={setError}
+        />
       ) : null}
     </Box>
   )

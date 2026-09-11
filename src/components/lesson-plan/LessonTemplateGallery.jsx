@@ -10,6 +10,7 @@ import {
   FormControl,
   InputLabel,
   MenuItem,
+  Paper,
   Select,
   Stack,
   Typography,
@@ -21,7 +22,10 @@ import {
   listLessonTemplates,
   templateIsOwnedBy,
 } from '../../lib/lessonTemplates'
+import { lessonPlanTemplateProps } from '../../lib/lessonPlanPrint'
 import ConfirmDeleteDialog from '../shared/ConfirmDeleteDialog'
+import StudentContentExplainer from '../content/StudentContentExplainer'
+import LessonPlanTemplate from './LessonPlanTemplate'
 
 export default function LessonTemplateGallery({
   student,
@@ -170,7 +174,19 @@ export default function LessonTemplateGallery({
     },
   ]
 
-  return (
+  const selectedTemplate = templates.find((item) => item.id === selectedId) ?? null
+  const previewProps = selectedTemplate
+    ? lessonPlanTemplateProps(
+        {
+          name: selectedTemplate.name,
+          plan: selectedTemplate.plan,
+          date: selectedTemplate.createdAt,
+        },
+        null,
+      )
+    : null
+
+  const galleryBody = (
     <>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
         {catalogMode
@@ -200,7 +216,7 @@ export default function LessonTemplateGallery({
           label={`${rows.length} template${rows.length === 1 ? '' : 's'}`}
         />
       </Stack>
-      <Box sx={{ height: { xs: 360, md: 'calc(100vh - 380px)' }, minHeight: 280, width: '100%' }}>
+      <Box sx={{ height: { xs: 360, md: 'calc(100vh - 320px)' }, minHeight: 280, width: '100%' }}>
         <DataGrid
           rows={rows}
           columns={columns}
@@ -227,19 +243,74 @@ export default function LessonTemplateGallery({
           }}
         />
       </Box>
-      <ConfirmDeleteDialog
-        open={Boolean(toDelete)}
-        title="Delete this template?"
-        description={
-          toDelete
-            ? `Delete “${toDelete.name}”? Student lesson plans that already used it are not affected.`
-            : ''
-        }
-        confirmLabel="Delete template"
-        deleting={deleting}
-        onClose={() => !deleting && setToDelete(null)}
-        onConfirm={() => void handleDelete()}
-      />
+    </>
+  )
+
+  const deleteDialog = (
+    <ConfirmDeleteDialog
+      open={Boolean(toDelete)}
+      title="Delete this template?"
+      description={
+        toDelete
+          ? `Delete “${toDelete.name}”? Student lesson plans that already used it are not affected.`
+          : ''
+      }
+      confirmLabel="Delete template"
+      deleting={deleting}
+      onClose={() => !deleting && setToDelete(null)}
+      onConfirm={() => void handleDelete()}
+    />
+  )
+
+  if (!catalogMode) {
+    return (
+      <>
+        {galleryBody}
+        {deleteDialog}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+          gridTemplateAreas: { xs: '"preview" "work"', md: '"work preview"' },
+          gap: 2,
+          alignItems: 'start',
+        }}
+      >
+        <Box sx={{ gridArea: 'work', minWidth: 0 }}>
+          <Paper sx={{ p: 2 }}>{galleryBody}</Paper>
+        </Box>
+        <Box
+          sx={{
+            gridArea: 'preview',
+            position: { md: 'sticky' },
+            top: { md: 88 },
+            maxHeight: { md: 'calc(100vh - 104px)' },
+            overflow: { md: 'auto' },
+          }}
+        >
+          {!selectedTemplate || !previewProps ? (
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <StudentContentExplainer kind="catalogLesson" empty />
+            </Paper>
+          ) : (
+            <Paper sx={{ p: 2 }}>
+              {selectedTemplate.summary ? (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  {selectedTemplate.summary}
+                </Typography>
+              ) : null}
+              <LessonPlanTemplate {...previewProps} />
+            </Paper>
+          )}
+        </Box>
+      </Box>
+      {deleteDialog}
     </>
   )
 }

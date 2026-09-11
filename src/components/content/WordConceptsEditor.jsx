@@ -2,9 +2,10 @@
  * Inline concept Autocomplete for a word row (hover → Edit Concepts → save joins).
  */
 import { useMemo, useState } from 'react'
-import { Autocomplete, Box, Button, Chip, Stack, TextField } from '@mui/material'
+import { Autocomplete, Box, Button, Stack, TextField } from '@mui/material'
 import { assignedConceptLinks, assignedConcepts, saveWordConcepts, wordRecordId } from '../../lib/wordConcepts'
 import { wordRowId } from '../../lib/wordSelection'
+import ConceptChip from './ConceptTooltip'
 
 export const wordConceptGridSx = {
   '& .word-edit-concepts-btn': {
@@ -75,7 +76,7 @@ export function WordConceptsInlineEditor({
         renderTags={(selected, getTagProps) =>
           selected.map((option, index) => {
             const { key, ...tagProps } = getTagProps({ index })
-            return <Chip key={key} {...tagProps} size="small" label={option.concept} />
+            return <ConceptChip key={key} concept={option} {...tagProps} />
           })
         }
         renderInput={(params) => (
@@ -145,7 +146,7 @@ export function buildWordConceptColumns({
         return (
           <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap" sx={{ py: 0.5 }}>
             {chips.map((concept) => (
-              <Chip key={concept.id} size="small" label={concept.concept} />
+              <ConceptChip key={concept.id} concept={concept} />
             ))}
           </Stack>
         )
