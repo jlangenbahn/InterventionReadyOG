@@ -20,10 +20,12 @@ import {
 } from '@mui/material'
 import ImportContactsIcon from '@mui/icons-material/ImportContacts'
 import NotesIcon from '@mui/icons-material/Notes'
+import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd'
 import { DataGrid } from '@mui/x-data-grid'
 import DictionaryWordTooltip from './DictionaryWordTooltip'
 import ConceptChip from '../content/ConceptTooltip'
 import {
+  addCatalogWords,
   approveDataQualityFinding,
   approveDataQualityFindings,
   conceptOgCoverage,
@@ -54,6 +56,7 @@ const AUDIT_SIZES = [
   { value: 25, label: 'Medium (25)' },
   { value: 100, label: 'Large (100)' },
 ]
+const ADD_WORD_SIZES = AUDIT_SIZES
 
 function emptySelection() {
   return { type: 'include', ids: new Set() }
@@ -158,6 +161,8 @@ export default function DataQualityPanel({
   const [loading, setLoading] = useState(true)
   const [auditing, setAuditing] = useState(false)
   const [auditSize, setAuditSize] = useState(25)
+  const [addingWords, setAddingWords] = useState(false)
+  const [addWordSize, setAddWordSize] = useState(25)
   const [spellChecking, setSpellChecking] = useState(false)
   const [spellProgress, setSpellProgress] = useState(null)
   const [writingDefinitions, setWritingDefinitions] = useState(false)
@@ -385,6 +390,21 @@ export default function DataQualityPanel({
     }
   }
 
+  async function handleAddWords() {
+    setAddingWords(true)
+    try {
+      const result = await addCatalogWords(addWordSize)
+      setNotice(result.message || 'Added catalog words.')
+      setError('')
+      await onCatalogReload?.()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add catalog words')
+      await onCatalogReload?.()
+    } finally {
+      setAddingWords(false)
+    }
+  }
+
   async function handleRunSpellCheck() {
     const ids = realCatalogWordIds(catalogWords)
     if (!ids.length) {
@@ -524,7 +544,7 @@ export default function DataQualityPanel({
     }
   }
 
-  const running = auditing || spellChecking || writingDefinitions || generatingDescriptions
+  const running = auditing || addingWords || spellChecking || writingDefinitions || generatingDescriptions
   const dictionaryProgressValue =
     dictionaryProgress?.total > 0
       ? Math.round((dictionaryProgress.processed / dictionaryProgress.total) * 100)
@@ -629,6 +649,30 @@ export default function DataQualityPanel({
 
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
           <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel id="add-word-size-label">Add words</InputLabel>
+            <Select
+              labelId="add-word-size-label"
+              label="Add words"
+              value={addWordSize}
+              onChange={(event) => setAddWordSize(Number(event.target.value))}
+              disabled={running}
+            >
+              {ADD_WORD_SIZES.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button
+            variant="contained"
+            startIcon={addingWords ? <CircularProgress size={16} color="inherit" /> : <PlaylistAddIcon />}
+            onClick={() => void handleAddWords()}
+            disabled={running}
+          >
+            {addingWords ? 'Adding words…' : 'Add Words'}
+          </Button>
+          <FormControl size="small" sx={{ minWidth: 150 }}>
             <InputLabel id="audit-size-label">Audit size</InputLabel>
             <Select
               labelId="audit-size-label"
@@ -644,7 +688,7 @@ export default function DataQualityPanel({
               ))}
             </Select>
           </FormControl>
-          <Button variant="contained" onClick={() => void handleRunAudit()} disabled={running}>
+          <Button variant="outlined" onClick={() => void handleRunAudit()} disabled={running}>
             {auditing ? 'Running audit…' : 'Run Audit'}
           </Button>
           <Button variant="outlined" onClick={() => void handleRunSpellCheck()} disabled={running}>
@@ -663,8 +707,9 @@ export default function DataQualityPanel({
         </Stack>
 
         <Typography variant="body2" color="text.secondary">
-          Audit samples the selected number of words and uses each concept’s OG description.
-          Spell check reviews every real word in the catalog in batches of {SPELL_CHECK_BATCH_LIMIT}.
+          Catalog flow: Add Words (the model sees every word already in the database, then writes
+          10, 25, or 100 net-new real words) → Write Dictionary Definitions → Run Audit to suggest
+          concept tags. Spell check reviews every real word in batches of {SPELL_CHECK_BATCH_LIMIT}.
           Dictionary writes up to {DICTIONARY_WRITE_LIMIT} words still missing a definition, in
           batches of {DICTIONARY_BATCH_LIMIT}. Approve applies ADD/REMOVE tags or the suggested
           spelling; Reject only closes the finding.

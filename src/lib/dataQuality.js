@@ -46,6 +46,15 @@ export async function runDataQualityAudit(sampleSize) {
   })
 }
 
+export const ADD_WORD_SIZES = [10, 25, 100]
+
+export async function addCatalogWords(count) {
+  const size = Number(count)
+  return runNamedMutation('addCatalogWords', 'Add catalog words', {
+    count: size === 10 || size === 25 || size === 100 ? size : 25,
+  })
+}
+
 export async function runSpellCheck(wordIds = []) {
   const ids = [...new Set((wordIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean))]
   return runNamedMutation('runSpellCheck', 'Spell check', {

@@ -15,6 +15,7 @@ import { runDataQualityAuditFn } from './functions/run-data-quality-audit/resour
 import { runSpellCheckFn } from './functions/run-spell-check/resource';
 import { generateConceptDescriptionsFn } from './functions/generate-concept-descriptions/resource';
 import { generateDictionaryDefinitionsFn } from './functions/generate-dictionary-definitions/resource';
+import { addCatalogWordsFn } from './functions/add-catalog-words/resource';
 import { startDictionaryMegaBatchFn } from './functions/start-dictionary-mega-batch/resource';
 import { dictionaryWorkerFn } from './functions/dictionary-worker/resource';
 
@@ -28,6 +29,7 @@ const backend = defineBackend({
   runSpellCheckFn,
   generateConceptDescriptionsFn,
   generateDictionaryDefinitionsFn,
+  addCatalogWordsFn,
   startDictionaryMegaBatchFn,
   dictionaryWorkerFn,
 });
@@ -72,6 +74,7 @@ grantHaikuUsInvoke(backend.runDataQualityAuditFn.resources.lambda);
 grantHaikuUsInvoke(backend.runSpellCheckFn.resources.lambda);
 grantHaikuUsInvoke(backend.generateConceptDescriptionsFn.resources.lambda);
 grantHaikuUsInvoke(backend.generateDictionaryDefinitionsFn.resources.lambda);
+grantHaikuUsInvoke(backend.addCatalogWordsFn.resources.lambda);
 
 const studentTable = backend.data.resources.tables['Student'];
 const lessonTable = backend.data.resources.tables['Lesson'];
@@ -109,6 +112,11 @@ backend.generateConceptDescriptionsFn.addEnvironment('CONCEPT_TABLE_NAME', conce
 
 wordTable.grantReadWriteData(backend.generateDictionaryDefinitionsFn.resources.lambda);
 backend.generateDictionaryDefinitionsFn.addEnvironment('WORD_TABLE_NAME', wordTable.tableName);
+
+wordTable.grantReadWriteData(backend.addCatalogWordsFn.resources.lambda);
+conceptTable.grantReadData(backend.addCatalogWordsFn.resources.lambda);
+backend.addCatalogWordsFn.addEnvironment('WORD_TABLE_NAME', wordTable.tableName);
+backend.addCatalogWordsFn.addEnvironment('CONCEPT_TABLE_NAME', conceptTable.tableName);
 
 const batchJobTable = backend.data.resources.tables['BatchJob'];
 const dictionaryMegaBatchDlq = new Queue(backend.data.stack, 'DictionaryMegaBatchDlq', {

@@ -9,6 +9,7 @@ import { runDataQualityAuditFn } from '../functions/run-data-quality-audit/resou
 import { runSpellCheckFn } from '../functions/run-spell-check/resource';
 import { generateConceptDescriptionsFn } from '../functions/generate-concept-descriptions/resource';
 import { generateDictionaryDefinitionsFn } from '../functions/generate-dictionary-definitions/resource';
+import { addCatalogWordsFn } from '../functions/add-catalog-words/resource';
 import { startDictionaryMegaBatchFn } from '../functions/start-dictionary-mega-batch/resource';
 
 /**
@@ -557,6 +558,20 @@ const schema = a.schema({
     })
     .returns(a.ref('DataQualityAuditResult'))
     .handler(a.handler.function(generateDictionaryDefinitionsFn))
+    .authorization((allow) => [allow.authenticated()]),
+
+  /**
+   * Bedrock Converse catalog expander. Reads every existing Word label, asks
+   * Claude Haiku 4.5 for net-new real English words, and writes untagged Word
+   * rows. count: 10 (small), 25 (medium), or 100 (large).
+   */
+  addCatalogWords: a
+    .mutation()
+    .arguments({
+      count: a.integer(),
+    })
+    .returns(a.ref('DataQualityAuditResult'))
+    .handler(a.handler.function(addCatalogWordsFn))
     .authorization((allow) => [allow.authenticated()]),
 
   /**
