@@ -1,12 +1,14 @@
 /**
  * Bedrock Converse audit: sample catalog words, ask Claude Haiku 4.5 for
  * ADD/REMOVE concept tags, then write OPEN DataQualityFinding rows.
+ * Optional wordIds limits the sample to a client-selected chip subset.
  */
 import {
   BedrockRuntimeClient,
   ConverseCommand,
 } from '@aws-sdk/client-bedrock-runtime';
 import {
+  BatchGetItemCommand,
   DynamoDBClient,
   PutItemCommand,
   ScanCommand,
@@ -75,6 +77,7 @@ type AuditResult = {
 type AuditEvent = {
   arguments?: {
     sampleSize?: number | null;
+    wordIds?: Array<string | null> | null;
   };
 };
 
@@ -153,6 +156,10 @@ function shuffle<T>(items: T[]) {
 
 function randomSegment() {
   return Math.floor(Math.random() * TOTAL_SEGMENTS);
+}
+
+function uniqueIds(ids: Array<string | null> | null | undefined) {
+  return [...new Set((ids ?? []).map((id) => String(id ?? '').trim()).filter(Boolean))];
 }
 
 function resolveSampleSize(raw: unknown) {
@@ -235,6 +242,40 @@ async function scanWords(tableName: string, limit: number): Promise<CatalogWord[
   return words;
 }
 
+async function loadWordsByIds(tableName: string, ids: string[]): Promise<CatalogWord[]> {
+  const projection = projectionFor(['id', 'word', 'isNonsenseWord']);
+  const words: CatalogWord[] = [];
+  let pending: Record<string, AttributeValue>[] = ids.map((id) => ({ id: { S: id } }));
+  let attempts = 0;
+  while (pending.length && attempts < 4) {
+    attempts += 1;
+    const result = await dynamo.send(
+      new BatchGetItemCommand({
+        RequestItems: {
+          [tableName]: {
+            Keys: pending,
+            ProjectionExpression: projection.ProjectionExpression,
+            ExpressionAttributeNames: projection.ExpressionAttributeNames,
+          },
+        },
+      }),
+    );
+    for (const item of result.Responses?.[tableName] ?? []) {
+      const id = attrString(item, 'id');
+      const word = attrString(item, 'word');
+      if (!id || !word) continue;
+      words.push({
+        id,
+        word,
+        isNonsenseWord: item.isNonsenseWord?.BOOL === true,
+        taggedConcepts: [],
+      });
+    }
+    pending = result.UnprocessedKeys?.[tableName]?.Keys ?? [];
+  }
+  return words;
+}
+
 function parseConcepts(items: Record<string, AttributeValue>[]): CatalogConcept[] {
   return items
     .map((item) => ({
@@ -309,11 +350,16 @@ export const handler = async (event: AuditEvent = {}): Promise<AuditResult> => {
   }
 
   const sampleSize = resolveSampleSize(event.arguments?.sampleSize);
+  const requested = uniqueIds(event.arguments?.wordIds).slice(0, sampleSize);
   const [scannedWords, conceptItems] = await Promise.all([
-    scanWords(wordTable, Math.max(SCAN_CAP, sampleSize)),
+    requested.length
+      ? loadWordsByIds(wordTable, requested)
+      : scanWords(wordTable, Math.max(SCAN_CAP, sampleSize)),
     scanAll(conceptTable, ['id', 'concept', 'category', 'subcategory', 'level', 'ogDescription']),
   ]);
-  const wordRows = shuffle(scannedWords).slice(0, sampleSize);
+  const wordRows = requested.length
+    ? scannedWords.slice(0, sampleSize)
+    : shuffle(scannedWords).slice(0, sampleSize);
   const concepts = parseConcepts(conceptItems);
   const conceptsById = new Map(concepts.map((concept) => [concept.id, concept]));
 

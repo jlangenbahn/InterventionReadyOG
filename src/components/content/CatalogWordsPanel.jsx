@@ -7,8 +7,9 @@ import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import HelpTip from '../shared/HelpTip'
 import { DictionaryEntryCard, DictionaryWordCell } from '../data/DictionaryWordTooltip'
 import { buildWordConceptColumns, wordConceptGridSx } from './WordConceptsEditor'
-import { assignedConcepts, catalogWordTagKind, uniqueCatalogWords, wordRecordId, wordTagCountById, TAG_FILTER } from '../../lib/wordConcepts'
-import { catalogWordCoverageKind, COVERAGE_FILTER, parseDictionaryData } from '../../lib/dictionaryData'
+import { assignedConcepts, uniqueCatalogWords, wordRecordId, wordTagCountById, TAG_FILTER } from '../../lib/wordConcepts'
+import { COVERAGE_FILTER, parseDictionaryData } from '../../lib/dictionaryData'
+import { matchesCatalogFilter, TEXT_FILTER } from '../../lib/catalogFilters'
 import { wordRowId } from '../../lib/wordSelection'
 import StudentContentExplainer from './StudentContentExplainer'
 import ConceptChip from './ConceptTooltip'
@@ -20,6 +21,7 @@ const CATALOG_FILTER_LABELS = {
   [TAG_FILTER.UNTAGGED]: 'untagged',
   [TAG_FILTER.ONE_TAG]: 'with 1 tag',
   [TAG_FILTER.TWO_TAGS]: 'with 2 tags',
+  [TEXT_FILTER.CONTAINS_SPACE]: 'with a space',
 }
 
 export default function CatalogWordsPanel({
@@ -49,16 +51,9 @@ export default function CatalogWordsPanel({
 
   const visibleRows = useMemo(() => {
     if (!coverageFilter) return rows
-    return rows.filter((row) => {
-      if (
-        coverageFilter === TAG_FILTER.UNTAGGED ||
-        coverageFilter === TAG_FILTER.ONE_TAG ||
-        coverageFilter === TAG_FILTER.TWO_TAGS
-      ) {
-        return catalogWordTagKind(tagCounts.get(wordRecordId(row)) ?? 0) === coverageFilter
-      }
-      return catalogWordCoverageKind(row) === coverageFilter
-    })
+    return rows.filter((row) =>
+      matchesCatalogFilter(row, coverageFilter, tagCounts.get(wordRecordId(row)) ?? 0),
+    )
   }, [coverageFilter, rows, tagCounts])
 
   useEffect(() => {
@@ -136,7 +131,7 @@ export default function CatalogWordsPanel({
                 onDelete={() => onCoverageFilterChange?.(null)}
               />
             ) : null}
-            <HelpTip title="This is the shared word catalog. A book icon means a dictionary entry is already loaded. Hover the word to read it. Hover a concept chip for its OG description. Hover a row to edit which concepts are tagged. Use the Data Operations chips to show only words with definitions, without definitions, not valid words, untagged words, or words with 1 or 2 tags." />
+            <HelpTip title="This is the shared word catalog. A book icon means a dictionary entry is already loaded. Hover the word to read it. Hover a concept chip for its OG description. Hover a row to edit which concepts are tagged. Use the Data Operations chips to show only words with definitions, without definitions, not valid words, untagged words, words with 1 or 2 tags, or words that contain a space. Run Audit uses the selected chip as its sample pool." />
           </Stack>
           <Box sx={{ height: { xs: 420, md: 'calc(100vh - 320px)' }, minHeight: 320, width: '100%' }}>
             <DataGrid

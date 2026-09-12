@@ -510,11 +510,13 @@ const schema = a.schema({
    * Bedrock Converse catalog audit. Samples words, asks Claude Haiku 4.5 for
    * ADD/REMOVE tags, and writes OPEN DataQualityFinding rows.
    * sampleSize: 10 (small), 25 (medium), or 100 (large).
+   * wordIds: optional subset; when present the sample is taken from these ids.
    */
   runDataQualityAudit: a
     .mutation()
     .arguments({
       sampleSize: a.integer(),
+      wordIds: a.id().array(),
     })
     .returns(a.ref('DataQualityAuditResult'))
     .handler(a.handler.function(runDataQualityAuditFn))

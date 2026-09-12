@@ -48,7 +48,8 @@ import {
   realCatalogWordIds,
   wordsMissingDictionaryData,
 } from '../../lib/dictionaryData'
-import { assignedConcepts, tagCoverage, TAG_FILTER, uniqueCatalogWords, wordLabelById } from '../../lib/wordConcepts'
+import { assignedConcepts, tagCoverage, TAG_FILTER, uniqueCatalogWords, wordLabelById, wordTagCountById } from '../../lib/wordConcepts'
+import { matchesCatalogFilter, TEXT_FILTER, wordsContainingSpace } from '../../lib/catalogFilters'
 
 const VIEW_OPEN = 'open'
 const VIEW_HISTORY = 'history'
@@ -59,6 +60,7 @@ const CATALOG_FILTER_LABELS = {
   [TAG_FILTER.UNTAGGED]: 'untagged',
   [TAG_FILTER.ONE_TAG]: 'with 1 tag',
   [TAG_FILTER.TWO_TAGS]: 'with 2 tags',
+  [TEXT_FILTER.CONTAINS_SPACE]: 'with a space',
 }
 const AUDIT_SIZES = [
   { value: 10, label: 'Small (10)' },
@@ -100,6 +102,18 @@ function matchesIssueView(row, view) {
 
 function openRows(rows, selectedIds) {
   return rows.filter((row) => selectedIds.includes(row.id) && statusOf(row) === 'OPEN')
+}
+
+function pickRandomIds(words, size) {
+  const ids = (words ?? []).map((word) => word?.id).filter(Boolean)
+  const next = ids.slice()
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const current = next[i]
+    next[i] = next[j]
+    next[j] = current
+  }
+  return next.slice(0, size)
 }
 
 function chunkIds(ids, size) {
@@ -207,7 +221,15 @@ export default function DataQualityPanel({
     () => uniqueCatalogWords(catalogWords, wordsByConceptId),
     [catalogWords, wordsByConceptId],
   )
+  const tagCounts = useMemo(() => wordTagCountById(wordsByConceptId), [wordsByConceptId])
   const tags = useMemo(() => tagCoverage(uniqueWords, wordsByConceptId), [uniqueWords, wordsByConceptId])
+  const spaceCount = useMemo(() => wordsContainingSpace(uniqueWords).length, [uniqueWords])
+  const filteredWords = useMemo(() => {
+    if (!coverageFilter) return uniqueWords
+    return uniqueWords.filter((word) =>
+      matchesCatalogFilter(word, coverageFilter, tagCounts.get(word.id) ?? 0),
+    )
+  }, [coverageFilter, uniqueWords, tagCounts])
   const ogCoverage = useMemo(() => conceptOgCoverage(concepts), [concepts])
 
   function toggleCoverageFilter(next) {
@@ -419,9 +441,14 @@ export default function DataQualityPanel({
   )
 
   async function handleRunAudit() {
+    if (coverageFilter && !filteredWords.length) {
+      setNotice(`No words ${CATALOG_FILTER_LABELS[coverageFilter]} were available to audit.`)
+      return
+    }
     setAuditing(true)
     try {
-      const result = await runDataQualityAudit(auditSize)
+      const wordIds = coverageFilter ? pickRandomIds(filteredWords, auditSize) : []
+      const result = await runDataQualityAudit(auditSize, wordIds)
       setNotice(result.message || 'Audit finished.')
       setError('')
       await loadFindings()
@@ -744,6 +771,14 @@ export default function DataQualityPanel({
             aria-pressed={coverageFilter === TAG_FILTER.TWO_TAGS}
             onClick={() => toggleCoverageFilter(TAG_FILTER.TWO_TAGS)}
           />
+          <Chip
+            clickable
+            size="small"
+            variant={coverageFilter === TEXT_FILTER.CONTAINS_SPACE ? 'filled' : 'outlined'}
+            label={`${spaceCount} with a space`}
+            aria-pressed={coverageFilter === TEXT_FILTER.CONTAINS_SPACE}
+            onClick={() => toggleCoverageFilter(TEXT_FILTER.CONTAINS_SPACE)}
+          />
         </Stack>
         {coverageFilter ? (
           <Typography variant="body2" color="text.secondary">
@@ -793,8 +828,16 @@ export default function DataQualityPanel({
               ))}
             </Select>
           </FormControl>
-          <Button variant="outlined" onClick={() => void handleRunAudit()} disabled={running}>
-            {auditing ? 'Running audit…' : 'Run Audit'}
+          <Button
+            variant="outlined"
+            onClick={() => void handleRunAudit()}
+            disabled={running || Boolean(coverageFilter && !filteredWords.length)}
+          >
+            {auditing
+              ? 'Running audit…'
+              : coverageFilter
+                ? `Run Audit (${CATALOG_FILTER_LABELS[coverageFilter]})`
+                : 'Run Audit'}
           </Button>
           <Button variant="outlined" onClick={() => void handleRunSpellCheck()} disabled={running}>
             {spellChecking ? 'Checking spelling…' : 'Run Spell Check'}
@@ -814,10 +857,11 @@ export default function DataQualityPanel({
         <Typography variant="body2" color="text.secondary">
           Catalog flow: Add Words (the model sees every word already in the database, then writes
           10, 25, or 100 net-new real words) → Write Dictionary Definitions → Run Audit to suggest
-          concept tags. Spell check reviews every real word in batches of {SPELL_CHECK_BATCH_LIMIT}.
-          Dictionary writes up to {DICTIONARY_WRITE_LIMIT} words still missing a definition, in
-          batches of {DICTIONARY_BATCH_LIMIT}. Approve applies ADD/REMOVE tags or the suggested
-          spelling; Reject only closes the finding.
+          concept tags. Select a chip first to audit only that subset (untagged, 1 tag, 2 tags,
+          words with a space, and the definition chips). Spell check reviews every real word in
+          batches of {SPELL_CHECK_BATCH_LIMIT}. Dictionary writes up to {DICTIONARY_WRITE_LIMIT}{' '}
+          words still missing a definition, in batches of {DICTIONARY_BATCH_LIMIT}. Approve applies
+          ADD/REMOVE tags or the suggested spelling; Reject only closes the finding.
         </Typography>
 
         {dictionaryProgress ? (

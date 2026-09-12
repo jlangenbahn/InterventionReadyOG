@@ -39,10 +39,13 @@ export async function fetchDataQualityFindings() {
   return listAll(findingsModel())
 }
 
-export async function runDataQualityAudit(sampleSize) {
+export async function runDataQualityAudit(sampleSize, wordIds = []) {
   const size = Number(sampleSize)
+  const resolvedSize = size === 10 || size === 25 || size === 100 ? size : 25
+  const ids = [...new Set((wordIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean))]
   return runNamedMutation('runDataQualityAudit', 'Data quality audit', {
-    sampleSize: size === 10 || size === 25 || size === 100 ? size : 25,
+    sampleSize: resolvedSize,
+    ...(ids.length ? { wordIds: ids.slice(0, resolvedSize) } : {}),
   })
 }
 
