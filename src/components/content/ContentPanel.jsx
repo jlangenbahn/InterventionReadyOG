@@ -2,7 +2,7 @@
  * Shared catalog: Words, Concepts, Lists, Sentences, Passages, and Lesson Plans.
  * Data operations (audit, spell check, dictionary) sit in a togglable banner.
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   Box,
   Collapse,
@@ -52,6 +52,17 @@ export default function ContentPanel({
 }) {
   const [subTab, setSubTab] = useState(CONTENT_TAB_WORDS)
   const [dataOpsOpen, setDataOpsOpen] = useState(false)
+  const [wordCoverageFilter, setWordCoverageFilter] = useState(null)
+  const catalogWordsRef = useRef(null)
+
+  function handleCoverageFilterChange(next) {
+    setWordCoverageFilter(next)
+    if (next) {
+      window.requestAnimationFrame(() => {
+        catalogWordsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    }
+  }
 
   return (
     <Box>
@@ -87,13 +98,18 @@ export default function ContentPanel({
           catalogWords={catalogWords}
           onCatalogReload={onCatalogReload}
           setError={setError}
+          coverageFilter={wordCoverageFilter}
+          onCoverageFilterChange={handleCoverageFilterChange}
         />
       </Collapse>
 
       <Paper variant="outlined" sx={{ px: 1.5, pt: 0.5, mb: 2 }}>
         <Tabs
           value={subTab}
-          onChange={(_event, value) => setSubTab(value)}
+          onChange={(_event, value) => {
+            setSubTab(value)
+            if (value !== CONTENT_TAB_WORDS) setWordCoverageFilter(null)
+          }}
           variant="scrollable"
           scrollButtons="auto"
         >
@@ -107,14 +123,18 @@ export default function ContentPanel({
       </Paper>
 
       {subTab === CONTENT_TAB_WORDS ? (
-        <CatalogWordsPanel
-          concepts={concepts}
-          wordsByConceptId={wordsByConceptId}
-          catalogWords={catalogWords}
-          loadingCatalog={loadingCatalog}
-          onCatalogReload={onCatalogReload}
-          setError={setError}
-        />
+        <Box ref={catalogWordsRef}>
+          <CatalogWordsPanel
+            concepts={concepts}
+            wordsByConceptId={wordsByConceptId}
+            catalogWords={catalogWords}
+            loadingCatalog={loadingCatalog}
+            onCatalogReload={onCatalogReload}
+            setError={setError}
+            coverageFilter={wordCoverageFilter}
+            onCoverageFilterChange={handleCoverageFilterChange}
+          />
+        </Box>
       ) : null}
       {subTab === CONTENT_TAB_CONCEPTS ? (
         <ConceptsCatalogPanel

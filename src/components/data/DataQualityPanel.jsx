@@ -40,6 +40,7 @@ import {
   runSpellCheck,
 } from '../../lib/dataQuality'
 import {
+  COVERAGE_FILTER,
   DICTIONARY_BATCH_LIMIT,
   DICTIONARY_WRITE_LIMIT,
   SPELL_CHECK_BATCH_LIMIT,
@@ -51,6 +52,11 @@ import { assignedConcepts, wordLabelById } from '../../lib/wordConcepts'
 
 const VIEW_OPEN = 'open'
 const VIEW_HISTORY = 'history'
+const COVERAGE_FILTER_LABELS = {
+  [COVERAGE_FILTER.WITH_DEFINITIONS]: 'with definitions',
+  [COVERAGE_FILTER.MISSING_DEFINITIONS]: 'without definitions',
+  [COVERAGE_FILTER.INVALID_WORDS]: 'not valid words',
+}
 const AUDIT_SIZES = [
   { value: 10, label: 'Small (10)' },
   { value: 25, label: 'Medium (25)' },
@@ -156,6 +162,8 @@ export default function DataQualityPanel({
   catalogWords = [],
   onCatalogReload,
   setError,
+  coverageFilter = null,
+  onCoverageFilterChange,
 }) {
   const [findings, setFindings] = useState([])
   const [loading, setLoading] = useState(true)
@@ -193,6 +201,10 @@ export default function DataQualityPanel({
 
   const coverage = useMemo(() => dictionaryCoverage(catalogWords), [catalogWords])
   const ogCoverage = useMemo(() => conceptOgCoverage(concepts), [concepts])
+
+  function toggleCoverageFilter(next) {
+    onCoverageFilterChange?.(coverageFilter === next ? null : next)
+  }
 
   const loadFindings = useCallback(async () => {
     setLoading(true)
@@ -649,10 +661,39 @@ export default function DataQualityPanel({
         </Stack>
 
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-          <Chip size="small" color="success" variant="outlined" label={`${coverage.withDefinitions} with definitions`} />
-          <Chip size="small" color="warning" variant="outlined" label={`${coverage.missingDefinitions} without definitions`} />
-          <Chip size="small" variant="outlined" label={`${coverage.invalidWords} not valid words`} />
+          <Chip
+            clickable
+            size="small"
+            color="success"
+            variant={coverageFilter === COVERAGE_FILTER.WITH_DEFINITIONS ? 'filled' : 'outlined'}
+            label={`${coverage.withDefinitions} with definitions`}
+            aria-pressed={coverageFilter === COVERAGE_FILTER.WITH_DEFINITIONS}
+            onClick={() => toggleCoverageFilter(COVERAGE_FILTER.WITH_DEFINITIONS)}
+          />
+          <Chip
+            clickable
+            size="small"
+            color="warning"
+            variant={coverageFilter === COVERAGE_FILTER.MISSING_DEFINITIONS ? 'filled' : 'outlined'}
+            label={`${coverage.missingDefinitions} without definitions`}
+            aria-pressed={coverageFilter === COVERAGE_FILTER.MISSING_DEFINITIONS}
+            onClick={() => toggleCoverageFilter(COVERAGE_FILTER.MISSING_DEFINITIONS)}
+          />
+          <Chip
+            clickable
+            size="small"
+            variant={coverageFilter === COVERAGE_FILTER.INVALID_WORDS ? 'filled' : 'outlined'}
+            label={`${coverage.invalidWords} not valid words`}
+            aria-pressed={coverageFilter === COVERAGE_FILTER.INVALID_WORDS}
+            onClick={() => toggleCoverageFilter(COVERAGE_FILTER.INVALID_WORDS)}
+          />
         </Stack>
+        {coverageFilter ? (
+          <Typography variant="body2" color="text.secondary">
+            Catalog is filtered to words {COVERAGE_FILTER_LABELS[coverageFilter]}. Click the chip again
+            to show all words.
+          </Typography>
+        ) : null}
 
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
           <FormControl size="small" sx={{ minWidth: 150 }}>

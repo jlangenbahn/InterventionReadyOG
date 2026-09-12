@@ -91,12 +91,23 @@ type CatalogWordLike = {
   dictionaryData?: unknown
 }
 
+export const COVERAGE_FILTER = {
+  WITH_DEFINITIONS: 'withDefinitions',
+  MISSING_DEFINITIONS: 'missingDefinitions',
+  INVALID_WORDS: 'invalidWords',
+} as const
+
+export type CoverageFilter = (typeof COVERAGE_FILTER)[keyof typeof COVERAGE_FILTER]
+
+export function catalogWordCoverageKind(word: CatalogWordLike): CoverageFilter | null {
+  if (!word?.id || !String(word.word ?? '').trim()) return null
+  if (word.isNonsenseWord) return COVERAGE_FILTER.INVALID_WORDS
+  if (hasDictionaryData(word.dictionaryData)) return COVERAGE_FILTER.WITH_DEFINITIONS
+  return COVERAGE_FILTER.MISSING_DEFINITIONS
+}
+
 export function wordsMissingDictionaryData(words: CatalogWordLike[] = []) {
-  return (words ?? []).filter((word) => {
-    if (!word?.id || !String(word.word ?? '').trim()) return false
-    if (word.isNonsenseWord) return false
-    return !hasDictionaryData(word.dictionaryData)
-  })
+  return (words ?? []).filter((word) => catalogWordCoverageKind(word) === COVERAGE_FILTER.MISSING_DEFINITIONS)
 }
 
 export function dictionaryCoverage(words: CatalogWordLike[] = []) {
@@ -104,13 +115,10 @@ export function dictionaryCoverage(words: CatalogWordLike[] = []) {
   let missingDefinitions = 0
   let invalidWords = 0
   for (const word of words ?? []) {
-    if (!word?.id || !String(word.word ?? '').trim()) continue
-    if (word.isNonsenseWord) {
-      invalidWords += 1
-      continue
-    }
-    if (hasDictionaryData(word.dictionaryData)) withDefinitions += 1
-    else missingDefinitions += 1
+    const kind = catalogWordCoverageKind(word)
+    if (kind === COVERAGE_FILTER.WITH_DEFINITIONS) withDefinitions += 1
+    else if (kind === COVERAGE_FILTER.MISSING_DEFINITIONS) missingDefinitions += 1
+    else if (kind === COVERAGE_FILTER.INVALID_WORDS) invalidWords += 1
   }
   return { withDefinitions, missingDefinitions, invalidWords }
 }

@@ -1,17 +1,23 @@
 /**
  * Shared catalog word grid for the global Content page.
  */
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Box, Chip, CircularProgress, Divider, Paper, Stack, Typography } from '@mui/material'
 import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import HelpTip from '../shared/HelpTip'
 import { DictionaryEntryCard, DictionaryWordCell } from '../data/DictionaryWordTooltip'
 import { buildWordConceptColumns, wordConceptGridSx } from './WordConceptsEditor'
 import { assignedConcepts, uniqueCatalogWords, wordRecordId } from '../../lib/wordConcepts'
-import { parseDictionaryData } from '../../lib/dictionaryData'
+import { catalogWordCoverageKind, COVERAGE_FILTER, parseDictionaryData } from '../../lib/dictionaryData'
 import { wordRowId } from '../../lib/wordSelection'
 import StudentContentExplainer from './StudentContentExplainer'
 import ConceptChip from './ConceptTooltip'
+
+const COVERAGE_FILTER_LABELS = {
+  [COVERAGE_FILTER.WITH_DEFINITIONS]: 'with definitions',
+  [COVERAGE_FILTER.MISSING_DEFINITIONS]: 'without definitions',
+  [COVERAGE_FILTER.INVALID_WORDS]: 'not valid words',
+}
 
 export default function CatalogWordsPanel({
   concepts = [],
@@ -20,9 +26,12 @@ export default function CatalogWordsPanel({
   loadingCatalog = false,
   onCatalogReload,
   setError,
+  coverageFilter = null,
+  onCoverageFilterChange,
 }) {
   const [editingWordRowId, setEditingWordRowId] = useState(null)
   const [selectedRowId, setSelectedRowId] = useState(null)
+  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 })
 
   const rows = useMemo(
     () =>
@@ -33,7 +42,16 @@ export default function CatalogWordsPanel({
     [catalogWords, wordsByConceptId],
   )
 
-  const selectedWord = rows.find((row) => wordRowId(row) === selectedRowId) ?? null
+  const visibleRows = useMemo(() => {
+    if (!coverageFilter) return rows
+    return rows.filter((row) => catalogWordCoverageKind(row) === coverageFilter)
+  }, [coverageFilter, rows])
+
+  useEffect(() => {
+    setPaginationModel((current) => ({ ...current, page: 0 }))
+  }, [coverageFilter])
+
+  const selectedWord = visibleRows.find((row) => wordRowId(row) === selectedRowId) ?? null
   const selectedConcepts = selectedWord
     ? assignedConcepts(wordRecordId(selectedWord), wordsByConceptId, concepts)
     : []
@@ -89,11 +107,25 @@ export default function CatalogWordsPanel({
         <Paper sx={{ p: 2 }}>
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
             {loadingCatalog ? <CircularProgress size={16} /> : null}
-            <HelpTip title="This is the shared word catalog. A book icon means a dictionary entry is already loaded. Hover the word to read it. Hover a concept chip for its OG description. Hover a row to edit which concepts are tagged." />
+            {coverageFilter ? (
+              <Chip
+                size="small"
+                color={
+                  coverageFilter === COVERAGE_FILTER.MISSING_DEFINITIONS
+                    ? 'warning'
+                    : coverageFilter === COVERAGE_FILTER.WITH_DEFINITIONS
+                      ? 'success'
+                      : 'default'
+                }
+                label={`Showing ${visibleRows.length} ${COVERAGE_FILTER_LABELS[coverageFilter]}`}
+                onDelete={() => onCoverageFilterChange?.(null)}
+              />
+            ) : null}
+            <HelpTip title="This is the shared word catalog. A book icon means a dictionary entry is already loaded. Hover the word to read it. Hover a concept chip for its OG description. Hover a row to edit which concepts are tagged. Use the Data Operations chips to show only words with definitions, without definitions, or not valid words." />
           </Stack>
           <Box sx={{ height: { xs: 420, md: 'calc(100vh - 320px)' }, minHeight: 320, width: '100%' }}>
             <DataGrid
-              rows={rows}
+              rows={visibleRows}
               columns={columns}
               getRowId={wordRowId}
               getRowHeight={() => 'auto'}
@@ -101,9 +133,10 @@ export default function CatalogWordsPanel({
               getRowClassName={(params) => (params.id === selectedRowId ? 'Mui-selected' : '')}
               loading={loadingCatalog}
               pagination
+              paginationModel={paginationModel}
+              onPaginationModelChange={setPaginationModel}
               pageSizeOptions={[25, 50, 100]}
               initialState={{
-                pagination: { paginationModel: { pageSize: 25 } },
                 sorting: { sortModel: [{ field: 'word', sort: 'asc' }] },
               }}
               slots={{ toolbar: GridToolbar }}
@@ -111,7 +144,11 @@ export default function CatalogWordsPanel({
                 toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 300 } },
               }}
               density="compact"
-              localeText={{ noRowsLabel: 'No words in the catalog yet.' }}
+              localeText={{
+                noRowsLabel: coverageFilter
+                  ? `No words ${COVERAGE_FILTER_LABELS[coverageFilter]}.`
+                  : 'No words in the catalog yet.',
+              }}
               sx={{
                 ...wordConceptGridSx,
                 '& .MuiDataGrid-cell': { overflow: 'visible' },
