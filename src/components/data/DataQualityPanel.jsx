@@ -48,14 +48,17 @@ import {
   realCatalogWordIds,
   wordsMissingDictionaryData,
 } from '../../lib/dictionaryData'
-import { assignedConcepts, wordLabelById } from '../../lib/wordConcepts'
+import { assignedConcepts, tagCoverage, TAG_FILTER, uniqueCatalogWords, wordLabelById } from '../../lib/wordConcepts'
 
 const VIEW_OPEN = 'open'
 const VIEW_HISTORY = 'history'
-const COVERAGE_FILTER_LABELS = {
+const CATALOG_FILTER_LABELS = {
   [COVERAGE_FILTER.WITH_DEFINITIONS]: 'with definitions',
   [COVERAGE_FILTER.MISSING_DEFINITIONS]: 'without definitions',
   [COVERAGE_FILTER.INVALID_WORDS]: 'not valid words',
+  [TAG_FILTER.UNTAGGED]: 'untagged',
+  [TAG_FILTER.ONE_TAG]: 'with 1 tag',
+  [TAG_FILTER.TWO_TAGS]: 'with 2 tags',
 }
 const AUDIT_SIZES = [
   { value: 10, label: 'Small (10)' },
@@ -200,6 +203,11 @@ export default function DataQualityPanel({
   }, [catalogWords])
 
   const coverage = useMemo(() => dictionaryCoverage(catalogWords), [catalogWords])
+  const uniqueWords = useMemo(
+    () => uniqueCatalogWords(catalogWords, wordsByConceptId),
+    [catalogWords, wordsByConceptId],
+  )
+  const tags = useMemo(() => tagCoverage(uniqueWords, wordsByConceptId), [uniqueWords, wordsByConceptId])
   const ogCoverage = useMemo(() => conceptOgCoverage(concepts), [concepts])
 
   function toggleCoverageFilter(next) {
@@ -340,7 +348,29 @@ export default function DataQualityPanel({
       },
       { field: 'suggestedSpelling', headerName: 'Suggested spelling', flex: 0.8, minWidth: 140 },
       { field: 'actionType', headerName: 'Action', width: 120 },
-      { field: 'reason', headerName: 'Reason', flex: 1.4, minWidth: 180 },
+      {
+        field: 'reason',
+        headerName: 'Reason',
+        flex: 1.4,
+        minWidth: 180,
+        cellClassName: 'reason-cell',
+        renderCell: (params) => (
+          <Box
+            sx={{
+              py: 0.75,
+              pr: 1,
+              width: '100%',
+              minWidth: 0,
+              whiteSpace: 'normal',
+              overflowWrap: 'anywhere',
+              wordBreak: 'break-word',
+              lineHeight: 1.35,
+            }}
+          >
+            {params.value || '—'}
+          </Box>
+        ),
+      },
       {
         field: 'confidence',
         headerName: 'Confidence',
@@ -688,9 +718,36 @@ export default function DataQualityPanel({
             onClick={() => toggleCoverageFilter(COVERAGE_FILTER.INVALID_WORDS)}
           />
         </Stack>
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+          <Chip
+            clickable
+            size="small"
+            color="warning"
+            variant={coverageFilter === TAG_FILTER.UNTAGGED ? 'filled' : 'outlined'}
+            label={`${tags.untagged} untagged`}
+            aria-pressed={coverageFilter === TAG_FILTER.UNTAGGED}
+            onClick={() => toggleCoverageFilter(TAG_FILTER.UNTAGGED)}
+          />
+          <Chip
+            clickable
+            size="small"
+            variant={coverageFilter === TAG_FILTER.ONE_TAG ? 'filled' : 'outlined'}
+            label={`${tags.oneTag} with 1 tag`}
+            aria-pressed={coverageFilter === TAG_FILTER.ONE_TAG}
+            onClick={() => toggleCoverageFilter(TAG_FILTER.ONE_TAG)}
+          />
+          <Chip
+            clickable
+            size="small"
+            variant={coverageFilter === TAG_FILTER.TWO_TAGS ? 'filled' : 'outlined'}
+            label={`${tags.twoTags} with 2 tags`}
+            aria-pressed={coverageFilter === TAG_FILTER.TWO_TAGS}
+            onClick={() => toggleCoverageFilter(TAG_FILTER.TWO_TAGS)}
+          />
+        </Stack>
         {coverageFilter ? (
           <Typography variant="body2" color="text.secondary">
-            Catalog is filtered to words {COVERAGE_FILTER_LABELS[coverageFilter]}. Click the chip again
+            Catalog is filtered to words {CATALOG_FILTER_LABELS[coverageFilter]}. Click the chip again
             to show all words.
           </Typography>
         ) : null}
@@ -813,6 +870,7 @@ export default function DataQualityPanel({
             columns={findingColumns}
             checkboxSelection
             disableRowSelectionOnClick
+            getRowHeight={() => 'auto'}
             rowSelectionModel={selectionModel}
             onRowSelectionModelChange={setSelectionModel}
             isRowSelectable={(params) => statusOf(params.row) === 'OPEN'}
@@ -826,7 +884,13 @@ export default function DataQualityPanel({
             density="compact"
             sx={{
               '& .MuiDataGrid-cell': {
+                alignItems: 'flex-start',
                 overflow: 'visible',
+                py: 0.5,
+              },
+              '& .MuiDataGrid-cell.reason-cell': {
+                overflow: 'hidden',
+                whiteSpace: 'normal',
               },
             }}
             localeText={{

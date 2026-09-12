@@ -7,16 +7,19 @@ import { DataGrid, GridToolbar } from '@mui/x-data-grid'
 import HelpTip from '../shared/HelpTip'
 import { DictionaryEntryCard, DictionaryWordCell } from '../data/DictionaryWordTooltip'
 import { buildWordConceptColumns, wordConceptGridSx } from './WordConceptsEditor'
-import { assignedConcepts, uniqueCatalogWords, wordRecordId } from '../../lib/wordConcepts'
+import { assignedConcepts, catalogWordTagKind, uniqueCatalogWords, wordRecordId, wordTagCountById, TAG_FILTER } from '../../lib/wordConcepts'
 import { catalogWordCoverageKind, COVERAGE_FILTER, parseDictionaryData } from '../../lib/dictionaryData'
 import { wordRowId } from '../../lib/wordSelection'
 import StudentContentExplainer from './StudentContentExplainer'
 import ConceptChip from './ConceptTooltip'
 
-const COVERAGE_FILTER_LABELS = {
+const CATALOG_FILTER_LABELS = {
   [COVERAGE_FILTER.WITH_DEFINITIONS]: 'with definitions',
   [COVERAGE_FILTER.MISSING_DEFINITIONS]: 'without definitions',
   [COVERAGE_FILTER.INVALID_WORDS]: 'not valid words',
+  [TAG_FILTER.UNTAGGED]: 'untagged',
+  [TAG_FILTER.ONE_TAG]: 'with 1 tag',
+  [TAG_FILTER.TWO_TAGS]: 'with 2 tags',
 }
 
 export default function CatalogWordsPanel({
@@ -42,10 +45,21 @@ export default function CatalogWordsPanel({
     [catalogWords, wordsByConceptId],
   )
 
+  const tagCounts = useMemo(() => wordTagCountById(wordsByConceptId), [wordsByConceptId])
+
   const visibleRows = useMemo(() => {
     if (!coverageFilter) return rows
-    return rows.filter((row) => catalogWordCoverageKind(row) === coverageFilter)
-  }, [coverageFilter, rows])
+    return rows.filter((row) => {
+      if (
+        coverageFilter === TAG_FILTER.UNTAGGED ||
+        coverageFilter === TAG_FILTER.ONE_TAG ||
+        coverageFilter === TAG_FILTER.TWO_TAGS
+      ) {
+        return catalogWordTagKind(tagCounts.get(wordRecordId(row)) ?? 0) === coverageFilter
+      }
+      return catalogWordCoverageKind(row) === coverageFilter
+    })
+  }, [coverageFilter, rows, tagCounts])
 
   useEffect(() => {
     setPaginationModel((current) => ({ ...current, page: 0 }))
@@ -111,17 +125,18 @@ export default function CatalogWordsPanel({
               <Chip
                 size="small"
                 color={
-                  coverageFilter === COVERAGE_FILTER.MISSING_DEFINITIONS
+                  coverageFilter === COVERAGE_FILTER.MISSING_DEFINITIONS ||
+                  coverageFilter === TAG_FILTER.UNTAGGED
                     ? 'warning'
                     : coverageFilter === COVERAGE_FILTER.WITH_DEFINITIONS
                       ? 'success'
                       : 'default'
                 }
-                label={`Showing ${visibleRows.length} ${COVERAGE_FILTER_LABELS[coverageFilter]}`}
+                label={`Showing ${visibleRows.length} ${CATALOG_FILTER_LABELS[coverageFilter]}`}
                 onDelete={() => onCoverageFilterChange?.(null)}
               />
             ) : null}
-            <HelpTip title="This is the shared word catalog. A book icon means a dictionary entry is already loaded. Hover the word to read it. Hover a concept chip for its OG description. Hover a row to edit which concepts are tagged. Use the Data Operations chips to show only words with definitions, without definitions, or not valid words." />
+            <HelpTip title="This is the shared word catalog. A book icon means a dictionary entry is already loaded. Hover the word to read it. Hover a concept chip for its OG description. Hover a row to edit which concepts are tagged. Use the Data Operations chips to show only words with definitions, without definitions, not valid words, untagged words, or words with 1 or 2 tags." />
           </Stack>
           <Box sx={{ height: { xs: 420, md: 'calc(100vh - 320px)' }, minHeight: 320, width: '100%' }}>
             <DataGrid
@@ -146,7 +161,7 @@ export default function CatalogWordsPanel({
               density="compact"
               localeText={{
                 noRowsLabel: coverageFilter
-                  ? `No words ${COVERAGE_FILTER_LABELS[coverageFilter]}.`
+                  ? `No words ${CATALOG_FILTER_LABELS[coverageFilter]}.`
                   : 'No words in the catalog yet.',
               }}
               sx={{

@@ -43,6 +43,54 @@ export function assignedConcepts(wordId, wordsByConceptId, concepts = []) {
     .sort((a, b) => String(a.concept ?? '').localeCompare(String(b.concept ?? '')))
 }
 
+export const TAG_FILTER = {
+  UNTAGGED: 'untagged',
+  ONE_TAG: 'oneTag',
+  TWO_TAGS: 'twoTags',
+}
+
+export function wordTagCountById(wordsByConceptId) {
+  const idsByWord = new Map()
+  for (const [conceptId, rows] of wordsByConceptId?.entries?.() ?? []) {
+    if (!conceptId) continue
+    for (const row of rows ?? []) {
+      const wordId = row?.wordId || row?.id
+      if (!wordId) continue
+      let ids = idsByWord.get(wordId)
+      if (!ids) {
+        ids = new Set()
+        idsByWord.set(wordId, ids)
+      }
+      ids.add(conceptId)
+    }
+  }
+  const counts = new Map()
+  for (const [wordId, ids] of idsByWord) counts.set(wordId, ids.size)
+  return counts
+}
+
+export function catalogWordTagKind(tagCount) {
+  if (tagCount === 0) return TAG_FILTER.UNTAGGED
+  if (tagCount === 1) return TAG_FILTER.ONE_TAG
+  if (tagCount === 2) return TAG_FILTER.TWO_TAGS
+  return null
+}
+
+export function tagCoverage(words = [], wordsByConceptId) {
+  const counts = wordTagCountById(wordsByConceptId)
+  let untagged = 0
+  let oneTag = 0
+  let twoTags = 0
+  for (const word of words ?? []) {
+    if (!word?.id || !String(word.word ?? '').trim()) continue
+    const kind = catalogWordTagKind(counts.get(word.id) ?? 0)
+    if (kind === TAG_FILTER.UNTAGGED) untagged += 1
+    else if (kind === TAG_FILTER.ONE_TAG) oneTag += 1
+    else if (kind === TAG_FILTER.TWO_TAGS) twoTags += 1
+  }
+  return { untagged, oneTag, twoTags }
+}
+
 export async function saveWordConcepts({ wordId, nextConceptIds, currentLinks = [] }) {
   if (!wordId) throw new Error('Word is required')
   if (!client.models.ConceptWord) {
