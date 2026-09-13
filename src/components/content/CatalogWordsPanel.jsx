@@ -2,8 +2,22 @@
  * Shared catalog word grid for the global Content page.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Box, Chip, CircularProgress, Divider, Paper, Stack, Typography } from '@mui/material'
-import { DataGrid, GridToolbar } from '@mui/x-data-grid'
+import {
+  Autocomplete,
+  Box,
+  Chip,
+  CircularProgress,
+  Divider,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
+import { DataGrid, GridToolbarContainer } from '@mui/x-data-grid'
 import HelpTip from '../shared/HelpTip'
 import { DictionaryEntryCard, DictionaryWordCell } from '../data/DictionaryWordTooltip'
 import { buildWordConceptColumns, wordConceptGridSx } from './WordConceptsEditor'
@@ -14,6 +28,15 @@ import { wordRowId } from '../../lib/wordSelection'
 import StudentContentExplainer from './StudentContentExplainer'
 import ConceptChip from './ConceptTooltip'
 
+const WORD_MATCH_CONTAINS = 'contains'
+const WORD_MATCH_STARTS = 'startsWith'
+const WORD_MATCH_ENDS = 'endsWith'
+const WORD_MATCH_MODES = [
+  { value: WORD_MATCH_CONTAINS, label: 'Contains' },
+  { value: WORD_MATCH_STARTS, label: 'Begins with' },
+  { value: WORD_MATCH_ENDS, label: 'Ends with' },
+]
+
 const CATALOG_FILTER_LABELS = {
   [COVERAGE_FILTER.WITH_DEFINITIONS]: 'with definitions',
   [COVERAGE_FILTER.MISSING_DEFINITIONS]: 'without definitions',
@@ -22,6 +45,79 @@ const CATALOG_FILTER_LABELS = {
   [TAG_FILTER.ONE_TAG]: 'with 1 tag',
   [TAG_FILTER.TWO_TAGS]: 'with 2 tags',
   [TEXT_FILTER.CONTAINS_SPACE]: 'that contain a space',
+}
+
+function matchesWordLookup(word, query, mode) {
+  const needle = String(query ?? '').trim().toLowerCase()
+  if (!needle) return true
+  const haystack = String(word ?? '').trim().toLowerCase()
+  if (mode === WORD_MATCH_STARTS) return haystack.startsWith(needle)
+  if (mode === WORD_MATCH_ENDS) return haystack.endsWith(needle)
+  return haystack.includes(needle)
+}
+
+function wordLookupPlaceholder(mode) {
+  if (mode === WORD_MATCH_STARTS) return 'Begins with…'
+  if (mode === WORD_MATCH_ENDS) return 'Ends with…'
+  return 'Contains…'
+}
+
+function WordsCatalogToolbar({
+  wordQuery,
+  onWordQueryChange,
+  wordMatchMode,
+  onWordMatchModeChange,
+  concepts = [],
+  selectedConcept,
+  onSelectedConceptChange,
+}) {
+  return (
+    <GridToolbarContainer
+      sx={{
+        p: 1,
+        gap: 1,
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        width: '100%',
+      }}
+    >
+      <FormControl size="small" sx={{ minWidth: 140 }}>
+        <InputLabel id="word-match-mode-label">Word match</InputLabel>
+        <Select
+          labelId="word-match-mode-label"
+          label="Word match"
+          value={wordMatchMode}
+          onChange={(event) => onWordMatchModeChange(event.target.value)}
+        >
+          {WORD_MATCH_MODES.map((option) => (
+            <MenuItem key={option.value} value={option.value}>
+              {option.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      <TextField
+        size="small"
+        label="Word"
+        value={wordQuery}
+        onChange={(event) => onWordQueryChange(event.target.value)}
+        placeholder={wordLookupPlaceholder(wordMatchMode)}
+        sx={{ minWidth: 180, flex: 1 }}
+      />
+      <Autocomplete
+        size="small"
+        options={concepts}
+        value={selectedConcept}
+        onChange={(_event, next) => onSelectedConceptChange(next)}
+        getOptionLabel={(option) => option?.concept || ''}
+        isOptionEqualToValue={(option, value) => option?.id === value?.id}
+        renderInput={(params) => (
+          <TextField {...params} label="Concept" placeholder="Show words tagged with…" />
+        )}
+        sx={{ minWidth: 220, flex: 1.2 }}
+      />
+    </GridToolbarContainer>
+  )
 }
 
 export default function CatalogWordsPanel({
@@ -37,6 +133,9 @@ export default function CatalogWordsPanel({
   const [editingWordRowId, setEditingWordRowId] = useState(null)
   const [selectedRowId, setSelectedRowId] = useState(null)
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 })
+  const [wordQuery, setWordQuery] = useState('')
+  const [wordMatchMode, setWordMatchMode] = useState(WORD_MATCH_CONTAINS)
+  const [selectedConcept, setSelectedConcept] = useState(null)
 
   const rows = useMemo(
     () =>
@@ -47,18 +146,45 @@ export default function CatalogWordsPanel({
     [catalogWords, wordsByConceptId],
   )
 
-  const tagCounts = useMemo(() => wordTagCountById(wordsByConceptId), [wordsByConceptId])
+  const conceptOptions = useMemo(
+    () =>
+      [...(concepts ?? [])]
+        .filter((concept) => concept?.id)
+        .sort((a, b) => String(a.concept ?? '').localeCompare(String(b.concept ?? ''))),
+    [concepts],
+  )
 
-  const visibleRows = useMemo(() => {
-    if (!coverageFilter) return rows
-    return rows.filter((row) =>
-      matchesCatalogFilter(row, coverageFilter, tagCounts.get(wordRecordId(row)) ?? 0),
-    )
-  }, [coverageFilter, rows, tagCounts])
+  const tagCounts = useMemo(() => wordTagCountById(wordsByConceptId), [wordsByConceptId])
+  const conceptWordIds = useMemo(() => {
+    if (!selectedConcept?.id) return null
+    const ids = new Set()
+    for (const row of wordsByConceptId?.get(selectedConcept.id) ?? []) {
+      const id = row?.wordId || row?.id
+      if (id) ids.add(id)
+    }
+    return ids
+  }, [selectedConcept, wordsByConceptId])
+
+  const visibleRows = useMemo(
+    () =>
+      rows.filter((row) => {
+        if (
+          coverageFilter &&
+          !matchesCatalogFilter(row, coverageFilter, tagCounts.get(wordRecordId(row)) ?? 0)
+        ) {
+          return false
+        }
+        if (!matchesWordLookup(row.word, wordQuery, wordMatchMode)) return false
+        if (conceptWordIds && !conceptWordIds.has(wordRecordId(row))) return false
+        return true
+      }),
+    [conceptWordIds, coverageFilter, rows, tagCounts, wordMatchMode, wordQuery],
+  )
+  const lookupActive = Boolean(String(wordQuery ?? '').trim()) || Boolean(selectedConcept?.id)
 
   useEffect(() => {
     setPaginationModel((current) => ({ ...current, page: 0 }))
-  }, [coverageFilter])
+  }, [coverageFilter, wordQuery, wordMatchMode, selectedConcept])
 
   const selectedWord = visibleRows.find((row) => wordRowId(row) === selectedRowId) ?? null
   const selectedConcepts = selectedWord
@@ -133,7 +259,7 @@ export default function CatalogWordsPanel({
                 onDelete={() => onCoverageFilterChange?.(null)}
               />
             ) : null}
-            <HelpTip title="This is the shared word catalog. A book icon means a dictionary entry is already loaded. Hover the word to read it. Hover a concept chip for its OG description. Hover a row to edit which concepts are tagged. Use the Data Operations chips to show only words with definitions, without definitions, not valid words, untagged words, words with 1 or 2 tags, or words that contain a space. Run Audit uses the selected chip as its sample pool." />
+            <HelpTip title="Look up words in the toolbar: Contains (default), Begins with, or Ends with. Pick a concept to show only words tagged with it. A book icon means a dictionary entry is already loaded. Hover the word to read it. Hover a concept chip for its OG description. Hover a row to edit which concepts are tagged. Use the Data Operations chips for definition and tag coverage." />
           </Stack>
           <Box sx={{ height: { xs: 420, md: 'calc(100vh - 320px)' }, minHeight: 320, width: '100%' }}>
             <DataGrid
@@ -151,15 +277,25 @@ export default function CatalogWordsPanel({
               initialState={{
                 sorting: { sortModel: [{ field: 'word', sort: 'asc' }] },
               }}
-              slots={{ toolbar: GridToolbar }}
+              slots={{ toolbar: WordsCatalogToolbar }}
               slotProps={{
-                toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 300 } },
+                toolbar: {
+                  wordQuery,
+                  onWordQueryChange: setWordQuery,
+                  wordMatchMode,
+                  onWordMatchModeChange: setWordMatchMode,
+                  concepts: conceptOptions,
+                  selectedConcept,
+                  onSelectedConceptChange: setSelectedConcept,
+                },
               }}
               density="compact"
               localeText={{
-                noRowsLabel: coverageFilter
-                  ? `No words ${CATALOG_FILTER_LABELS[coverageFilter]}.`
-                  : 'No words in the catalog yet.',
+                noRowsLabel: lookupActive
+                  ? 'No words match this lookup.'
+                  : coverageFilter
+                    ? `No words ${CATALOG_FILTER_LABELS[coverageFilter]}.`
+                    : 'No words in the catalog yet.',
               }}
               sx={{
                 ...wordConceptGridSx,
