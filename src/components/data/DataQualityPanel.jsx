@@ -60,7 +60,7 @@ const CATALOG_FILTER_LABELS = {
   [TAG_FILTER.UNTAGGED]: 'untagged',
   [TAG_FILTER.ONE_TAG]: 'with 1 tag',
   [TAG_FILTER.TWO_TAGS]: 'with 2 tags',
-  [TEXT_FILTER.CONTAINS_SPACE]: 'with a space',
+  [TEXT_FILTER.CONTAINS_SPACE]: 'that contain a space',
 }
 const AUDIT_SIZES = [
   { value: 10, label: 'Small (10)' },
@@ -744,6 +744,15 @@ export default function DataQualityPanel({
             aria-pressed={coverageFilter === COVERAGE_FILTER.INVALID_WORDS}
             onClick={() => toggleCoverageFilter(COVERAGE_FILTER.INVALID_WORDS)}
           />
+          <Chip
+            clickable
+            size="small"
+            color="error"
+            variant={coverageFilter === TEXT_FILTER.CONTAINS_SPACE ? 'filled' : 'outlined'}
+            label={`${spaceCount} contain a space`}
+            aria-pressed={coverageFilter === TEXT_FILTER.CONTAINS_SPACE}
+            onClick={() => toggleCoverageFilter(TEXT_FILTER.CONTAINS_SPACE)}
+          />
         </Stack>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
           <Chip
@@ -771,16 +780,13 @@ export default function DataQualityPanel({
             aria-pressed={coverageFilter === TAG_FILTER.TWO_TAGS}
             onClick={() => toggleCoverageFilter(TAG_FILTER.TWO_TAGS)}
           />
-          <Chip
-            clickable
-            size="small"
-            variant={coverageFilter === TEXT_FILTER.CONTAINS_SPACE ? 'filled' : 'outlined'}
-            label={`${spaceCount} with a space`}
-            aria-pressed={coverageFilter === TEXT_FILTER.CONTAINS_SPACE}
-            onClick={() => toggleCoverageFilter(TEXT_FILTER.CONTAINS_SPACE)}
-          />
         </Stack>
-        {coverageFilter ? (
+        {coverageFilter === TEXT_FILTER.CONTAINS_SPACE ? (
+          <Typography variant="body2" color="error">
+            Catalog entries with a space are almost certainly errors. Review them in the grid below,
+            then fix or remove them.
+          </Typography>
+        ) : coverageFilter ? (
           <Typography variant="body2" color="text.secondary">
             Catalog is filtered to words {CATALOG_FILTER_LABELS[coverageFilter]}. Click the chip again
             to show all words.

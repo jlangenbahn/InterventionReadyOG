@@ -21,7 +21,7 @@ const CATALOG_FILTER_LABELS = {
   [TAG_FILTER.UNTAGGED]: 'untagged',
   [TAG_FILTER.ONE_TAG]: 'with 1 tag',
   [TAG_FILTER.TWO_TAGS]: 'with 2 tags',
-  [TEXT_FILTER.CONTAINS_SPACE]: 'with a space',
+  [TEXT_FILTER.CONTAINS_SPACE]: 'that contain a space',
 }
 
 export default function CatalogWordsPanel({
@@ -120,12 +120,14 @@ export default function CatalogWordsPanel({
               <Chip
                 size="small"
                 color={
-                  coverageFilter === COVERAGE_FILTER.MISSING_DEFINITIONS ||
-                  coverageFilter === TAG_FILTER.UNTAGGED
-                    ? 'warning'
-                    : coverageFilter === COVERAGE_FILTER.WITH_DEFINITIONS
-                      ? 'success'
-                      : 'default'
+                  coverageFilter === TEXT_FILTER.CONTAINS_SPACE
+                    ? 'error'
+                    : coverageFilter === COVERAGE_FILTER.MISSING_DEFINITIONS ||
+                        coverageFilter === TAG_FILTER.UNTAGGED
+                      ? 'warning'
+                      : coverageFilter === COVERAGE_FILTER.WITH_DEFINITIONS
+                        ? 'success'
+                        : 'default'
                 }
                 label={`Showing ${visibleRows.length} ${CATALOG_FILTER_LABELS[coverageFilter]}`}
                 onDelete={() => onCoverageFilterChange?.(null)}
