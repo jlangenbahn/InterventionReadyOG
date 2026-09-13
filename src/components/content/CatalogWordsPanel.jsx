@@ -17,7 +17,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { DataGrid, GridToolbarContainer } from '@mui/x-data-grid'
+import { DataGrid } from '@mui/x-data-grid'
 import HelpTip from '../shared/HelpTip'
 import { DictionaryEntryCard, DictionaryWordCell } from '../data/DictionaryWordTooltip'
 import { buildWordConceptColumns, wordConceptGridSx } from './WordConceptsEditor'
@@ -72,14 +72,13 @@ function WordsCatalogToolbar({
   onSelectedConceptChange,
 }) {
   return (
-    <GridToolbarContainer
-      sx={{
-        p: 1,
-        gap: 1,
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        width: '100%',
-      }}
+    <Stack
+      direction="row"
+      spacing={1}
+      alignItems="center"
+      flexWrap="wrap"
+      useFlexGap
+      sx={{ mb: 1.5, width: '100%' }}
     >
       <FormControl size="small" sx={{ minWidth: 140 }}>
         <InputLabel id="word-match-mode-label">Word match</InputLabel>
@@ -116,7 +115,7 @@ function WordsCatalogToolbar({
         )}
         sx={{ minWidth: 220, flex: 1.2 }}
       />
-    </GridToolbarContainer>
+    </Stack>
   )
 }
 
@@ -259,9 +258,18 @@ export default function CatalogWordsPanel({
                 onDelete={() => onCoverageFilterChange?.(null)}
               />
             ) : null}
-            <HelpTip title="Look up words in the toolbar: Contains (default), Begins with, or Ends with. Pick a concept to show only words tagged with it. A book icon means a dictionary entry is already loaded. Hover the word to read it. Hover a concept chip for its OG description. Hover a row to edit which concepts are tagged. Use the Data Operations chips for definition and tag coverage." />
+            <HelpTip title="Look up words above the grid: Contains (default), Begins with, or Ends with. Pick a concept to show only words tagged with it. A book icon means a dictionary entry is already loaded. Hover the word to read it. Hover a concept chip for its OG description. Hover a row to edit which concepts are tagged. Use the Data Operations chips for definition and tag coverage." />
           </Stack>
-          <Box sx={{ height: { xs: 420, md: 'calc(100vh - 320px)' }, minHeight: 320, width: '100%' }}>
+          <WordsCatalogToolbar
+            wordQuery={wordQuery}
+            onWordQueryChange={setWordQuery}
+            wordMatchMode={wordMatchMode}
+            onWordMatchModeChange={setWordMatchMode}
+            concepts={conceptOptions}
+            selectedConcept={selectedConcept}
+            onSelectedConceptChange={setSelectedConcept}
+          />
+          <Box sx={{ height: { xs: 420, md: 'calc(100vh - 380px)' }, minHeight: 320, width: '100%' }}>
             <DataGrid
               rows={visibleRows}
               columns={columns}
@@ -276,18 +284,6 @@ export default function CatalogWordsPanel({
               pageSizeOptions={[25, 50, 100]}
               initialState={{
                 sorting: { sortModel: [{ field: 'word', sort: 'asc' }] },
-              }}
-              slots={{ toolbar: WordsCatalogToolbar }}
-              slotProps={{
-                toolbar: {
-                  wordQuery,
-                  onWordQueryChange: setWordQuery,
-                  wordMatchMode,
-                  onWordMatchModeChange: setWordMatchMode,
-                  concepts: conceptOptions,
-                  selectedConcept,
-                  onSelectedConceptChange: setSelectedConcept,
-                },
               }}
               density="compact"
               localeText={{
